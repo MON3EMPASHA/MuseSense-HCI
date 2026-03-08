@@ -46,12 +46,26 @@ using System.Text;
 		private bool fullscreen;
 		private bool verbose;
 
+		// Face detection status
+		private bool faceDetected = false;
+		private string lastMessage = "";
+		private DateTime lastFaceDetectionTime = DateTime.Now;
+		
+		// UI Components
+		private Label statusLabel;
+		private Label markerInfoLabel;
+		private Label faceStatusLabel;
+
 		Font font = new Font("Arial", 10.0f);
+		Font titleFont = new Font("Arial", 16.0f, FontStyle.Bold);
+		Font statusFont = new Font("Arial", 12.0f);
 		SolidBrush fntBrush = new SolidBrush(Color.White);
 		SolidBrush bgrBrush = new SolidBrush(Color.FromArgb(0,0,64));
 		SolidBrush curBrush = new SolidBrush(Color.FromArgb(192, 0, 192));
 		SolidBrush objBrush = new SolidBrush(Color.FromArgb(64, 0, 0));
 		SolidBrush blbBrush = new SolidBrush(Color.FromArgb(64, 64, 64));
+		SolidBrush faceDetectedBrush = new SolidBrush(Color.FromArgb(0, 255, 0));
+		SolidBrush faceNotDetectedBrush = new SolidBrush(Color.FromArgb(255, 100, 100));
 		Pen curPen = new Pen(new SolidBrush(Color.Blue), 1);
 
 		public TuioDemo(int port) {
@@ -63,7 +77,7 @@ using System.Text;
 
 			this.ClientSize = new System.Drawing.Size(width, height);
 			this.Name = "TuioDemo";
-			this.Text = "TuioDemo";
+			this.Text = "MuseSense - Interactive Museum Guide";
 			
 			this.Closing+=new CancelEventHandler(Form_Closing);
 			this.KeyDown+=new KeyEventHandler(Form_KeyDown);
@@ -71,6 +85,9 @@ using System.Text;
 			this.SetStyle( ControlStyles.AllPaintingInWmPaint |
 							ControlStyles.UserPaint |
 							ControlStyles.DoubleBuffer, true);
+
+			// Initialize UI labels
+			InitializeLabels();
 
 			objectList = new Dictionary<long,TuioObject>(128);
 			cursorList = new Dictionary<long,TuioCursor>(128);
@@ -80,9 +97,48 @@ using System.Text;
 			client.addTuioListener(this);
 
 			client.connect();
+			
+			// Start socket thread for Python communication (face detection, gestures)
 			Thread socketThread = new Thread(stream);
 			socketThread.IsBackground = true;
-			socketThread.Start();//this right here is to recive stuff from our python code: hand gestures anf facial recognition
+			socketThread.Start();
+    }
+    
+    private void InitializeLabels()
+    {
+        // Face status label (top-right corner)
+        faceStatusLabel = new Label();
+        faceStatusLabel.AutoSize = false;
+        faceStatusLabel.Size = new Size(200, 30);
+        faceStatusLabel.Location = new Point(width - 210, 10);
+        faceStatusLabel.BackColor = Color.Transparent;
+        faceStatusLabel.ForeColor = Color.White;
+        faceStatusLabel.Font = statusFont;
+        faceStatusLabel.Text = "Face: Not Detected";
+        this.Controls.Add(faceStatusLabel);
+        
+        // Marker info label (top-left corner)
+        markerInfoLabel = new Label();
+        markerInfoLabel.AutoSize = false;
+        markerInfoLabel.Size = new Size(300, 60);
+        markerInfoLabel.Location = new Point(10, 10);
+        markerInfoLabel.BackColor = Color.Transparent;
+        markerInfoLabel.ForeColor = Color.White;
+        markerInfoLabel.Font = statusFont;
+        markerInfoLabel.Text = "Place a marker to begin";
+        this.Controls.Add(markerInfoLabel);
+        
+        // Status label (bottom center)
+        statusLabel = new Label();
+        statusLabel.AutoSize = false;
+        statusLabel.Size = new Size(400, 25);
+        statusLabel.Location = new Point((width - 400) / 2, height - 35);
+        statusLabel.BackColor = Color.Transparent;
+        statusLabel.ForeColor = Color.LightGray;
+        statusLabel.Font = font;
+        statusLabel.TextAlign = ContentAlignment.MiddleCenter;
+        statusLabel.Text = "Press F1 for fullscreen | ESC to exit | V for verbose";
+        this.Controls.Add(statusLabel);
     }
 
 		private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e) {
@@ -136,7 +192,11 @@ using System.Text;
 		public void addTuioObject(TuioObject o) {
 			lock(objectList) {
 				objectList.Add(o.SessionID,o);
-			} if (verbose) Console.WriteLine("add obj "+o.SymbolID+" ("+o.SessionID+") "+o.X+" "+o.Y+" "+o.Angle);
+			} 
+			if (verbose) Console.WriteLine("add obj "+o.SymbolID+" ("+o.SessionID+") "+o.X+" "+o.Y+" "+o.Angle);
+			
+			// Update marker info on UI thread
+			UpdateMarkerInfo(o.SymbolID, true);
 		}
 
 		public void updateTuioObject(TuioObject o) {
@@ -149,6 +209,11 @@ using System.Text;
 				objectList.Remove(o.SessionID);
 			}
 			if (verbose) Console.WriteLine("del obj "+o.SymbolID+" ("+o.SessionID+")");
+			
+			// Update marker info on UI thread
+			if (objectList.Count == 0) {
+				UpdateMarkerInfo(-1, false);
+			}
 		}
 
 		public void addTuioCursor(TuioCursor c) {
@@ -237,22 +302,145 @@ using System.Text;
     }
     public void stream()
     {
-		MessageBox.Show("i am here");
+        Console.WriteLine("Starting socket connection for Python communication...");
         Client c = new Client();
-        c.connectToSocket("localhost", 5000);
+        
+        if (!c.connectToSocket("localhost", 5000))
+        {
+            Console.WriteLine("Failed to connect to Python server. Make sure Python script is running.");
+            UpdateStatus("Python connection failed - Face detection unavailable");
+            return;
+        }
+        
+        UpdateStatus("Connected to Python server");
         string msg = "";
+        
         while (true)
         {
             msg = c.recieveMessage();
-            if (msg == "q")
+            
+            if (msg == null || msg == "q")
             {
                 c.stream.Close();
                 c.client.Close();
                 Console.WriteLine("Connection Terminated !");
+                UpdateStatus("Python connection closed");
                 break;
             }
-            MessageBox.Show(msg);
+            
+            // Process the message from Python
+            Console.WriteLine("Received from Python: " + msg);
+            
+            if (msg.Contains("face:detected") || msg.Contains("face detected"))
+            {
+                faceDetected = true;
+                lastFaceDetectionTime = DateTime.Now;
+                UpdateFaceStatus(true);
+            }
+            else if (msg.Contains("face:lost") || msg.Contains("face lost"))
+            {
+                faceDetected = false;
+                UpdateFaceStatus(false);
+            }
+            else if (msg.Contains("gesture"))
+            {
+                UpdateStatus("Gesture detected: " + msg);
+            }
+            
+            lastMessage = msg;
+            
+            // Request UI refresh
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke(new MethodInvoker(delegate { this.Invalidate(); }));
+            }
+            else
+            {
+                this.Invalidate();
+            }
+            
+            Thread.Sleep(50); // Small delay to prevent CPU overload
         }
+    }
+    
+    private void UpdateFaceStatus(bool detected)
+    {
+        if (faceStatusLabel.InvokeRequired)
+        {
+            faceStatusLabel.BeginInvoke(new MethodInvoker(delegate {
+                faceStatusLabel.Text = detected ? "✓ Face Detected" : "Face: Not Detected";
+                faceStatusLabel.ForeColor = detected ? Color.LightGreen : Color.LightCoral;
+            }));
+        }
+        else
+        {
+            faceStatusLabel.Text = detected ? "✓ Face Detected" : "Face: Not Detected";
+            faceStatusLabel.ForeColor = detected ? Color.LightGreen : Color.LightCoral;
+        }
+    }
+    
+    private void UpdateStatus(string message)
+    {
+        if (statusLabel.InvokeRequired)
+        {
+            statusLabel.BeginInvoke(new MethodInvoker(delegate {
+                statusLabel.Text = message;
+            }));
+        }
+        else
+        {
+            statusLabel.Text = message;
+        }
+    }
+    
+    private void UpdateMarkerInfo(int symbolID, bool added)
+    {
+        if (markerInfoLabel.InvokeRequired)
+        {
+            markerInfoLabel.BeginInvoke(new MethodInvoker(delegate {
+                UpdateMarkerInfoInternal(symbolID, added);
+            }));
+        }
+        else
+        {
+            UpdateMarkerInfoInternal(symbolID, added);
+        }
+    }
+    
+    private void UpdateMarkerInfoInternal(int symbolID, bool added)
+    {
+        if (!added)
+        {
+            markerInfoLabel.Text = "Place a marker to begin";
+            markerInfoLabel.ForeColor = Color.White;
+            return;
+        }
+        
+        string artifactName = "";
+        string artifactInfo = "";
+        
+        switch (symbolID)
+        {
+            case 0:
+                artifactName = "Artifact #0";
+                artifactInfo = "Ancient Pottery Collection";
+                break;
+            case 1:
+                artifactName = "Artifact #1";
+                artifactInfo = "Medieval Manuscript";
+                break;
+            case 2:
+                artifactName = "Artifact #2";
+                artifactInfo = "Renaissance Painting";
+                break;
+            default:
+                artifactName = $"Marker #{symbolID}";
+                artifactInfo = "Unknown Artifact";
+                break;
+        }
+        
+        markerInfoLabel.Text = $"📍 {artifactName}\n{artifactInfo}";
+        markerInfoLabel.ForeColor = Color.Yellow;
     }
 
     protected override void OnPaintBackground(PaintEventArgs pevent)
@@ -260,6 +448,19 @@ using System.Text;
 			// Getting the graphics object
 			Graphics g = pevent.Graphics;
 			g.FillRectangle(bgrBrush, new Rectangle(0,0,width,height));
+
+			// Draw face detection indicator in top-right corner
+			int indicatorSize = 15;
+			int indicatorX = width - 220;
+			int indicatorY = 45;
+			if (faceDetected && (DateTime.Now - lastFaceDetectionTime).TotalSeconds < 2)
+			{
+				g.FillEllipse(faceDetectedBrush, indicatorX, indicatorY, indicatorSize, indicatorSize);
+			}
+			else
+			{
+				g.FillEllipse(faceNotDetectedBrush, indicatorX, indicatorY, indicatorSize, indicatorSize);
+			}
 
 			// draw the cursor path
 			if (cursorList.Count > 0) {
@@ -286,75 +487,93 @@ using System.Text;
                     int size = height / 10;
 					int ox=0;
 					int oy=0;
+                    
+                    // Draw glow effect around marker to show it's detected
+                    ox = tobj.getScreenX(width);
+                    oy = tobj.getScreenY(height);
+                    
+                    // Draw outer glow
+                    using (Pen glowPen = new Pen(Color.FromArgb(100, 255, 255, 0), 3))
+                    {
+                        g.DrawEllipse(glowPen, ox - size/2 - 10, oy - size/2 - 10, size + 20, size + 20);
+                    }
+                    
                     if (tobj.SymbolID == 0)
                     {
-                        Image bgimg = Image.FromFile("background1.png");
-                        Image objimg = Image.FromFile("obj1.png");
-                        ox = tobj.getScreenX(width);
-                        oy = tobj.getScreenY(height);
-                        g.DrawImage(bgimg, 0, 0, width, height);
-                        g.TranslateTransform(ox, oy);
-                        g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
-                        g.TranslateTransform(-ox, -oy);
+                        try {
+                            Image bgimg = Image.FromFile("background1.png");
+                            Image objimg = Image.FromFile("obj1.png");
+                            g.DrawImage(bgimg, 0, 0, width, height);
+                            g.TranslateTransform(ox, oy);
+                            g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
+                            g.TranslateTransform(-ox, -oy);
                        
 
-                        g.DrawImage(objimg, ox - size / 2, oy - size / 2, size, size);
-
+                            g.DrawImage(objimg, ox - size / 2, oy - size / 2, size, size);
+                        } catch (Exception ex) {
+                            // If images not found, draw colored rectangle
+                            g.FillRectangle(new SolidBrush(Color.FromArgb(180, 100, 50)), new Rectangle(ox - size / 2, oy - size / 2, size, size));
+                        }
                     }
-                    if (tobj.SymbolID == 1)
+                    else if (tobj.SymbolID == 1)
                     {
-                        Image bgimg = Image.FromFile("background2.png");
-                        Image objimg = Image.FromFile("obj2.png");
-                        ox = tobj.getScreenX(width);
-                        oy = tobj.getScreenY(height);
-                        g.DrawImage(bgimg, 0, 0, width, height);
-                        g.TranslateTransform(ox, oy);
-                        g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
-                        g.TranslateTransform(-ox, -oy);
+                        try {
+                            Image bgimg = Image.FromFile("background2.png");
+                            Image objimg = Image.FromFile("obj2.png");
+                            g.DrawImage(bgimg, 0, 0, width, height);
+                            g.TranslateTransform(ox, oy);
+                            g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
+                            g.TranslateTransform(-ox, -oy);
 
-
-                        g.DrawImage(objimg, ox - size / 2, oy - size / 2, size, size);
-
+                            g.DrawImage(objimg, ox - size / 2, oy - size / 2, size, size);
+                        } catch (Exception ex) {
+                            g.FillRectangle(new SolidBrush(Color.FromArgb(50, 100, 180)), new Rectangle(ox - size / 2, oy - size / 2, size, size));
+                        }
                     }
-                    if (tobj.SymbolID == 2)
+                    else if (tobj.SymbolID == 2)
                     {
-                        Image bgimg = Image.FromFile("background3.png");
-                        Image objimg = Image.FromFile("obj3.png");
-                        ox = tobj.getScreenX(width);
-                        oy = tobj.getScreenY(height);
-                        g.DrawImage(bgimg, 0, 0, width, height);
-                        g.TranslateTransform(ox, oy);
-                        g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
-                        g.TranslateTransform(-ox, -oy);
+                        try {
+                            Image bgimg = Image.FromFile("background3.png");
+                            Image objimg = Image.FromFile("obj3.png");
+                            g.DrawImage(bgimg, 0, 0, width, height);
+                            g.TranslateTransform(ox, oy);
+                            g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
+                            g.TranslateTransform(-ox, -oy);
 
-
-                        g.DrawImage(objimg, ox - size / 2, oy - size / 2, size, size);
-
+                            g.DrawImage(objimg, ox - size / 2, oy - size / 2, size, size);
+                        } catch (Exception ex) {
+                            g.FillRectangle(new SolidBrush(Color.FromArgb(180, 50, 180)), new Rectangle(ox - size / 2, oy - size / 2, size, size));
+                        }
                     }
-					if(tobj.SymbolID != 0&&tobj.SymbolID!=1&&tobj.SymbolID!=2) //defaultt
+					else //default marker
 					{
-                         ox = tobj.getScreenX(width);
-                         oy = tobj.getScreenY(height);
-                         size = height / 10;
+                        size = height / 10;
 
                         g.TranslateTransform(ox, oy);
                         g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
                         g.TranslateTransform(-ox, -oy);
 
-                        g.FillRectangle(objBrush, new Rectangle(ox - size / 2, oy - size / 2, size, size));
+                        // Draw colored rectangle based on symbol ID
+                        Color markerColor = Color.FromArgb(
+                            (tobj.SymbolID * 40) % 255, 
+                            (tobj.SymbolID * 80) % 255, 
+                            (tobj.SymbolID * 120) % 255
+                        );
+                        g.FillRectangle(new SolidBrush(markerColor), new Rectangle(ox - size / 2, oy - size / 2, size, size));
                     }
 
-
-
-
-
-
-
+                    // Draw marker ID text
                     g.TranslateTransform(ox, oy);
-						g.RotateTransform(-1 * (float)(tobj.Angle / Math.PI * 180.0f));
-						g.TranslateTransform(-ox, -oy);
+					g.RotateTransform(-1 * (float)(tobj.Angle / Math.PI * 180.0f));
+					g.TranslateTransform(-ox, -oy);
 
-						g.DrawString(tobj.SymbolID + "", font, fntBrush, new PointF(ox - 10, oy - 10));
+					// Draw ID with background for better visibility
+					string idText = "ID:" + tobj.SymbolID;
+					SizeF textSize = g.MeasureString(idText, font);
+					g.FillRectangle(new SolidBrush(Color.FromArgb(150, 0, 0, 0)), 
+					    new RectangleF(ox - textSize.Width/2 - 2, oy - textSize.Height/2 - 2, 
+					    textSize.Width + 4, textSize.Height + 4));
+					g.DrawString(idText, font, fntBrush, new PointF(ox - textSize.Width/2, oy - textSize.Height/2));
 					}
 				}
 			}
