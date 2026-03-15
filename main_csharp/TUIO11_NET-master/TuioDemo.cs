@@ -283,7 +283,7 @@ using System.Text;
         {
             try
             {
-
+                if (stream == null) return null;
                 byte[] receiveBuffer = new byte[1024];
                 int bytesReceived = stream.Read(receiveBuffer, 0, 1024);
                 Console.WriteLine(bytesReceived);
