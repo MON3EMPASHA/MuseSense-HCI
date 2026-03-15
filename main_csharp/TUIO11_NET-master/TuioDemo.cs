@@ -300,33 +300,31 @@ using System.Text;
         }
 
     }
+	string msg = "";
+	string oldmsg = "";
     public void stream()
     {
-        Console.WriteLine("Starting socket connection for Python communication...");
-        Client c = new Client();
-        
-        if (!c.connectToSocket("localhost", 5000))
+         Client c = new Client();
+        if (!c.connectToSocket("localhost", 5000))    
         {
-            Console.WriteLine("Failed to connect to Python server. Make sure Python script is running.");
-            UpdateStatus("Python connection failed - Face detection unavailable");
+            Console.WriteLine("Could not connect.");
             return;
         }
-        
-        UpdateStatus("Connected to Python server");
-        string msg = "";
         
         while (true)
         {
             msg = c.recieveMessage();
-            
-            if (msg == null || msg == "q")
+            if (msg == "q")
             {
                 c.stream.Close();
                 c.client.Close();
                 Console.WriteLine("Connection Terminated !");
-                UpdateStatus("Python connection closed");
                 break;
             }
+			if (msg!=oldmsg)
+            MessageBox.Show(msg);
+			oldmsg = msg;
+        }
             
             // Process the message from Python
             Console.WriteLine("Received from Python: " + msg);
