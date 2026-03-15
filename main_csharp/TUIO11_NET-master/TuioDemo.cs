@@ -310,10 +310,12 @@ using System.Text;
             Console.WriteLine("Could not connect.");
             return;
         }
-        
+
         while (true)
         {
             msg = c.recieveMessage();
+            if (msg == null) { Thread.Sleep(50); continue; }
+
             if (msg == "q")
             {
                 c.stream.Close();
@@ -321,19 +323,17 @@ using System.Text;
                 Console.WriteLine("Connection Terminated !");
                 break;
             }
-			if (msg!=oldmsg)
-            MessageBox.Show(msg);
-			oldmsg = msg;
-        }
-            
+        
+
+
             // Process the message from Python
             Console.WriteLine("Received from Python: " + msg);
-            
+
             if (msg.Contains("face:detected") || msg.Contains("face detected"))
             {
                 faceDetected = true;
                 lastFaceDetectionTime = DateTime.Now;
-                UpdateFaceStatus(true);
+                UpdateFaceStatus(true, msg);
             }
             else if (msg.Contains("face:lost") || msg.Contains("face lost"))
             {
@@ -344,9 +344,13 @@ using System.Text;
             {
                 UpdateStatus("Gesture detected: " + msg);
             }
-            
-            lastMessage = msg;
-            
+
+            if (msg != oldmsg)
+            {
+                lastMessage = msg;
+                oldmsg = msg;
+            }
+
             // Request UI refresh
             if (this.InvokeRequired)
             {
@@ -356,23 +360,30 @@ using System.Text;
             {
                 this.Invalidate();
             }
-            
+
             Thread.Sleep(50); // Small delay to prevent CPU overload
         }
     }
     
-    private void UpdateFaceStatus(bool detected)
+    private void UpdateFaceStatus(bool detected, string rawMsg = "")
     {
+        string label = detected ? "✓ Face Detected" : "Face: Not Detected";
+        if (detected && rawMsg.Contains("face:detected:"))
+        {
+            string personName = rawMsg.Substring(rawMsg.IndexOf("face:detected:") + "face:detected:".Length).Trim();
+            if (!string.IsNullOrEmpty(personName))
+                label = "✓ " + personName;
+        }
         if (faceStatusLabel.InvokeRequired)
         {
             faceStatusLabel.BeginInvoke(new MethodInvoker(delegate {
-                faceStatusLabel.Text = detected ? "✓ Face Detected" : "Face: Not Detected";
+                faceStatusLabel.Text = label;
                 faceStatusLabel.ForeColor = detected ? Color.LightGreen : Color.LightCoral;
             }));
         }
         else
         {
-            faceStatusLabel.Text = detected ? "✓ Face Detected" : "Face: Not Detected";
+            faceStatusLabel.Text = label;
             faceStatusLabel.ForeColor = detected ? Color.LightGreen : Color.LightCoral;
         }
     }
@@ -451,7 +462,7 @@ using System.Text;
 			int indicatorSize = 15;
 			int indicatorX = width - 220;
 			int indicatorY = 45;
-			if (faceDetected && (DateTime.Now - lastFaceDetectionTime).TotalSeconds < 2)
+			if (faceDetected && (DateTime.Now - lastFaceDetectionTime).TotalSeconds < 5)
 			{
 				g.FillEllipse(faceDetectedBrush, indicatorX, indicatorY, indicatorSize, indicatorSize);
 			}
