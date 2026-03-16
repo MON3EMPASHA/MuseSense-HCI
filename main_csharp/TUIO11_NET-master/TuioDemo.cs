@@ -320,6 +320,16 @@ public class TuioDemo : Form, TuioListener
     private readonly HashSet<int> modelsBeingLoaded = new HashSet<int>();
     private float artifactAngle = 0f;
 
+    // Static thumbnail cache — one small bitmap per artifact, rendered once at a fixed angle
+    // Used for all non-rotating cards (carousel background cards, favourites)
+    private Dictionary<int, Bitmap> _thumbnailCache = new Dictionary<int, Bitmap>();
+    private const int ThumbSize = 100; // px — small enough to be fast, big enough to look good
+    private const float ThumbAngle = 0.6f; // fixed display angle for thumbnails
+
+    // Rotating card state — only ONE card rotates at a time
+    private int   _rotatingCardId = -1;  // which carousel card is currently spinning (-1 = none)
+    private float _rotatingCardAngle = 0f;
+
     // Background cache
     private Bitmap bgCache = null;
     private int bgCacheW = -1, bgCacheH = -1;
@@ -372,12 +382,15 @@ public class TuioDemo : Form, TuioListener
         this.WindowState = FormWindowState.Maximized;
         UpdateLayout();
 
-        // Single timer drives all animation at ~30fps, far less overhead than two 16ms timers
+        // Single timer drives animation — only the active rotating card + artifact detail spin
         mainTimer = new System.Windows.Forms.Timer();
         mainTimer.Interval = 33;
         mainTimer.Tick += (s,e) => {
             carouselAngle += (carouselTarget - carouselAngle) * 0.12f;
-            if (currentScreen == AppScreen.Artifact) artifactAngle += 0.022f;
+            if (currentScreen == AppScreen.Artifact)
+                artifactAngle += 0.022f;
+            if (currentScreen == AppScreen.Explore && _rotatingCardId >= 0)
+                _rotatingCardAngle += 0.022f;
             Invalidate();
         };
         mainTimer.Start();
@@ -475,6 +488,9 @@ public class TuioDemo : Form, TuioListener
         carouselFocused = idx;
         float step = (float)(2 * Math.PI / ArtifactData.Count);
         carouselTarget = -idx * step;
+        // Start rotating the newly focused card, stop the previous one
+        _rotatingCardId = idx;
+        _rotatingCardAngle = 0f;
     }
 
     protected override void OnPaintBackground(PaintEventArgs e)
@@ -590,8 +606,16 @@ public class TuioDemo : Form, TuioListener
         if (model != null)
         {
             int ms = (int)(cardW * 0.72f);
-            float spin = (float)(DateTime.Now.TimeOfDay.TotalSeconds * 0.5) + idx * 2.1f;
-            RenderObjModel(g, model, cx, cardTop + cardH/3, spin, ms, ArtifactData.Colors[idx], false, 0.58f);
+            if (isFocused && _rotatingCardId == idx)
+            {
+                // Only the focused+selected card rotates — rasterize live
+                RenderObjModelDirect(g, model, cx, cardTop + cardH/3, _rotatingCardAngle, ms, ArtifactData.Colors[idx]);
+            }
+            else
+            {
+                // All other cards show a static thumbnail — rendered once, reused forever
+                DrawThumbnail(g, idx, model, cx, cardTop + cardH/3, ms);
+            }
         }
 
         using (var br = new SolidBrush(Color.FromArgb(alpha,230,230,255)))
@@ -661,8 +685,7 @@ public class TuioDemo : Form, TuioListener
         if (model != null)
         {
             int ms = (int)(r.Width * 0.65f);
-            float spin = (float)(DateTime.Now.TimeOfDay.TotalSeconds * 0.4) + id * 1.5f;
-            RenderObjModel(g, model, r.Left+r.Width/2, r.Top+r.Height/3, spin, ms, ArtifactData.Colors[id], false, 0.58f);
+            DrawThumbnail(g, id, model, r.Left+r.Width/2, r.Top+r.Height/3, ms);
         }
         using (var br = new SolidBrush(Color.White))
         {
@@ -691,7 +714,7 @@ public class TuioDemo : Form, TuioListener
         {
             using (var br = new SolidBrush(Color.FromArgb(30,100,160,255)))
             { int gs=modelSize+60; g.FillEllipse(br, mx-gs/2, my-gs/2, gs, gs); }
-            RenderObjModel(g, model, mx, my, artifactAngle, modelSize, ArtifactData.Colors[artifactID], true, 1.0f);
+            RenderObjModelDirect(g, model, mx, my, artifactAngle, modelSize, ArtifactData.Colors[artifactID]);
         }
 
         int rx = mx + modelSize/2 + 40;
@@ -854,7 +877,6 @@ public class TuioDemo : Form, TuioListener
         TryGetModelBg(id);
         return null;
     }
-
     // Thread-safe: queues a background load if not already in progress.
     private void TryGetModelBg(int id)
     {
@@ -866,54 +888,119 @@ public class TuioDemo : Form, TuioListener
         }
         int capturedId = id;
         ThreadPool.QueueUserWorkItem(_ => {
-            ObjModel m = LoadObjModel(ArtifactData.GetObjPath(capturedId));
-            // Post result back to UI thread so modelCache is only ever written from UI thread
+            string objPath = ArtifactData.GetObjPath(capturedId);
+            if (string.IsNullOrEmpty(objPath))
+            {
+                lock (modelsBeingLoaded) modelsBeingLoaded.Remove(capturedId);
+                return;
+            }
+            ObjModel m = LoadObjModel(objPath);
             if (IsHandleCreated)
-                BeginInvoke(new MethodInvoker(() => { modelCache[capturedId] = m; Invalidate(); }));
+                BeginInvoke(new MethodInvoker(() => {
+                    modelCache[capturedId] = m;
+                    lock (modelsBeingLoaded) modelsBeingLoaded.Remove(capturedId);
+                    // Build static thumbnail for this artifact on a background thread
+                    if (m != null)
+                    {
+                        int tid = capturedId; ObjModel tm = m;
+                        ThreadPool.QueueUserWorkItem(__ => BuildThumbnail(tid, tm));
+                    }
+                    Invalidate();
+                }));
             else
+            {
                 modelCache[capturedId] = m;
+                lock (modelsBeingLoaded) modelsBeingLoaded.Remove(capturedId);
+            }
         });
     }
 
-    private void RenderObjModel(Graphics g, ObjModel model, int cx, int cy, float angle, int size, Color baseColor, bool useTextures, float resolutionScale)
+    // Renders a single static bitmap for this artifact at ThumbAngle — called once per artifact
+    private readonly object _thumbLock = new object();
+    private void BuildThumbnail(int id, ObjModel model)
+    {
+        Bitmap bmp = RasterizeSingle(model, ThumbSize, ThumbSize, ThumbAngle, ArtifactData.Colors[id], false);
+        lock (_thumbLock)
+        {
+            if (_thumbnailCache.ContainsKey(id)) { bmp.Dispose(); return; }
+            _thumbnailCache[id] = bmp;
+        }
+        if (IsHandleCreated) BeginInvoke(new MethodInvoker(Invalidate));
+    }
+
+    // Draws the static thumbnail for a card, scaled to fit the requested display size
+    private void DrawThumbnail(Graphics g, int id, ObjModel model, int cx, int cy, int displaySize)
+    {
+        Bitmap thumb;
+        lock (_thumbLock) _thumbnailCache.TryGetValue(id, out thumb);
+        if (thumb != null)
+        {
+            g.DrawImage(thumb, cx - displaySize/2, cy - displaySize/2, displaySize, displaySize);
+        }
+        // else: thumbnail still building — draw nothing (card background is already visible)
+    }
+
+    // Renders the rotating model directly to the Graphics surface (used only for the one active card)
+    private void RenderObjModelDirect(Graphics g, ObjModel model, int cx, int cy, float angle, int size, Color baseColor)
     {
         if (model == null) return;
-        int W = Math.Max(100, (int)(size * resolutionScale));
-        int H = W;
-        int[] pixels = new int[W*H];
-        float[] zBuf = new float[W*H];
-        for (int i=0;i<zBuf.Length;i++) zBuf[i]=float.NegativeInfinity;
-        float scale=(size*0.95f)/model.Radius, yaw=angle, pitch=-0.35f, camZ=size*3.2f, proj=size*1.7f;
-        Vec3[] trans=new Vec3[model.Verts.Count]; PointF[] proj2=new PointF[model.Verts.Count]; float[] depth=new float[model.Verts.Count];
-        for (int i=0;i<model.Verts.Count;i++)
+        int W = Math.Max(60, size);
+        Bitmap bmp = RasterizeSingle(model, W, W, angle, baseColor, false);
+        g.DrawImage(bmp, cx - size/2, cy - size/2, size, size);
+        bmp.Dispose();
+    }
+
+    // Core rasterizer — allocates its own buffers so it is fully thread-safe
+    private Bitmap RasterizeSingle(ObjModel model, int W, int H, float angle, Color baseColor, bool useTextures)
+    {
+        int[] pixels = new int[W * H];
+        float[] zBuf = new float[W * H];
+        for (int i = 0; i < zBuf.Length; i++) zBuf[i] = float.NegativeInfinity;
+
+        float scale = (W * 0.95f) / model.Radius;
+        float yaw = angle, pitch = -0.35f, camZ = W * 3.2f, proj = W * 1.7f;
+        int vc = model.Verts.Count;
+        Vec3[]  trans = new Vec3[vc];
+        PointF[] proj2 = new PointF[vc];
+        float[]  depth = new float[vc];
+
+        for (int i = 0; i < vc; i++)
         {
-            Vec3 tv=RotV(model.Verts[i],yaw,pitch); tv.X*=scale;tv.Y*=scale;tv.Z*=scale; trans[i]=tv;
-            float z=tv.Z+camZ; if(z<1f)z=1f; depth[i]=tv.Z;
-            proj2[i]=new PointF(W*0.5f+tv.X*proj/z, H*0.5f-tv.Y*proj/z);
+            Vec3 tv = RotV(model.Verts[i], yaw, pitch);
+            tv.X *= scale; tv.Y *= scale; tv.Z *= scale;
+            trans[i] = tv;
+            float z = tv.Z + camZ; if (z < 1f) z = 1f;
+            depth[i] = tv.Z;
+            proj2[i] = new PointF(W * 0.5f + tv.X * proj / z, H * 0.5f - tv.Y * proj / z);
         }
-        Vec3 ld=Norm(new Vec3(0.2f,-0.5f,1f));
-        for (int i=0;i<model.Faces.Count;i++)
+
+        Vec3 ld = Norm(new Vec3(0.2f, -0.5f, 1f));
+        int faceCount = model.Faces.Count;
+        for (int i = 0; i < faceCount; i++)
         {
-            Face3 f=model.Faces[i]; Vec3 a=trans[f.A],b=trans[f.B],c=trans[f.C];
-            float nx=(b.Y-a.Y)*(c.Z-a.Z)-(b.Z-a.Z)*(c.Y-a.Y);
-            float ny=(b.Z-a.Z)*(c.X-a.X)-(b.X-a.X)*(c.Z-a.Z);
-            float nz=(b.X-a.X)*(c.Y-a.Y)-(b.Y-a.Y)*(c.X-a.X);
-            float nl=(float)Math.Sqrt(nx*nx+ny*ny+nz*nz); if(nl<1e-5f)continue;
-            nx/=nl;ny/=nl;nz/=nl;
-            float lf=Math.Min(1.18f,0.68f+0.42f*Math.Abs(nx*ld.X+ny*ld.Y+nz*ld.Z));
-            Color fc=(!string.IsNullOrEmpty(f.Mat)&&model.MatColors.ContainsKey(f.Mat))?model.MatColors[f.Mat]:baseColor;
-            TextureData tex=(useTextures&&!string.IsNullOrEmpty(f.Mat)&&model.MatTextures.ContainsKey(f.Mat))?model.MatTextures[f.Mat]:null;
-            Vec2 uv1=(f.TA>=0&&f.TA<model.UVs.Count)?model.UVs[f.TA]:null;
-            Vec2 uv2=(f.TB>=0&&f.TB<model.UVs.Count)?model.UVs[f.TB]:null;
-            Vec2 uv3=(f.TC>=0&&f.TC<model.UVs.Count)?model.UVs[f.TC]:null;
-            RasterTri(pixels,zBuf,W,H,proj2[f.A],proj2[f.B],proj2[f.C],depth[f.A],depth[f.B],depth[f.C],uv1,uv2,uv3,tex,fc,lf);
+            Face3 f = model.Faces[i];
+            Vec3 a = trans[f.A], b = trans[f.B], c = trans[f.C];
+            float nx = (b.Y-a.Y)*(c.Z-a.Z)-(b.Z-a.Z)*(c.Y-a.Y);
+            float ny = (b.Z-a.Z)*(c.X-a.X)-(b.X-a.X)*(c.Z-a.Z);
+            float nz = (b.X-a.X)*(c.Y-a.Y)-(b.Y-a.Y)*(c.X-a.X);
+            float nl = (float)Math.Sqrt(nx*nx+ny*ny+nz*nz);
+            if (nl < 1e-5f) continue;
+            nx /= nl; ny /= nl; nz /= nl;
+            if (nz < 0f) continue; // back-face cull — skip ~50% of triangles
+            float lf = Math.Min(1.18f, 0.68f + 0.42f * Math.Abs(nx*ld.X+ny*ld.Y+nz*ld.Z));
+            Color fc = (!string.IsNullOrEmpty(f.Mat) && model.MatColors.ContainsKey(f.Mat)) ? model.MatColors[f.Mat] : baseColor;
+            TextureData tex = (useTextures && !string.IsNullOrEmpty(f.Mat) && model.MatTextures.ContainsKey(f.Mat)) ? model.MatTextures[f.Mat] : null;
+            Vec2 uv1 = (f.TA>=0&&f.TA<model.UVs.Count)?model.UVs[f.TA]:null;
+            Vec2 uv2 = (f.TB>=0&&f.TB<model.UVs.Count)?model.UVs[f.TB]:null;
+            Vec2 uv3 = (f.TC>=0&&f.TC<model.UVs.Count)?model.UVs[f.TC]:null;
+            RasterTri(pixels, zBuf, W, H, proj2[f.A], proj2[f.B], proj2[f.C], depth[f.A], depth[f.B], depth[f.C], uv1, uv2, uv3, tex, fc, lf);
         }
-        using (Bitmap bmp=new Bitmap(W,H,PixelFormat.Format32bppArgb))
-        {
-            BitmapData bd=bmp.LockBits(new Rectangle(0,0,W,H),ImageLockMode.WriteOnly,PixelFormat.Format32bppArgb);
-            Marshal.Copy(pixels,0,bd.Scan0,pixels.Length); bmp.UnlockBits(bd);
-            g.DrawImage(bmp,cx-size/2,cy-size/2,size,size);
-        }
+
+        Bitmap bmp = new Bitmap(W, H, PixelFormat.Format32bppArgb);
+        BitmapData bd = bmp.LockBits(new Rectangle(0,0,W,H), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        Marshal.Copy(pixels, 0, bd.Scan0, pixels.Length);
+        bmp.UnlockBits(bd);
+        return bmp;
     }
 
     private Vec3 RotV(Vec3 v,float yaw,float pitch)
@@ -1075,25 +1162,7 @@ public class TuioDemo : Form, TuioListener
     public void removeTuioObject(TuioObject o)
     {
         lock(objectList) objectList.Remove(o.SessionID);
-
-        // If the currently shown artifact marker is removed, stop narration and return to Explore.
-        if (currentScreen == AppScreen.Artifact)
-        {
-            bool hasCurrentArtifactMarker = false;
-            lock (objectList)
-            {
-                foreach (TuioObject obj in objectList.Values)
-                {
-                    if (ArtifactData.GetIndexByTuioId(obj.SymbolID) == artifactID)
-                    {
-                        hasCurrentArtifactMarker = true;
-                        break;
-                    }
-                }
-            }
-            if (!hasCurrentArtifactMarker && IsHandleCreated)
-                BeginInvoke(new MethodInvoker(() => GoTo(AppScreen.Explore)));
-        }
+        // Artifact screen stays visible even when the marker is no longer detected.
     }
     public void addTuioCursor(TuioCursor c){lock(cursorList)cursorList[c.SessionID]=c;}
     public void updateTuioCursor(TuioCursor c){}
