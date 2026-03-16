@@ -1,1382 +1,763 @@
-/*
-	TUIO C# Demo - part of the reacTIVision project
-	Copyright (c) 2005-2016 Martin Kaltenbrunner <martin@tuio.org>
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
-
+// MuseSense - Interactive Museum Guide
+// Multi-screen: Explore | Favourites | Artifact Detail
+// TUIO marker detection auto-navigates to Artifact page.
 using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Windows.Forms;
 using System.ComponentModel;
 using System.Collections.Generic;
-using System.Collections;
 using System.Threading;
 using System.IO;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
-using TUIO;
 using System.Net.Sockets;
 using System.Text;
-
-	public class TuioDemo : Form , TuioListener
-	{
-		private TuioClient client;
-		private Dictionary<long,TuioObject> objectList;
-		private Dictionary<long,TuioCursor> cursorList;
-		private Dictionary<long,TuioBlob> blobList;
-
-		public static int width, height;
-		private int window_width =  640;
-		private int window_height = 480;
-		private int window_left = 0;
-		private int window_top = 0;
-		private int screen_width = Screen.PrimaryScreen.Bounds.Width;
-		private int screen_height = Screen.PrimaryScreen.Bounds.Height;
-
-		private bool fullscreen;
-		private bool verbose;
-
-		// Face detection status
-		private bool faceDetected = false;
-		private string lastMessage = "";
-		private DateTime lastFaceDetectionTime = DateTime.Now;
-		
-		// UI Components
-		private Label statusLabel;
-		private Label markerInfoLabel;
-		private Label faceStatusLabel;
-		private Label pythonStatusLabel;
-        private readonly Dictionary<int, ObjModel> modelCache = new Dictionary<int, ObjModel>();
-        private int persistentSymbolID = -1;
-        private float persistentAngle = 0.0f;
-
-        Font font = new Font("Segoe UI", 10.0f, FontStyle.Regular);
-        Font titleFont = new Font("Segoe UI Semibold", 16.0f, FontStyle.Bold);
-        Font statusFont = new Font("Segoe UI Semibold", 12.0f, FontStyle.Bold);
-		SolidBrush fntBrush = new SolidBrush(Color.White);
-		SolidBrush bgrBrush = new SolidBrush(Color.FromArgb(0,0,64));
-		SolidBrush curBrush = new SolidBrush(Color.FromArgb(192, 0, 192));
-		SolidBrush objBrush = new SolidBrush(Color.FromArgb(64, 0, 0));
-		SolidBrush blbBrush = new SolidBrush(Color.FromArgb(64, 64, 64));
-		SolidBrush faceDetectedBrush = new SolidBrush(Color.FromArgb(0, 255, 0));
-		SolidBrush faceNotDetectedBrush = new SolidBrush(Color.FromArgb(255, 100, 100));
-		Pen curPen = new Pen(new SolidBrush(Color.Blue), 1);
-
-		public TuioDemo(int port) {
-		
-			verbose = false;
-			fullscreen = false;
-            width = window_width;
-            height = window_height;
-
-			this.ClientSize = new System.Drawing.Size(width, height);
-			this.Name = "TuioDemo";
-			this.Text = "MuseSense - Interactive Museum Guide";
-			
-			this.Closing+=new CancelEventHandler(Form_Closing);
-			this.KeyDown+=new KeyEventHandler(Form_KeyDown);
-            this.Resize+=new EventHandler(Form_Resized);
-
-			this.SetStyle( ControlStyles.AllPaintingInWmPaint |
-							ControlStyles.UserPaint |
-							ControlStyles.DoubleBuffer, true);
-
-			// Initialize UI labels
-			InitializeLabels();
-            this.WindowState = FormWindowState.Maximized;
-            UpdateLayoutMetrics();
-
-			objectList = new Dictionary<long,TuioObject>(128);
-			cursorList = new Dictionary<long,TuioCursor>(128);
-			blobList   = new Dictionary<long,TuioBlob>(128);
-			
-			client = new TuioClient(port);
-			client.addTuioListener(this);
-
-			client.connect();
-			
-			// Start socket thread for Python communication (face detection, gestures)
-			Thread socketThread = new Thread(stream);
-			socketThread.IsBackground = true;
-			socketThread.Start();
-    }
-
-        private void Form_Resized(object sender, EventArgs e)
-        {
-            UpdateLayoutMetrics();
-        }
-
-        private void UpdateLayoutMetrics()
-        {
-            width = this.ClientSize.Width;
-            height = this.ClientSize.Height;
-
-            if (faceStatusLabel != null)
-                faceStatusLabel.Location = new Point(width - 270, 10);
-
-            if (pythonStatusLabel != null)
-                pythonStatusLabel.Location = new Point(width - 270, 42);
-
-            if (markerInfoLabel != null)
-            {
-                markerInfoLabel.Location = new Point(10, 8);
-                markerInfoLabel.Size = new Size(Math.Max(300, width - 20), 28);
-            }
-
-            if (statusLabel != null)
-                statusLabel.Location = new Point((width - 400) / 2, height - 35);
-        }
-
-        private class Vec3
-        {
-            public float X;
-            public float Y;
-            public float Z;
-
-            public Vec3(float x, float y, float z)
-            {
-                X = x;
-                Y = y;
-                Z = z;
-            }
-        }
-
-        private class Vec2
-        {
-            public float U;
-            public float V;
-
-            public Vec2(float u, float v)
-            {
-                U = u;
-                V = v;
-            }
-        }
-
-        private class Face3
-        {
-            public int A;
-            public int B;
-            public int C;
-            public int TA;
-            public int TB;
-            public int TC;
-            public string MaterialName;
-
-            public Face3(int a, int b, int c, int ta, int tb, int tc, string materialName)
-            {
-                A = a;
-                B = b;
-                C = c;
-                TA = ta;
-                TB = tb;
-                TC = tc;
-                MaterialName = materialName;
-            }
-        }
-
-        private class MaterialInfo
-        {
-            public Color DiffuseColor = Color.LightGray;
-            public string TexturePath;
-            public Bitmap TextureBitmap;
-        }
-
-        private class ObjModel
-        {
-            public List<Vec3> Vertices = new List<Vec3>();
-            public List<Vec2> UVs = new List<Vec2>();
-            public List<Face3> Faces = new List<Face3>();
-            public Dictionary<string, Color> MaterialColors = new Dictionary<string, Color>();
-            public Dictionary<string, Bitmap> MaterialTextures = new Dictionary<string, Bitmap>();
-            public float Radius = 1.0f;
-        }
-
-        private class FaceRender
-        {
-            public PointF P1;
-            public PointF P2;
-            public PointF P3;
-            public float Depth;
-            public float Shade;
-            public Color BaseColor;
-        }
-
-        private string GetArtifactName(int symbolID)
-        {
-            switch (symbolID)
-            {
-                case 0:
-                    return "Mask of Tutankhamun";
-                case 1:
-                    return "Ramses II statue at the Grand Egyptian Museum";
-                case 2:
-                    return "King Senwosret III (1836-1818 BC)";
-                default:
-                    return "Unknown Artifact";
-            }
-        }
-
-        private bool IsRenderableSymbol(int symbolID)
-        {
-            return symbolID >= 0 && symbolID <= 2;
-        }
-
-        private int GetMarkerModelSize()
-        {
-            int minDim = Math.Min(width, height);
-            return Math.Max(210, (int)(minDim * 0.42f));
-        }
-
-        private int GetPersistentModelSize()
-        {
-            int minDim = Math.Min(width, height);
-            return Math.Max(280, (int)(minDim * 0.62f));
-        }
-
-        private void PinModel(int symbolID, float angle)
-        {
-            if (!IsRenderableSymbol(symbolID)) return;
-            persistentSymbolID = symbolID;
-            persistentAngle = angle;
-        }
-
-        private Point GetDisplayCenter()
-        {
-            return new Point(width / 2, height / 2 + 18);
-        }
-
-        private string GetModelObjPath(int symbolID)
-        {
-            switch (symbolID)
-            {
-                case 0:
-                    return Path.Combine("3d models", "Mask of Tutankhamun", "Mask of Tutankhamun.obj");
-                case 1:
-                    return Path.Combine("3d models", "Ramses II statue at the Grand Egyptian Museum", "Ramses II statue at the Grand Egyptian Museum .obj");
-                case 2:
-                    return Path.Combine("3d models", "King Senwosret III (1836-1818 BC)", "King Senwosret III (1836-1818 BC).obj");
-                default:
-                    return null;
-            }
-        }
-
-        private int ParseObjIndex(string token, int vertexCount)
-        {
-            string[] chunks = token.Split('/');
-            int idx;
-            if (!int.TryParse(chunks[0], out idx)) return -1;
-
-            if (idx > 0) return idx - 1;
-            if (idx < 0) return vertexCount + idx;
-            return -1;
-        }
-
-        private int ParseObjTexIndex(string token, int uvCount)
-        {
-            string[] chunks = token.Split('/');
-            if (chunks.Length < 2 || string.IsNullOrEmpty(chunks[1])) return -1;
-
-            int idx;
-            if (!int.TryParse(chunks[1], out idx)) return -1;
-
-            if (idx > 0) return idx - 1;
-            if (idx < 0) return uvCount + idx;
-            return -1;
-        }
-
-        private string ResolveAssetPath(string relativePath)
-        {
-            if (string.IsNullOrEmpty(relativePath)) return null;
-
-            string[] candidates = new string[]
-            {
-                relativePath,
-                Path.Combine(Application.StartupPath, relativePath),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, relativePath)
-            };
-
-            for (int i = 0; i < candidates.Length; i++)
-            {
-                if (File.Exists(candidates[i])) return candidates[i];
-            }
-
-            return null;
-        }
-
-        private ObjModel LoadObjModel(string relativePath)
-        {
-            string objPath = ResolveAssetPath(relativePath);
-            if (string.IsNullOrEmpty(objPath)) return null;
-
-            ObjModel model = new ObjModel();
-            string objDirectory = Path.GetDirectoryName(objPath);
-            List<string> materialLibraries = new List<string>();
-            string currentMaterial = null;
-
-            foreach (string raw in File.ReadAllLines(objPath))
-            {
-                if (string.IsNullOrWhiteSpace(raw)) continue;
-                string line = raw.Trim();
-
-                if (line.StartsWith("mtllib "))
-                {
-                    string libName = line.Substring(7).Trim();
-                    if (!string.IsNullOrEmpty(libName)) materialLibraries.Add(libName);
-                    continue;
-                }
-
-                if (line.StartsWith("usemtl "))
-                {
-                    currentMaterial = line.Substring(7).Trim();
-                    continue;
-                }
-
-                if (line.StartsWith("v "))
-                {
-                    string[] parts = line.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length >= 4)
-                    {
-                        float x;
-                        float y;
-                        float z;
-                        if (float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out x) &&
-                            float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out y) &&
-                            float.TryParse(parts[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out z))
-                        {
-                            model.Vertices.Add(new Vec3(x, y, z));
-                        }
-                    }
-                }
-                else if (line.StartsWith("vt "))
-                {
-                    string[] parts = line.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length >= 3)
-                    {
-                        float u;
-                        float v;
-                        if (float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out u) &&
-                            float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v))
-                        {
-                            model.UVs.Add(new Vec2(u, v));
-                        }
-                    }
-                }
-                else if (line.StartsWith("f "))
-                {
-                    string[] parts = line.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length >= 4)
-                    {
-                        int[] indices = new int[parts.Length - 1];
-                        int[] texIndices = new int[parts.Length - 1];
-                        bool allValid = true;
-                        for (int i = 1; i < parts.Length; i++)
-                        {
-                            int parsed = ParseObjIndex(parts[i], model.Vertices.Count);
-                            int parsedTex = ParseObjTexIndex(parts[i], model.UVs.Count);
-                            if (parsed < 0 || parsed >= model.Vertices.Count)
-                            {
-                                allValid = false;
-                                break;
-                            }
-                            indices[i - 1] = parsed;
-                            texIndices[i - 1] = parsedTex;
-                        }
-
-                        if (!allValid) continue;
-
-                        // Triangulate polygon faces using a fan.
-                        for (int i = 1; i < indices.Length - 1; i++)
-                        {
-                            model.Faces.Add(new Face3(
-                                indices[0], indices[i], indices[i + 1],
-                                texIndices[0], texIndices[i], texIndices[i + 1],
-                                currentMaterial));
-                        }
-                    }
-                }
-            }
-
-            Dictionary<string, MaterialInfo> materialInfos = LoadMaterialInfos(objDirectory, materialLibraries);
-            foreach (KeyValuePair<string, MaterialInfo> entry in materialInfos)
-            {
-                Color finalColor = entry.Value.DiffuseColor;
-                if (!string.IsNullOrEmpty(entry.Value.TexturePath) && File.Exists(entry.Value.TexturePath))
-                    finalColor = GetAverageImageColor(entry.Value.TexturePath, entry.Value.DiffuseColor);
-
-                model.MaterialColors[entry.Key] = finalColor;
-                if (entry.Value.TextureBitmap != null)
-                    model.MaterialTextures[entry.Key] = entry.Value.TextureBitmap;
-            }
-
-            if (model.Vertices.Count == 0 || model.Faces.Count == 0) return null;
-
-            float cx = 0;
-            float cy = 0;
-            float cz = 0;
-            for (int i = 0; i < model.Vertices.Count; i++)
-            {
-                cx += model.Vertices[i].X;
-                cy += model.Vertices[i].Y;
-                cz += model.Vertices[i].Z;
-            }
-            cx /= model.Vertices.Count;
-            cy /= model.Vertices.Count;
-            cz /= model.Vertices.Count;
-
-            float maxRadius = 0.0001f;
-            for (int i = 0; i < model.Vertices.Count; i++)
-            {
-                model.Vertices[i].X -= cx;
-                model.Vertices[i].Y -= cy;
-                model.Vertices[i].Z -= cz;
-
-                float r = (float)Math.Sqrt(
-                    model.Vertices[i].X * model.Vertices[i].X +
-                    model.Vertices[i].Y * model.Vertices[i].Y +
-                    model.Vertices[i].Z * model.Vertices[i].Z);
-
-                if (r > maxRadius) maxRadius = r;
-            }
-
-            model.Radius = maxRadius;
-            return model;
-        }
-
-        private Dictionary<string, MaterialInfo> LoadMaterialInfos(string objDirectory, List<string> materialLibraries)
-        {
-            Dictionary<string, MaterialInfo> result = new Dictionary<string, MaterialInfo>();
-            if (string.IsNullOrEmpty(objDirectory) || materialLibraries == null) return result;
-
-            for (int m = 0; m < materialLibraries.Count; m++)
-            {
-                string mtlPath = Path.Combine(objDirectory, materialLibraries[m]);
-                if (!File.Exists(mtlPath)) continue;
-
-                Dictionary<string, MaterialInfo> materialInfos = ParseMtlFile(mtlPath);
-                foreach (KeyValuePair<string, MaterialInfo> entry in materialInfos)
-                {
-                    if (!string.IsNullOrEmpty(entry.Value.TexturePath) && File.Exists(entry.Value.TexturePath))
-                    {
-                        try
-                        {
-                            entry.Value.TextureBitmap = new Bitmap(entry.Value.TexturePath);
-                        }
-                        catch
-                        {
-                            entry.Value.TextureBitmap = null;
-                        }
-                    }
-                    result[entry.Key] = entry.Value;
-                }
-            }
-
-            return result;
-        }
-
-        private Dictionary<string, MaterialInfo> ParseMtlFile(string mtlPath)
-        {
-            Dictionary<string, MaterialInfo> materials = new Dictionary<string, MaterialInfo>();
-            string mtlDirectory = Path.GetDirectoryName(mtlPath);
-            string currentName = null;
-
-            foreach (string raw in File.ReadAllLines(mtlPath))
-            {
-                if (string.IsNullOrWhiteSpace(raw)) continue;
-                string line = raw.Trim();
-                if (line.StartsWith("#")) continue;
-
-                if (line.StartsWith("newmtl "))
-                {
-                    currentName = line.Substring(7).Trim();
-                    if (!materials.ContainsKey(currentName))
-                        materials[currentName] = new MaterialInfo();
-                    continue;
-                }
-
-                if (string.IsNullOrEmpty(currentName) || !materials.ContainsKey(currentName)) continue;
-
-                if (line.StartsWith("Kd "))
-                {
-                    string[] parts = line.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length >= 4)
-                    {
-                        float r;
-                        float g;
-                        float b;
-                        if (float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out r) &&
-                            float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out g) &&
-                            float.TryParse(parts[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out b))
-                        {
-                            int rr = Math.Max(0, Math.Min(255, (int)(r * 255f)));
-                            int gg = Math.Max(0, Math.Min(255, (int)(g * 255f)));
-                            int bb = Math.Max(0, Math.Min(255, (int)(b * 255f)));
-                            materials[currentName].DiffuseColor = Color.FromArgb(220, rr, gg, bb);
-                        }
-                    }
-                    continue;
-                }
-
-                if (line.StartsWith("map_Kd "))
-                {
-                    string textureRel = line.Substring(7).Trim();
-                    if (!string.IsNullOrEmpty(textureRel))
-                        materials[currentName].TexturePath = Path.Combine(mtlDirectory, textureRel);
-                }
-            }
-
-            return materials;
-        }
-
-        private Color GetAverageImageColor(string imagePath, Color fallback)
-        {
-            try
-            {
-                using (Bitmap bitmap = new Bitmap(imagePath))
-                {
-                    int stepX = Math.Max(1, bitmap.Width / 40);
-                    int stepY = Math.Max(1, bitmap.Height / 40);
-
-                    long sumR = 0;
-                    long sumG = 0;
-                    long sumB = 0;
-                    long count = 0;
-
-                    for (int y = 0; y < bitmap.Height; y += stepY)
-                    {
-                        for (int x = 0; x < bitmap.Width; x += stepX)
-                        {
-                            Color c = bitmap.GetPixel(x, y);
-                            sumR += c.R;
-                            sumG += c.G;
-                            sumB += c.B;
-                            count++;
-                        }
-                    }
-
-                    if (count == 0) return fallback;
-                    int r = (int)(sumR / count);
-                    int g = (int)(sumG / count);
-                    int b = (int)(sumB / count);
-                    return Color.FromArgb(220, r, g, b);
-                }
-            }
-            catch
-            {
-                return fallback;
-            }
-        }
-
-        private ObjModel TryGetModel(int symbolID)
-        {
-            if (modelCache.ContainsKey(symbolID)) return modelCache[symbolID];
-
-            string objPath = GetModelObjPath(symbolID);
-            ObjModel loaded = LoadObjModel(objPath);
-            modelCache[symbolID] = loaded;
-            return loaded;
-        }
-
-        private Color GetArtifactColor(int symbolID)
-        {
-            switch (symbolID)
-            {
-                case 0:
-                    return Color.FromArgb(220, 191, 138, 42);
-                case 1:
-                    return Color.FromArgb(220, 160, 160, 160);
-                case 2:
-                    return Color.FromArgb(220, 205, 170, 125);
-                default:
-                    return Color.LightGray;
-            }
-        }
-
-        private Vec3 RotateModelVertex(Vec3 v, float yaw, float pitch)
-        {
-            float cy = (float)Math.Cos(yaw);
-            float sy = (float)Math.Sin(yaw);
-            float cp = (float)Math.Cos(pitch);
-            float sp = (float)Math.Sin(pitch);
-
-            // Rotate around Y (yaw)
-            float x1 = v.X * cy + v.Z * sy;
-            float z1 = -v.X * sy + v.Z * cy;
-            float y1 = v.Y;
-
-            // Rotate around X (pitch)
-            float y2 = y1 * cp - z1 * sp;
-            float z2 = y1 * sp + z1 * cp;
-
-            return new Vec3(x1, y2, z2);
-        }
-
-        private Vec3 RotateFaceNormal(Vec3 normal, float yaw, float pitch)
-        {
-            return RotateModelVertex(normal, yaw, pitch);
-        }
-
-        private void RasterizeTriangle(
-            int[] pixels,
-            float[] zBuffer,
-            int bufferWidth,
-            int bufferHeight,
-            PointF p1, PointF p2, PointF p3,
-            float z1, float z2, float z3,
-            Vec2 uv1, Vec2 uv2, Vec2 uv3,
-            Bitmap texture,
-            Color fallbackColor,
-            float lightFactor)
-        {
-            int minX = Math.Max(0, (int)Math.Floor(Math.Min(p1.X, Math.Min(p2.X, p3.X))));
-            int maxX = Math.Min(bufferWidth - 1, (int)Math.Ceiling(Math.Max(p1.X, Math.Max(p2.X, p3.X))));
-            int minY = Math.Max(0, (int)Math.Floor(Math.Min(p1.Y, Math.Min(p2.Y, p3.Y))));
-            int maxY = Math.Min(bufferHeight - 1, (int)Math.Ceiling(Math.Max(p1.Y, Math.Max(p2.Y, p3.Y))));
-
-            float denom = ((p2.Y - p3.Y) * (p1.X - p3.X) + (p3.X - p2.X) * (p1.Y - p3.Y));
-            if (Math.Abs(denom) < 0.00001f) return;
-
-            bool useTexture = texture != null && uv1 != null && uv2 != null && uv3 != null;
-
-            for (int y = minY; y <= maxY; y++)
-            {
-                for (int x = minX; x <= maxX; x++)
-                {
-                    float w1 = ((p2.Y - p3.Y) * (x - p3.X) + (p3.X - p2.X) * (y - p3.Y)) / denom;
-                    float w2 = ((p3.Y - p1.Y) * (x - p3.X) + (p1.X - p3.X) * (y - p3.Y)) / denom;
-                    float w3 = 1.0f - w1 - w2;
-
-                    if (w1 < 0 || w2 < 0 || w3 < 0) continue;
-
-                    float z = w1 * z1 + w2 * z2 + w3 * z3;
-                    int idx = y * bufferWidth + x;
-                    if (z <= zBuffer[idx]) continue;
-                    zBuffer[idx] = z;
-
-                    Color sourceColor = fallbackColor;
-                    if (useTexture)
-                    {
-                        float u = w1 * uv1.U + w2 * uv2.U + w3 * uv3.U;
-                        float v = w1 * uv1.V + w2 * uv2.V + w3 * uv3.V;
-                        u = Math.Max(0.0f, Math.Min(1.0f, u));
-                        v = Math.Max(0.0f, Math.Min(1.0f, v));
-
-                        int tx = Math.Max(0, Math.Min(texture.Width - 1, (int)(u * (texture.Width - 1))));
-                        int ty = Math.Max(0, Math.Min(texture.Height - 1, (int)((1.0f - v) * (texture.Height - 1))));
-                        sourceColor = texture.GetPixel(tx, ty);
-                    }
-
-                    float exposure = 1.12f;
-                    int r = Math.Max(0, Math.Min(255, (int)(sourceColor.R * lightFactor * exposure + 8)));
-                    int gr = Math.Max(0, Math.Min(255, (int)(sourceColor.G * lightFactor * exposure + 8)));
-                    int b = Math.Max(0, Math.Min(255, (int)(sourceColor.B * lightFactor * exposure + 8)));
-                    pixels[idx] = Color.FromArgb(255, r, gr, b).ToArgb();
-                }
-            }
-        }
-
-        private void RenderObjModel(Graphics g, ObjModel model, int centerX, int centerY, float markerAngle, int size, Color baseColor)
-        {
-            if (model == null) return;
-
-            int renderWidth = size;
-            int renderHeight = size;
-            int[] pixels = new int[renderWidth * renderHeight];
-            float[] zBuffer = new float[renderWidth * renderHeight];
-            for (int i = 0; i < zBuffer.Length; i++) zBuffer[i] = float.NegativeInfinity;
-
-            float scale = (size * 0.95f) / model.Radius;
-            float yaw = markerAngle + (float)(DateTime.Now.TimeOfDay.TotalSeconds * 0.4);
-            float pitch = -0.35f;
-            float cameraZ = size * 3.2f;
-            float projection = size * 1.7f;
-
-            Vec3[] transformed = new Vec3[model.Vertices.Count];
-            PointF[] projected = new PointF[model.Vertices.Count];
-            float[] depthValues = new float[model.Vertices.Count];
-
-            for (int i = 0; i < model.Vertices.Count; i++)
-            {
-                Vec3 tv = RotateModelVertex(model.Vertices[i], yaw, pitch);
-                tv.X *= scale;
-                tv.Y *= scale;
-                tv.Z *= scale;
-                transformed[i] = tv;
-
-                float z = tv.Z + cameraZ;
-                if (z < 1f) z = 1f;
-                depthValues[i] = tv.Z;
-
-                float sx = renderWidth * 0.5f + (tv.X * projection / z);
-                float sy = renderHeight * 0.5f - (tv.Y * projection / z);
-                projected[i] = new PointF(sx, sy);
-            }
-            Vec3 lightDir = new Vec3(0.2f, -0.5f, 1.0f);
-            float lightLen = (float)Math.Sqrt(lightDir.X * lightDir.X + lightDir.Y * lightDir.Y + lightDir.Z * lightDir.Z);
-            lightDir.X /= lightLen;
-            lightDir.Y /= lightLen;
-            lightDir.Z /= lightLen;
-
-            for (int i = 0; i < model.Faces.Count; i++)
-            {
-                Face3 f = model.Faces[i];
-                Vec3 a = transformed[f.A];
-                Vec3 b = transformed[f.B];
-                Vec3 c = transformed[f.C];
-
-                float ux = b.X - a.X;
-                float uy = b.Y - a.Y;
-                float uz = b.Z - a.Z;
-                float vx = c.X - a.X;
-                float vy = c.Y - a.Y;
-                float vz = c.Z - a.Z;
-
-                float nx = uy * vz - uz * vy;
-                float ny = uz * vx - ux * vz;
-                float nz = ux * vy - uy * vx;
-
-                float nLen = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
-                if (nLen < 0.00001f) continue;
-                nx /= nLen;
-                ny /= nLen;
-                nz /= nLen;
-
-                Vec3 rotatedNormal = RotateFaceNormal(new Vec3(nx, ny, nz), yaw, pitch);
-
-                float diffuse = Math.Abs(nx * lightDir.X + ny * lightDir.Y + nz * lightDir.Z);
-                // Strong ambient term keeps original texture colors from collapsing into dark tones.
-                float lightFactor = 0.68f + 0.42f * diffuse;
-                if (lightFactor > 1.18f) lightFactor = 1.18f;
-
-                Color faceBaseColor = !string.IsNullOrEmpty(f.MaterialName) && model.MaterialColors.ContainsKey(f.MaterialName)
-                    ? model.MaterialColors[f.MaterialName]
-                    : baseColor;
-                Bitmap faceTexture = null;
-                if (!string.IsNullOrEmpty(f.MaterialName) && model.MaterialTextures.ContainsKey(f.MaterialName))
-                    faceTexture = model.MaterialTextures[f.MaterialName];
-
-                Vec2 uv1 = (f.TA >= 0 && f.TA < model.UVs.Count) ? model.UVs[f.TA] : null;
-                Vec2 uv2 = (f.TB >= 0 && f.TB < model.UVs.Count) ? model.UVs[f.TB] : null;
-                Vec2 uv3 = (f.TC >= 0 && f.TC < model.UVs.Count) ? model.UVs[f.TC] : null;
-
-                RasterizeTriangle(
-                    pixels,
-                    zBuffer,
-                    renderWidth,
-                    renderHeight,
-                    projected[f.A], projected[f.B], projected[f.C],
-                    depthValues[f.A], depthValues[f.B], depthValues[f.C],
-                    uv1, uv2, uv3,
-                    faceTexture,
-                    faceBaseColor,
-                        lightFactor);
-            }
-
-            using (Bitmap frame = new Bitmap(renderWidth, renderHeight, PixelFormat.Format32bppArgb))
-            {
-                Rectangle rect = new Rectangle(0, 0, renderWidth, renderHeight);
-                BitmapData data = frame.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-                Marshal.Copy(pixels, 0, data.Scan0, pixels.Length);
-                frame.UnlockBits(data);
-
-                g.DrawImage(frame, centerX - renderWidth / 2, centerY - renderHeight / 2, renderWidth, renderHeight);
-            }
-        }
-
-
-    private void InitializeLabels()
+using TUIO;
+
+// Minimal JSON parser for users.json (no external deps)
+static class TinyJson
+{
+    public static List<UserRecord> ParseUsers(string json)
     {
-        // Face status label (top-right corner)
-        faceStatusLabel = new Label();
-        faceStatusLabel.AutoSize = false;
-        faceStatusLabel.Size = new Size(260, 30);
-        faceStatusLabel.Location = new Point(width - 270, 10);
-        faceStatusLabel.BackColor = Color.Transparent;
-        faceStatusLabel.ForeColor = Color.White;
-        faceStatusLabel.Font = statusFont;
-        faceStatusLabel.TextAlign = ContentAlignment.MiddleRight;
-        faceStatusLabel.Text = "Face: Not Detected";
-        this.Controls.Add(faceStatusLabel);
-
-        // Python connection status label (top-right, below face label)
-        pythonStatusLabel = new Label();
-        pythonStatusLabel.AutoSize = false;
-        pythonStatusLabel.Size = new Size(260, 24);
-        pythonStatusLabel.Location = new Point(width - 270, 42);
-        pythonStatusLabel.BackColor = Color.Transparent;
-        pythonStatusLabel.ForeColor = Color.OrangeRed;
-        pythonStatusLabel.Font = font;
-        pythonStatusLabel.TextAlign = ContentAlignment.MiddleRight;
-        pythonStatusLabel.Text = "⬤ Python: Disconnected";
-        this.Controls.Add(pythonStatusLabel);
-        
-        // Marker info label (top-left corner)
-        markerInfoLabel = new Label();
-        markerInfoLabel.AutoSize = false;
-        markerInfoLabel.Size = new Size(620, 28);
-        markerInfoLabel.Location = new Point(10, 8);
-        markerInfoLabel.BackColor = Color.Transparent;
-        markerInfoLabel.ForeColor = Color.White;
-        markerInfoLabel.Font = statusFont;
-        markerInfoLabel.TextAlign = ContentAlignment.MiddleLeft;
-        markerInfoLabel.Text = "Place a marker to begin";
-        this.Controls.Add(markerInfoLabel);
-        
-        // Status label (bottom center)
-        statusLabel = new Label();
-        statusLabel.AutoSize = false;
-        statusLabel.Size = new Size(400, 25);
-        statusLabel.Location = new Point((width - 400) / 2, height - 35);
-        statusLabel.BackColor = Color.Transparent;
-        statusLabel.ForeColor = Color.LightGray;
-        statusLabel.Font = font;
-        statusLabel.TextAlign = ContentAlignment.MiddleCenter;
-        statusLabel.Text = "Press F1 for fullscreen | ESC to exit | V for verbose";
-        this.Controls.Add(statusLabel);
-    }
-
-		private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e) {
-
- 			if ( e.KeyData == Keys.F1) {
-	 			if (fullscreen == false) {
-
-					width = screen_width;
-					height = screen_height;
-
-					window_left = this.Left;
-					window_top = this.Top;
-
-					this.FormBorderStyle = FormBorderStyle.None;
-		 			this.Left = 0;
-		 			this.Top = 0;
-		 			this.Width = screen_width;
-		 			this.Height = screen_height;
-
-		 			fullscreen = true;
-	 			} else {
-
-					width = window_width;
-					height = window_height;
-
-		 			this.FormBorderStyle = FormBorderStyle.Sizable;
-		 			this.Left = window_left;
-		 			this.Top = window_top;
-		 			this.Width = window_width;
-		 			this.Height = window_height;
-
-		 			fullscreen = false;
-	 			}
- 			} else if ( e.KeyData == Keys.Escape) {
-				this.Close();
-
- 			} else if ( e.KeyData == Keys.V ) {
- 				verbose=!verbose;
- 			}
-
- 		}
-
-		private void Form_Closing(object sender, System.ComponentModel.CancelEventArgs e)
-		{
-            foreach (ObjModel model in modelCache.Values)
-            {
-                if (model == null) continue;
-                foreach (Bitmap tex in model.MaterialTextures.Values)
-                {
-                    if (tex != null) tex.Dispose();
-                }
-            }
-            modelCache.Clear();
-
-			client.removeTuioListener(this);
-
-			client.disconnect();
-			System.Environment.Exit(0);
-		}
-
-		public void addTuioObject(TuioObject o) {
-			lock(objectList) {
-				objectList.Add(o.SessionID,o);
-			} 
-            PinModel(o.SymbolID, (float)o.Angle);
-			if (verbose) Console.WriteLine("add obj "+o.SymbolID+" ("+o.SessionID+") "+o.X+" "+o.Y+" "+o.Angle);
-			
-			// Update marker info on UI thread
-			UpdateMarkerInfo(o.SymbolID, true);
-		}
-
-		public void updateTuioObject(TuioObject o) {
-
-			if (verbose) Console.WriteLine("set obj "+o.SymbolID+" "+o.SessionID+" "+o.X+" "+o.Y+" "+o.Angle+" "+o.MotionSpeed+" "+o.RotationSpeed+" "+o.MotionAccel+" "+o.RotationAccel);
-            PinModel(o.SymbolID, (float)o.Angle);
-            UpdateMarkerInfo(o.SymbolID, true);
-		}
-
-		public void removeTuioObject(TuioObject o) {
-			lock(objectList) {
-				objectList.Remove(o.SessionID);
-			}
-			if (verbose) Console.WriteLine("del obj "+o.SymbolID+" ("+o.SessionID+")");
-			
-			// Update marker info on UI thread
-			if (objectList.Count == 0) {
-                if (persistentSymbolID >= 0)
-                    UpdateMarkerInfo(persistentSymbolID, true);
-                else
-				    UpdateMarkerInfo(-1, false);
-            } else {
-                int firstSymbol = -1;
-                lock(objectList) {
-                    foreach (TuioObject remaining in objectList.Values) {
-                        firstSymbol = remaining.SymbolID;
-                        break;
-                    }
-                }
-                if (firstSymbol >= 0) UpdateMarkerInfo(firstSymbol, true);
-			}
-		}
-
-		public void addTuioCursor(TuioCursor c) {
-			lock(cursorList) {
-				cursorList.Add(c.SessionID,c);
-			}
-			if (verbose) Console.WriteLine("add cur "+c.CursorID + " ("+c.SessionID+") "+c.X+" "+c.Y);
-		}
-
-		public void updateTuioCursor(TuioCursor c) {
-			if (verbose) Console.WriteLine("set cur "+c.CursorID + " ("+c.SessionID+") "+c.X+" "+c.Y+" "+c.MotionSpeed+" "+c.MotionAccel);
-		}
-
-		public void removeTuioCursor(TuioCursor c) {
-			lock(cursorList) {
-				cursorList.Remove(c.SessionID);
-			}
-			if (verbose) Console.WriteLine("del cur "+c.CursorID + " ("+c.SessionID+")");
- 		}
-
-		public void addTuioBlob(TuioBlob b) {
-			lock(blobList) {
-				blobList.Add(b.SessionID,b);
-			}
-			if (verbose) Console.WriteLine("add blb "+b.BlobID + " ("+b.SessionID+") "+b.X+" "+b.Y+" "+b.Angle+" "+b.Width+" "+b.Height+" "+b.Area);
-		}
-
-		public void updateTuioBlob(TuioBlob b) {
-		
-			if (verbose) Console.WriteLine("set blb "+b.BlobID + " ("+b.SessionID+") "+b.X+" "+b.Y+" "+b.Angle+" "+b.Width+" "+b.Height+" "+b.Area+" "+b.MotionSpeed+" "+b.RotationSpeed+" "+b.MotionAccel+" "+b.RotationAccel);
-		}
-
-		public void removeTuioBlob(TuioBlob b) {
-			lock(blobList) {
-				blobList.Remove(b.SessionID);
-			}
-			if (verbose) Console.WriteLine("del blb "+b.BlobID + " ("+b.SessionID+")");
-		}
-
-		public void refresh(TuioTime frameTime) {
-			Invalidate();
-		}
-    class Client
-    {
-        int byteCT;
-        public NetworkStream stream;
-        byte[] sendData;
-        public TcpClient client;
-
-        public bool connectToSocket(string host, int portNumber)
-        {
-            try
-            {
-                client = new TcpClient(host, portNumber);
-                stream = client.GetStream();
-                Console.WriteLine("connection made ! with " + host);
-                return true;
-            }
-            catch (System.Net.Sockets.SocketException e)
-            {
-                Console.WriteLine("Connection Failed: " + e.Message);
-                return false;
-            }
-        }
-
-        public string recieveMessage()
-        {
-            try
-            {
-                if (stream == null) return null;
-                byte[] receiveBuffer = new byte[1024];
-                int bytesReceived = stream.Read(receiveBuffer, 0, 1024);
-                Console.WriteLine(bytesReceived);
-                string data = Encoding.UTF8.GetString(receiveBuffer, 0, bytesReceived);
-                Console.WriteLine(data);
-                return data;
-            }
-            catch (System.Exception e)
-            {
-
-            }
-
-            return null;
-        }
-
-    }
-	string msg = "";
-	string oldmsg = "";
-    public void stream()
-    {
-        Client c = new Client();
-        // Retry connecting until Python server is ready
-        while (!c.connectToSocket("localhost", 5000))
-        {
-            Console.WriteLine("[SOCKET] Retrying connection to Python in 2s...");
-            Thread.Sleep(2000);
-        }
-        UpdatePythonStatus(true);
-
+        var result = new List<UserRecord>();
+        int pos = 0;
         while (true)
         {
-            msg = c.recieveMessage();
-            if (msg == null) {
-                // Connection lost — try to reconnect
-                Console.WriteLine("[SOCKET] Connection lost. Reconnecting...");
-                UpdatePythonStatus(false);
-                c = new Client();
-                while (!c.connectToSocket("localhost", 5000))
+            int ni = json.IndexOf("\"name\"", pos);
+            if (ni < 0) break;
+            int colon = json.IndexOf(':', ni);
+            int q1 = json.IndexOf('"', colon + 1);
+            int q2 = json.IndexOf('"', q1 + 1);
+            string name = json.Substring(q1 + 1, q2 - q1 - 1);
+            var favs = new List<int>();
+            int fi = json.IndexOf("\"favourites\"", q2);
+            int nextName = json.IndexOf("\"name\"", q2 + 1);
+            if (fi >= 0 && (nextName < 0 || fi < nextName))
+            {
+                int arrStart = json.IndexOf('[', fi);
+                int arrEnd   = json.IndexOf(']', arrStart);
+                string inner = json.Substring(arrStart + 1, arrEnd - arrStart - 1).Trim();
+                if (!string.IsNullOrWhiteSpace(inner))
+                    foreach (string tok in inner.Split(','))
+                    { int v; if (int.TryParse(tok.Trim(), out v)) favs.Add(v); }
+            }
+            result.Add(new UserRecord { Name = name, Favourites = favs });
+            pos = q2 + 1;
+        }
+        return result;
+    }
+}
+
+class UserRecord
+{
+    public string Name;
+    public List<int> Favourites = new List<int>();
+}
+
+// Artifact data
+static class ArtifactData
+{
+    public static readonly string[] Names = {
+        "Mask of Tutankhamun",
+        "Ramses II Statue",
+        "King Senwosret III"
+    };
+    public static readonly string[] Descriptions = {
+        "The golden death mask of Pharaoh Tutankhamun, crafted around 1323 BC. " +
+        "Made of solid gold inlaid with lapis lazuli, quartz, and obsidian.",
+        "Colossal granite statue of Ramses II at the Grand Egyptian Museum, " +
+        "depicting the most celebrated pharaoh of the New Kingdom (1279-1213 BC).",
+        "Quartzite head of Senwosret III (1836-1818 BC), renowned for its " +
+        "strikingly realistic, careworn expression."
+    };
+    public static readonly Color[] Colors = {
+        Color.FromArgb(220, 191, 138, 42),
+        Color.FromArgb(220, 160, 160, 160),
+        Color.FromArgb(220, 205, 170, 125)
+    };
+    public static string GetObjPath(int id)
+    {
+        switch (id)
+        {
+            case 0: return Path.Combine("3d models","Mask of Tutankhamun","Mask of Tutankhamun.obj");
+            case 1: return Path.Combine("3d models","Ramses II statue at the Grand Egyptian Museum","Ramses II statue at the Grand Egyptian Museum .obj");
+            case 2: return Path.Combine("3d models","King Senwosret III (1836-1818 BC)","King Senwosret III (1836-1818 BC).obj");
+            default: return null;
+        }
+    }
+    public static int Count { get { return Names.Length; } }
+}
+
+enum AppScreen { Explore, Favourites, Artifact }
+
+// 3-D geometry helpers
+class Vec3 { public float X,Y,Z; public Vec3(float x,float y,float z){X=x;Y=y;Z=z;} }
+class Vec2 { public float U,V; public Vec2(float u,float v){U=u;V=v;} }
+class Face3 {
+    public int A,B,C,TA,TB,TC; public string Mat;
+    public Face3(int a,int b,int c,int ta,int tb,int tc,string m){A=a;B=b;C=c;TA=ta;TB=tb;TC=tc;Mat=m;}
+}
+class MaterialInfo { public Color Diffuse=Color.LightGray; public string TexPath; public Bitmap TexBmp; }
+class ObjModel {
+    public List<Vec3> Verts=new List<Vec3>();
+    public List<Vec2> UVs=new List<Vec2>();
+    public List<Face3> Faces=new List<Face3>();
+    public Dictionary<string,Color> MatColors=new Dictionary<string,Color>();
+    public Dictionary<string,Bitmap> MatTextures=new Dictionary<string,Bitmap>();
+    public float Radius=1f;
+}
+
+public class TuioDemo : Form, TuioListener
+{
+    private TuioClient client;
+    private Dictionary<long,TuioObject> objectList = new Dictionary<long,TuioObject>(128);
+    private Dictionary<long,TuioCursor> cursorList = new Dictionary<long,TuioCursor>(128);
+    private Dictionary<long,TuioBlob>   blobList   = new Dictionary<long,TuioBlob>(128);
+
+    public static int width, height;
+    private int screen_width  = Screen.PrimaryScreen.Bounds.Width;
+    private int screen_height = Screen.PrimaryScreen.Bounds.Height;
+    private bool fullscreen, verbose;
+
+    // Navigation
+    private AppScreen currentScreen = AppScreen.Explore;
+    private int artifactID = -1;
+
+    // Carousel
+    private float carouselAngle  = 0f;
+    private float carouselTarget = 0f;
+    private int   carouselFocused = 0;
+    private System.Windows.Forms.Timer carouselTimer;
+
+    // Users / Favourites
+    private List<UserRecord> users = new List<UserRecord>();
+    private string loggedInName = "";
+    private List<int> userFavourites = new List<int>();
+
+    // 3-D
+    private Dictionary<int,ObjModel> modelCache = new Dictionary<int,ObjModel>();
+    private float artifactAngle = 0f;
+    private System.Windows.Forms.Timer rotateTimer;
+
+    // Python socket
+    private bool faceDetected = false;
+
+    // Fonts
+    private Font fontUI    = new Font("Segoe UI", 11f);
+    private Font fontTitle = new Font("Segoe UI Semibold", 18f, FontStyle.Bold);
+    private Font fontSmall = new Font("Segoe UI", 9f);
+    private Font fontTab   = new Font("Segoe UI Semibold", 13f, FontStyle.Bold);
+
+    // Tab hit rects
+    private Rectangle tabExplore    = Rectangle.Empty;
+    private Rectangle tabFavourites = Rectangle.Empty;
+    private Rectangle tabArtifact   = Rectangle.Empty;
+
+    // Status labels
+    private Label faceStatusLabel;
+    private Label pythonStatusLabel;
+
+    public TuioDemo(int port)
+    {
+        verbose = false; fullscreen = false;
+        width = 1280; height = 720;
+        this.ClientSize = new Size(width, height);
+        this.Text = "MuseSense - Interactive Museum Guide";
+        this.Name = "TuioDemo";
+        this.SetStyle(ControlStyles.AllPaintingInWmPaint|ControlStyles.UserPaint|ControlStyles.DoubleBuffer, true);
+        this.Closing    += new CancelEventHandler(Form_Closing);
+        this.KeyDown    += new KeyEventHandler(Form_KeyDown);
+        this.Resize     += new EventHandler(Form_Resized);
+        this.MouseClick += new MouseEventHandler(Form_MouseClick);
+        InitStatusLabels();
+        this.WindowState = FormWindowState.Maximized;
+        UpdateLayout();
+
+        carouselTimer = new System.Windows.Forms.Timer();
+        carouselTimer.Interval = 16;
+        carouselTimer.Tick += (s,e) => { carouselAngle += (carouselTarget - carouselAngle) * 0.08f; if (currentScreen==AppScreen.Explore) Invalidate(); };
+        carouselTimer.Start();
+
+        rotateTimer = new System.Windows.Forms.Timer();
+        rotateTimer.Interval = 16;
+        rotateTimer.Tick += (s,e) => { if (currentScreen==AppScreen.Artifact) { artifactAngle += 0.012f; Invalidate(); } };
+        rotateTimer.Start();
+
+        LoadUsers();
+
+        client = new TuioClient(port);
+        client.addTuioListener(this);
+        client.connect();
+
+        Thread t = new Thread(SocketThread);
+        t.IsBackground = true;
+        t.Start();
+    }
+
+    private void LoadUsers()
+    {
+        string[] cands = {
+            Path.Combine("faces","users.json"),
+            Path.Combine(Application.StartupPath,"faces","users.json"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"faces","users.json"),
+            Path.Combine("..","..","faces","users.json"),
+            Path.Combine("..","..","..","faces","users.json")
+        };
+        foreach (string p in cands)
+            if (File.Exists(p)) { try { users = TinyJson.ParseUsers(File.ReadAllText(p)); } catch {} break; }
+    }
+
+    private void SetLoggedInUser(string name)
+    {
+        loggedInName = name;
+        userFavourites.Clear();
+        foreach (UserRecord u in users)
+            if (u.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            { userFavourites.AddRange(u.Favourites); break; }
+        UpdateFaceLabel(true, name);
+    }
+
+    private void GoTo(AppScreen screen, int id)
+    {
+        currentScreen = screen;
+        if (id >= 0) artifactID = id;
+        if (screen == AppScreen.Artifact && artifactID >= 0) artifactAngle = 0f;
+        Invalidate();
+    }
+
+    private void GoTo(AppScreen screen) { GoTo(screen, -1); }
+
+    private void Form_MouseClick(object sender, MouseEventArgs e)
+    {
+        Point p = e.Location;
+        if (tabExplore.Contains(p))    { GoTo(AppScreen.Explore);    return; }
+        if (tabFavourites.Contains(p)) { GoTo(AppScreen.Favourites); return; }
+        if (tabArtifact.Contains(p) && artifactID >= 0) { GoTo(AppScreen.Artifact); return; }
+
+        if (currentScreen == AppScreen.Explore)
+            for (int i = 0; i < ArtifactData.Count; i++)
+            {
+                if (GetCarouselCardRect(i).Contains(p))
                 {
-                    Console.WriteLine("[SOCKET] Retrying in 2s...");
-                    Thread.Sleep(2000);
+                    if (i == carouselFocused) GoTo(AppScreen.Artifact, i);
+                    else FocusCard(i);
+                    return;
                 }
-                Console.WriteLine("[SOCKET] Reconnected.");
-                UpdatePythonStatus(true);
-                continue;
             }
 
-            if (msg == "q")
-            {
-                c.stream.Close();
-                c.client.Close();
-                Console.WriteLine("Connection Terminated !");
-                break;
-            }
-        
-
-
-            // Process the message from Python
-            Console.WriteLine("Received from Python: " + msg);
-
-            if (msg.Contains("face:detected") || msg.Contains("face detected"))
-            {
-                faceDetected = true;
-                lastFaceDetectionTime = DateTime.Now;
-                UpdateFaceStatus(true, msg);
-            }
-            else if (msg.Contains("face:lost") || msg.Contains("face lost"))
-            {
-                faceDetected = false;
-                UpdateFaceStatus(false);
-            }
-            else if (msg.Contains("gesture"))
-            {
-                UpdateStatus("Gesture detected: " + msg);
-            }
-
-            if (msg != oldmsg)
-            {
-                lastMessage = msg;
-                oldmsg = msg;
-            }
-
-            // Request UI refresh
-            if (this.InvokeRequired)
-            {
-                this.BeginInvoke(new MethodInvoker(delegate { this.Invalidate(); }));
-            }
-            else
-            {
-                this.Invalidate();
-            }
-
-            Thread.Sleep(50); // Small delay to prevent CPU overload
-        }
+        if (currentScreen == AppScreen.Favourites)
+            for (int fi = 0; fi < userFavourites.Count; fi++)
+                if (GetFavCardRect(fi).Contains(p)) { GoTo(AppScreen.Artifact, userFavourites[fi]); return; }
     }
-    
-    private void UpdatePythonStatus(bool connected)
+
+    private void FocusCard(int idx)
     {
-        string text = connected ? "⬤ Python: Connected" : "⬤ Python: Disconnected";
-        Color color = connected ? Color.LimeGreen : Color.OrangeRed;
-        if (pythonStatusLabel.InvokeRequired)
+        carouselFocused = idx;
+        float step = (float)(2 * Math.PI / ArtifactData.Count);
+        carouselTarget = -idx * step;
+    }
+
+    // ── Paint ─────────────────────────────────────────────────────────────────
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        Graphics g = e.Graphics;
+        g.SmoothingMode   = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        DrawBg(g);
+        DrawHeader(g);
+        int top = 64;
+        switch (currentScreen)
         {
-            pythonStatusLabel.BeginInvoke(new MethodInvoker(delegate {
-                pythonStatusLabel.Text = text;
-                pythonStatusLabel.ForeColor = color;
-            }));
-        }
-        else
-        {
-            pythonStatusLabel.Text = text;
-            pythonStatusLabel.ForeColor = color;
+            case AppScreen.Explore:    DrawExplore(g, top);    break;
+            case AppScreen.Favourites: DrawFavourites(g, top); break;
+            case AppScreen.Artifact:   DrawArtifact(g, top);   break;
         }
     }
 
-    private void UpdateFaceStatus(bool detected, string rawMsg = "")
+    private void DrawBg(Graphics g)
     {
-        string label = detected ? "✓ Face Detected" : "Face: Not Detected";
-        if (detected && rawMsg.Contains("face:detected:"))
+        using (var br = new LinearGradientBrush(new Rectangle(0,0,width,height),
+            Color.FromArgb(10,22,48), Color.FromArgb(2,8,22), LinearGradientMode.Vertical))
+            g.FillRectangle(br, 0, 0, width, height);
+    }
+
+    private void DrawHeader(Graphics g)
+    {
+        using (var br = new SolidBrush(Color.FromArgb(180,5,15,35)))
+            g.FillRectangle(br, 0, 0, width, 60);
+        using (var pen = new Pen(Color.FromArgb(80,100,160,220), 1))
+            g.DrawLine(pen, 0, 60, width, 60);
+        using (var br = new SolidBrush(Color.FromArgb(200,180,220,255)))
+            g.DrawString("MuseSense", fontTitle, br, 18, 12);
+
+        string[] labels = { "Explore", "Favourites", "Artifact" };
+        AppScreen[] screens = { AppScreen.Explore, AppScreen.Favourites, AppScreen.Artifact };
+        int tabW=130, tabH=36, tabY=12;
+        int startX = width/2 - (labels.Length*tabW)/2;
+
+        for (int i = 0; i < labels.Length; i++)
         {
-            string personName = rawMsg.Substring(rawMsg.IndexOf("face:detected:") + "face:detected:".Length).Trim();
-            if (!string.IsNullOrEmpty(personName))
-                label = "✓ " + personName;
-        }
-        if (faceStatusLabel.InvokeRequired)
-        {
-            faceStatusLabel.BeginInvoke(new MethodInvoker(delegate {
-                faceStatusLabel.Text = label;
-                faceStatusLabel.ForeColor = detected ? Color.LightGreen : Color.LightCoral;
-            }));
-        }
-        else
-        {
-            faceStatusLabel.Text = label;
-            faceStatusLabel.ForeColor = detected ? Color.LightGreen : Color.LightCoral;
+            Rectangle r = new Rectangle(startX + i*tabW, tabY, tabW-4, tabH);
+            if (i==0) tabExplore=r; else if (i==1) tabFavourites=r; else tabArtifact=r;
+            bool active   = (currentScreen == screens[i]);
+            bool disabled = (screens[i] == AppScreen.Artifact && artifactID < 0);
+            Color bg = active ? Color.FromArgb(200,60,120,200) : Color.FromArgb(80,40,60,100);
+            using (var path = RoundRect(r,8)) using (var br = new SolidBrush(bg)) g.FillPath(br, path);
+            if (active) using (var pen = new Pen(Color.FromArgb(255,100,180,255),2))
+                g.DrawLine(pen, r.Left+8, r.Bottom-1, r.Right-8, r.Bottom-1);
+            Color fc = disabled ? Color.FromArgb(80,180,180,180) : Color.White;
+            using (var br = new SolidBrush(fc))
+            {
+                SizeF sz = g.MeasureString(labels[i], fontTab);
+                g.DrawString(labels[i], fontTab, br, r.Left+(r.Width-sz.Width)/2, r.Top+(r.Height-sz.Height)/2);
+            }
         }
     }
-    
-    private void UpdateStatus(string message)
+
+    // ── Explore screen ────────────────────────────────────────────────────────
+    private void DrawExplore(Graphics g, int top)
     {
-        if (statusLabel.InvokeRequired)
+        using (var br = new SolidBrush(Color.FromArgb(200,180,210,255)))
+            g.DrawString("Explore Artifacts", fontTitle, br, 20, top+10);
+        using (var br = new SolidBrush(Color.FromArgb(140,180,200,220)))
+            g.DrawString("Click a card to select  |  Click again to open  |  Place TUIO marker to jump directly",
+                fontSmall, br, 20, top+46);
+
+        int cy = top + 80 + (height - top - 80) / 2;
+        float step = (float)(2 * Math.PI / ArtifactData.Count);
+        int[] order = BackToFrontOrder(carouselFocused, ArtifactData.Count);
+        foreach (int i in order) DrawCarouselCard(g, i, carouselAngle + i*step, cy);
+
+        using (var br = new SolidBrush(Color.FromArgb(100,160,180,200)))
+            g.DrawString("Arrow keys or click to rotate", fontSmall, br, width/2-100, height-28);
+    }
+
+    private int[] BackToFrontOrder(int focused, int count)
+    {
+        var order = new List<int>();
+        for (int i = 0; i < count; i++) if (i != focused) order.Add(i);
+        order.Add(focused);
+        return order.ToArray();
+    }
+
+    private void DrawCarouselCard(Graphics g, int idx, float angle, int cy)
+    {
+        float radius = width * 0.28f;
+        float x = (float)Math.Sin(angle) * radius;
+        float z = (float)Math.Cos(angle);
+        float scale = 0.55f + 0.45f * ((z + 1f) / 2f);
+        int cardW = (int)(260 * scale);
+        int cardH = (int)(320 * scale);
+        int cx = width/2 + (int)x;
+        int cardTop = cy - cardH/2;
+        int alpha = (int)(80 + 175 * ((z + 1f) / 2f));
+        bool isFocused = (idx == carouselFocused);
+        Rectangle r = new Rectangle(cx - cardW/2, cardTop, cardW, cardH);
+
+        using (var path = RoundRect(r,14)) using (var br = new SolidBrush(Color.FromArgb(alpha,20,40,80))) g.FillPath(br, path);
+        Color border = isFocused ? Color.FromArgb(alpha,100,180,255) : Color.FromArgb(alpha/2,60,100,160);
+        using (var path = RoundRect(r,14)) using (var pen = new Pen(border, isFocused?2.5f:1f)) g.DrawPath(pen, path);
+
+        ObjModel model = TryGetModel(idx);
+        if (model != null)
         {
-            statusLabel.BeginInvoke(new MethodInvoker(delegate {
-                statusLabel.Text = message;
-            }));
+            int ms = (int)(cardW * 0.72f);
+            float spin = (float)(DateTime.Now.TimeOfDay.TotalSeconds * 0.5) + idx * 2.1f;
+            RenderObjModel(g, model, cx, cardTop + cardH/3, spin, ms, ArtifactData.Colors[idx]);
         }
-        else
+
+        using (var br = new SolidBrush(Color.FromArgb(alpha,230,230,255)))
         {
-            statusLabel.Text = message;
+            Font f = isFocused ? fontTab : fontSmall;
+            SizeF sz = g.MeasureString(ArtifactData.Names[idx], f);
+            g.DrawString(ArtifactData.Names[idx], f, br, cx - sz.Width/2, cardTop + cardH - sz.Height*2.2f);
+        }
+        if (isFocused) using (var br = new SolidBrush(Color.FromArgb(180,100,200,255)))
+        {
+            SizeF sz = g.MeasureString("Click to open", fontSmall);
+            g.DrawString("Click to open", fontSmall, br, cx - sz.Width/2, cardTop + cardH - sz.Height*1.1f);
         }
     }
-    
-    private void UpdateMarkerInfo(int symbolID, bool added)
+
+    private Rectangle GetCarouselCardRect(int idx)
     {
-        if (markerInfoLabel.InvokeRequired)
-        {
-            markerInfoLabel.BeginInvoke(new MethodInvoker(delegate {
-                UpdateMarkerInfoInternal(symbolID, added);
-            }));
-        }
-        else
-        {
-            UpdateMarkerInfoInternal(symbolID, added);
-        }
+        float step = (float)(2 * Math.PI / ArtifactData.Count);
+        float angle = carouselAngle + idx * step;
+        float x = (float)Math.Sin(angle) * width * 0.28f;
+        float z = (float)Math.Cos(angle);
+        float scale = 0.55f + 0.45f * ((z + 1f) / 2f);
+        int cardW = (int)(260 * scale), cardH = (int)(320 * scale);
+        int cy = 64 + 80 + (height - 64 - 80) / 2;
+        int cx = width/2 + (int)x;
+        return new Rectangle(cx - cardW/2, cy - cardH/2, cardW, cardH);
     }
-    
-    private void UpdateMarkerInfoInternal(int symbolID, bool added)
+
+    // ── Favourites screen ─────────────────────────────────────────────────────
+    private void DrawFavourites(Graphics g, int top)
     {
-        if (!added)
+        using (var br = new SolidBrush(Color.FromArgb(200,180,210,255)))
+            g.DrawString("Favourites", fontTitle, br, 20, top+10);
+
+        if (string.IsNullOrEmpty(loggedInName))
         {
-            markerInfoLabel.Text = "Place a marker to begin";
-            markerInfoLabel.ForeColor = Color.White;
+            using (var br = new SolidBrush(Color.FromArgb(160,200,200,200)))
+                g.DrawString("No user logged in. Face detection will load your favourites.", fontUI, br, 20, top+60);
             return;
         }
-        
-        string artifactName = symbolID >= 0 && symbolID <= 2
-            ? GetArtifactName(symbolID)
-            : $"Marker #{symbolID}";
+        using (var br = new SolidBrush(Color.FromArgb(160,160,200,160)))
+            g.DrawString("Logged in as: " + loggedInName, fontSmall, br, 20, top+46);
 
-        markerInfoLabel.Text = $"Current Artifact  |  ID: {symbolID}  |  {artifactName}";
-        markerInfoLabel.ForeColor = Color.Yellow;
+        if (userFavourites.Count == 0)
+        {
+            using (var br = new SolidBrush(Color.FromArgb(140,180,180,180)))
+                g.DrawString("No favourites saved yet.", fontUI, br, 20, top+80);
+            return;
+        }
+        for (int fi = 0; fi < userFavourites.Count; fi++)
+            DrawFavCard(g, GetFavCardRect(fi), userFavourites[fi]);
     }
 
-    protected override void OnPaintBackground(PaintEventArgs pevent)
-		{
-			// Getting the graphics object
-			Graphics g = pevent.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+    private Rectangle GetFavCardRect(int fi)
+    {
+        int cardW=220, cardH=280, margin=30, top=64+80;
+        int totalW = userFavourites.Count * (cardW + margin) - margin;
+        int startX = Math.Max(20, width/2 - totalW/2);
+        return new Rectangle(startX + fi*(cardW+margin), top, cardW, cardH);
+    }
 
-            using (LinearGradientBrush bg = new LinearGradientBrush(
-                new Rectangle(0, 0, width, height),
-                Color.FromArgb(10, 22, 48),
-                Color.FromArgb(2, 8, 22),
-                LinearGradientMode.Vertical))
+    private void DrawFavCard(Graphics g, Rectangle r, int id)
+    {
+        using (var path = RoundRect(r,14)) using (var br = new SolidBrush(Color.FromArgb(160,20,40,80))) g.FillPath(br, path);
+        using (var path = RoundRect(r,14)) using (var pen = new Pen(Color.FromArgb(160,255,180,60),2f)) g.DrawPath(pen, path);
+        using (var br = new SolidBrush(Color.FromArgb(220,255,200,50))) g.DrawString("*", fontTitle, br, r.Left+8, r.Top+6);
+
+        ObjModel model = TryGetModel(id);
+        if (model != null)
+        {
+            int ms = (int)(r.Width * 0.65f);
+            float spin = (float)(DateTime.Now.TimeOfDay.TotalSeconds * 0.4) + id * 1.5f;
+            RenderObjModel(g, model, r.Left+r.Width/2, r.Top+r.Height/3, spin, ms, ArtifactData.Colors[id]);
+        }
+        using (var br = new SolidBrush(Color.White))
+        {
+            SizeF sz = g.MeasureString(ArtifactData.Names[id], fontSmall);
+            g.DrawString(ArtifactData.Names[id], fontSmall, br, r.Left+(r.Width-sz.Width)/2, r.Bottom-sz.Height*2.2f);
+        }
+        using (var br = new SolidBrush(Color.FromArgb(160,100,200,255)))
+        {
+            SizeF sz = g.MeasureString("Tap to view", fontSmall);
+            g.DrawString("Tap to view", fontSmall, br, r.Left+(r.Width-sz.Width)/2, r.Bottom-sz.Height*1.1f);
+        }
+    }
+
+    // ── Artifact detail screen ────────────────────────────────────────────────
+    private void DrawArtifact(Graphics g, int top)
+    {
+        if (artifactID < 0 || artifactID >= ArtifactData.Count)
+        {
+            using (var br = new SolidBrush(Color.White)) g.DrawString("No artifact selected.", fontUI, br, 20, top+20);
+            return;
+        }
+        int modelSize = (int)(Math.Min(width * 0.45f, height - top - 40));
+        int mx = modelSize/2 + 40;
+        int my = top + (height - top) / 2;
+
+        ObjModel model = TryGetModel(artifactID);
+        if (model != null)
+        {
+            using (var br = new SolidBrush(Color.FromArgb(30,100,160,255)))
+            { int gs=modelSize+60; g.FillEllipse(br, mx-gs/2, my-gs/2, gs, gs); }
+            RenderObjModel(g, model, mx, my, artifactAngle, modelSize, ArtifactData.Colors[artifactID]);
+        }
+
+        int rx = mx + modelSize/2 + 40;
+        int ry = top + 30;
+        int rw = width - rx - 20;
+
+        using (var br = new SolidBrush(Color.FromArgb(255,220,200,100)))
+            g.DrawString(ArtifactData.Names[artifactID], fontTitle, br, rx, ry);
+        using (var pen = new Pen(Color.FromArgb(100,100,160,220),1))
+            g.DrawLine(pen, rx, ry+44, rx+rw, ry+44);
+        using (var br = new SolidBrush(Color.FromArgb(200,200,210,230)))
+            g.DrawString(ArtifactData.Descriptions[artifactID], fontUI, br, new RectangleF(rx, ry+56, rw, 200));
+        using (var br = new SolidBrush(Color.FromArgb(120,140,200,140)))
+            g.DrawString("Rotate the TUIO marker to spin the model", fontSmall, br, rx, ry+270);
+
+        bool isFav = userFavourites.Contains(artifactID);
+        using (var br = new SolidBrush(isFav ? Color.FromArgb(220,255,200,50) : Color.FromArgb(80,180,180,180)))
+            g.DrawString(isFav ? "* In your Favourites" : "Not in Favourites", fontSmall, br, rx, ry+300);
+        using (var br = new SolidBrush(Color.FromArgb(100,100,160,200)))
+            g.DrawString("Marker ID: " + artifactID, fontSmall, br, rx, ry+325);
+    }
+
+    // ── 3-D rendering ─────────────────────────────────────────────────────────
+    private ObjModel TryGetModel(int id)
+    {
+        if (modelCache.ContainsKey(id)) return modelCache[id];
+        ObjModel m = LoadObjModel(ArtifactData.GetObjPath(id));
+        modelCache[id] = m;
+        return m;
+    }
+
+    private void RenderObjModel(Graphics g, ObjModel model, int cx, int cy, float angle, int size, Color baseColor)
+    {
+        if (model == null) return;
+        int W=size, H=size;
+        int[] pixels = new int[W*H];
+        float[] zBuf = new float[W*H];
+        for (int i=0;i<zBuf.Length;i++) zBuf[i]=float.NegativeInfinity;
+        float scale=(size*0.95f)/model.Radius, yaw=angle, pitch=-0.35f, camZ=size*3.2f, proj=size*1.7f;
+        Vec3[] trans=new Vec3[model.Verts.Count]; PointF[] proj2=new PointF[model.Verts.Count]; float[] depth=new float[model.Verts.Count];
+        for (int i=0;i<model.Verts.Count;i++)
+        {
+            Vec3 tv=RotV(model.Verts[i],yaw,pitch); tv.X*=scale;tv.Y*=scale;tv.Z*=scale; trans[i]=tv;
+            float z=tv.Z+camZ; if(z<1f)z=1f; depth[i]=tv.Z;
+            proj2[i]=new PointF(W*0.5f+tv.X*proj/z, H*0.5f-tv.Y*proj/z);
+        }
+        Vec3 ld=Norm(new Vec3(0.2f,-0.5f,1f));
+        for (int i=0;i<model.Faces.Count;i++)
+        {
+            Face3 f=model.Faces[i]; Vec3 a=trans[f.A],b=trans[f.B],c=trans[f.C];
+            float nx=(b.Y-a.Y)*(c.Z-a.Z)-(b.Z-a.Z)*(c.Y-a.Y);
+            float ny=(b.Z-a.Z)*(c.X-a.X)-(b.X-a.X)*(c.Z-a.Z);
+            float nz=(b.X-a.X)*(c.Y-a.Y)-(b.Y-a.Y)*(c.X-a.X);
+            float nl=(float)Math.Sqrt(nx*nx+ny*ny+nz*nz); if(nl<1e-5f)continue;
+            nx/=nl;ny/=nl;nz/=nl;
+            float lf=Math.Min(1.18f,0.68f+0.42f*Math.Abs(nx*ld.X+ny*ld.Y+nz*ld.Z));
+            Color fc=(!string.IsNullOrEmpty(f.Mat)&&model.MatColors.ContainsKey(f.Mat))?model.MatColors[f.Mat]:baseColor;
+            Bitmap tex=(!string.IsNullOrEmpty(f.Mat)&&model.MatTextures.ContainsKey(f.Mat))?model.MatTextures[f.Mat]:null;
+            Vec2 uv1=(f.TA>=0&&f.TA<model.UVs.Count)?model.UVs[f.TA]:null;
+            Vec2 uv2=(f.TB>=0&&f.TB<model.UVs.Count)?model.UVs[f.TB]:null;
+            Vec2 uv3=(f.TC>=0&&f.TC<model.UVs.Count)?model.UVs[f.TC]:null;
+            RasterTri(pixels,zBuf,W,H,proj2[f.A],proj2[f.B],proj2[f.C],depth[f.A],depth[f.B],depth[f.C],uv1,uv2,uv3,tex,fc,lf);
+        }
+        using (Bitmap bmp=new Bitmap(W,H,PixelFormat.Format32bppArgb))
+        {
+            BitmapData bd=bmp.LockBits(new Rectangle(0,0,W,H),ImageLockMode.WriteOnly,PixelFormat.Format32bppArgb);
+            Marshal.Copy(pixels,0,bd.Scan0,pixels.Length); bmp.UnlockBits(bd);
+            g.DrawImage(bmp,cx-W/2,cy-H/2,W,H);
+        }
+    }
+
+    private Vec3 RotV(Vec3 v,float yaw,float pitch)
+    {
+        float cy=(float)Math.Cos(yaw),sy=(float)Math.Sin(yaw),cp=(float)Math.Cos(pitch),sp=(float)Math.Sin(pitch);
+        float x1=v.X*cy+v.Z*sy,z1=-v.X*sy+v.Z*cy,y1=v.Y;
+        return new Vec3(x1,y1*cp-z1*sp,y1*sp+z1*cp);
+    }
+    private Vec3 Norm(Vec3 v){float l=(float)Math.Sqrt(v.X*v.X+v.Y*v.Y+v.Z*v.Z);return l<1e-5f?v:new Vec3(v.X/l,v.Y/l,v.Z/l);}
+
+    private void RasterTri(int[] px,float[] zb,int W,int H,PointF p1,PointF p2,PointF p3,float z1,float z2,float z3,Vec2 uv1,Vec2 uv2,Vec2 uv3,Bitmap tex,Color fc,float lf)
+    {
+        int x0=(int)Math.Max(0,Math.Floor(Math.Min(p1.X,Math.Min(p2.X,p3.X))));
+        int x1=(int)Math.Min(W-1,Math.Ceiling(Math.Max(p1.X,Math.Max(p2.X,p3.X))));
+        int y0=(int)Math.Max(0,Math.Floor(Math.Min(p1.Y,Math.Min(p2.Y,p3.Y))));
+        int y1=(int)Math.Min(H-1,Math.Ceiling(Math.Max(p1.Y,Math.Max(p2.Y,p3.Y))));
+        float denom=((p2.Y-p3.Y)*(p1.X-p3.X)+(p3.X-p2.X)*(p1.Y-p3.Y));
+        if(Math.Abs(denom)<1e-5f)return;
+        bool useTex=tex!=null&&uv1!=null&&uv2!=null&&uv3!=null;
+        for(int y=y0;y<=y1;y++) for(int x=x0;x<=x1;x++)
+        {
+            float w1=((p2.Y-p3.Y)*(x-p3.X)+(p3.X-p2.X)*(y-p3.Y))/denom;
+            float w2=((p3.Y-p1.Y)*(x-p3.X)+(p1.X-p3.X)*(y-p3.Y))/denom;
+            float w3=1f-w1-w2;
+            if(w1<0||w2<0||w3<0)continue;
+            float z=w1*z1+w2*z2+w3*z3; int idx=y*W+x;
+            if(z<=zb[idx])continue; zb[idx]=z;
+            Color sc=fc;
+            if(useTex){float u=w1*uv1.U+w2*uv2.U+w3*uv3.U,v=w1*uv1.V+w2*uv2.V+w3*uv3.V;
+                u=Math.Max(0f,Math.Min(1f,u));v=Math.Max(0f,Math.Min(1f,v));
+                sc=tex.GetPixel(Math.Max(0,Math.Min(tex.Width-1,(int)(u*(tex.Width-1)))),Math.Max(0,Math.Min(tex.Height-1,(int)((1f-v)*(tex.Height-1)))));}
+            float exp=1.12f;
+            px[idx]=Color.FromArgb(255,Math.Max(0,Math.Min(255,(int)(sc.R*lf*exp+8))),Math.Max(0,Math.Min(255,(int)(sc.G*lf*exp+8))),Math.Max(0,Math.Min(255,(int)(sc.B*lf*exp+8)))).ToArgb();
+        }
+    }
+
+    // ── OBJ / MTL loader ──────────────────────────────────────────────────────
+    private ObjModel LoadObjModel(string rel)
+    {
+        string path=Resolve(rel); if(string.IsNullOrEmpty(path))return null;
+        ObjModel m=new ObjModel(); string dir=Path.GetDirectoryName(path);
+        List<string> mtlLibs=new List<string>(); string curMat=null;
+        foreach(string raw in File.ReadAllLines(path))
+        {
+            if(string.IsNullOrWhiteSpace(raw))continue; string line=raw.Trim();
+            if(line.StartsWith("mtllib ")){mtlLibs.Add(line.Substring(7).Trim());continue;}
+            if(line.StartsWith("usemtl ")){curMat=line.Substring(7).Trim();continue;}
+            if(line.StartsWith("v "))
             {
-                g.FillRectangle(bg, new Rectangle(0,0,width,height));
+                string[] p=line.Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);
+                if(p.Length>=4){float x,y,z; if(TryF(p[1],out x)&&TryF(p[2],out y)&&TryF(p[3],out z))m.Verts.Add(new Vec3(x,y,z));}
             }
-
-            // Soft highlight area to make the model stand out.
-            using (SolidBrush spotlight = new SolidBrush(Color.FromArgb(38, 120, 180, 230)))
+            else if(line.StartsWith("vt "))
             {
-                int s = (int)(Math.Min(width, height) * 0.85f);
-                g.FillEllipse(spotlight, width / 2 - s / 2, height / 2 - s / 2 + 20, s, s);
+                string[] p=line.Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);
+                if(p.Length>=3){float u,v; if(TryF(p[1],out u)&&TryF(p[2],out v))m.UVs.Add(new Vec2(u,v));}
             }
-
-            // Top and bottom translucent bars for better text readability.
-            using (SolidBrush topBar = new SolidBrush(Color.FromArgb(120, 5, 12, 28)))
-            using (SolidBrush bottomBar = new SolidBrush(Color.FromArgb(110, 5, 12, 28)))
+            else if(line.StartsWith("f "))
             {
-                g.FillRectangle(topBar, new Rectangle(0, 0, width, 54));
-                g.FillRectangle(bottomBar, new Rectangle(0, height - 44, width, 44));
-            }
-
-			// Draw face detection indicator in top-right corner
-			int indicatorSize = 15;
-			int indicatorX = width - 280;
-			int indicatorY = 45;
-			if (faceDetected && (DateTime.Now - lastFaceDetectionTime).TotalSeconds < 5)
-			{
-				g.FillEllipse(faceDetectedBrush, indicatorX, indicatorY, indicatorSize, indicatorSize);
-			}
-			else
-			{
-				g.FillEllipse(faceNotDetectedBrush, indicatorX, indicatorY, indicatorSize, indicatorSize);
-			}
-
-			// draw the cursor path
-			if (cursorList.Count > 0) {
- 			 lock(cursorList) {
-			 foreach (TuioCursor tcur in cursorList.Values) {
-					List<TuioPoint> path = tcur.Path;
-					TuioPoint current_point = path[0];
-
-					for (int i = 0; i < path.Count; i++) {
-						TuioPoint next_point = path[i];
-						g.DrawLine(curPen, current_point.getScreenX(width), current_point.getScreenY(height), next_point.getScreenX(width), next_point.getScreenY(height));
-						current_point = next_point;
-					}
-					g.FillEllipse(curBrush, current_point.getScreenX(width) - height / 100, current_point.getScreenY(height) - height / 100, height / 50, height / 50);
-					g.DrawString(tcur.CursorID + "", font, fntBrush, new PointF(tcur.getScreenX(width) - 10, tcur.getScreenY(height) - 10));
-				}
-			}
-		 }
-
-			// draw the objects
-            Point displayCenter = GetDisplayCenter();
-            int displaySize = GetPersistentModelSize();
-
-            if (objectList.Count > 0) {
- 				lock(objectList) {
-					foreach (TuioObject tobj in objectList.Values) {
-                    int size = GetMarkerModelSize();
-					int ox=0;
-					int oy=0;
-                    
-                    // Draw glow effect around marker to show it's detected
-                    ox = tobj.getScreenX(width);
-                    oy = tobj.getScreenY(height);
-                    
-
-					if (IsRenderableSymbol(tobj.SymbolID))
-                    {
-                        // Pin selected model/angle, but do not render at marker position.
-                        PinModel(tobj.SymbolID, (float)tobj.Angle);
-						continue;
-                    }
-					else //default marker
-					{
-                        size = GetMarkerModelSize();
-
-                        g.TranslateTransform(ox, oy);
-                        g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
-                        g.TranslateTransform(-ox, -oy);
-
-                        // Draw colored rectangle based on symbol ID
-                        Color markerColor = Color.FromArgb(
-                            (tobj.SymbolID * 40) % 255, 
-                            (tobj.SymbolID * 80) % 255, 
-                            (tobj.SymbolID * 120) % 255
-                        );
-                        g.FillRectangle(new SolidBrush(markerColor), new Rectangle(ox - size / 2, oy - size / 2, size, size));
-                    }
-
-                    // Reset transform so subsequent drawing stays in screen space.
-                    g.ResetTransform();
-					}
-				}
-			}
-
-            // Always render selected model at the static display position.
-            if (persistentSymbolID >= 0)
-            {
-                ObjModel persistentModel = TryGetModel(persistentSymbolID);
-                if (persistentModel != null)
-                {
-                    Color persistentColor = GetArtifactColor(persistentSymbolID);
-                    RenderObjModel(g, persistentModel, displayCenter.X, displayCenter.Y, persistentAngle, displaySize, persistentColor);
+                string[] p=line.Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);
+                if(p.Length>=4){
+                    int[] vi=new int[p.Length-1];int[] ti=new int[p.Length-1];bool ok=true;
+                    for(int i=1;i<p.Length;i++){int iv=ObjIdx(p[i],m.Verts.Count),it=ObjTexIdx(p[i],m.UVs.Count);if(iv<0||iv>=m.Verts.Count){ok=false;break;}vi[i-1]=iv;ti[i-1]=it;}
+                    if(!ok)continue;
+                    for(int i=1;i<vi.Length-1;i++)m.Faces.Add(new Face3(vi[0],vi[i],vi[i+1],ti[0],ti[i],ti[i+1],curMat));
                 }
             }
-
-			// draw the blobs
-			if (blobList.Count > 0) {
-				lock(blobList) {
-					foreach (TuioBlob tblb in blobList.Values) {
-						int bx = tblb.getScreenX(width);
-						int by = tblb.getScreenY(height);
-						float bw = tblb.Width*width;
-						float bh = tblb.Height*height;
-
-						g.TranslateTransform(bx, by);
-						g.RotateTransform((float)(tblb.Angle / Math.PI * 180.0f));
-						g.TranslateTransform(-bx, -by);
-
-						g.FillEllipse(blbBrush, bx - bw / 2, by - bh / 2, bw, bh);
-
-						g.TranslateTransform(bx, by);
-						g.RotateTransform(-1 * (float)(tblb.Angle / Math.PI * 180.0f));
-						g.TranslateTransform(-bx, -by);
-						
-						g.DrawString(tblb.BlobID + "", font, fntBrush, new PointF(bx, by));
-					}
-				}
-			}
-		}
-
-    private void InitializeComponent()
-    {
-            this.SuspendLayout();
-            // 
-            // TuioDemo
-            // 
-            this.ClientSize = new System.Drawing.Size(282, 253);
-            this.Name = "TuioDemo";
-            this.Load += new System.EventHandler(this.TuioDemo_Load);
-            this.ResumeLayout(false);
-
-    }
-	 
-    private void TuioDemo_Load(object sender, EventArgs e)
-    {
-       
+        }
+        var mats=LoadMtls(dir,mtlLibs);
+        foreach(var kv in mats){Color fc=kv.Value.Diffuse;if(!string.IsNullOrEmpty(kv.Value.TexPath)&&File.Exists(kv.Value.TexPath))fc=AvgColor(kv.Value.TexPath,fc);m.MatColors[kv.Key]=fc;if(kv.Value.TexBmp!=null)m.MatTextures[kv.Key]=kv.Value.TexBmp;}
+        if(m.Verts.Count==0||m.Faces.Count==0)return null;
+        float cx=0,cy=0,cz=0; foreach(var v in m.Verts){cx+=v.X;cy+=v.Y;cz+=v.Z;} cx/=m.Verts.Count;cy/=m.Verts.Count;cz/=m.Verts.Count;
+        float maxR=1e-4f; foreach(var v in m.Verts){v.X-=cx;v.Y-=cy;v.Z-=cz;float r=(float)Math.Sqrt(v.X*v.X+v.Y*v.Y+v.Z*v.Z);if(r>maxR)maxR=r;} m.Radius=maxR;
+        return m;
     }
 
-    public static void Main(String[] argv) {
-	 		int port = 0;
-			switch (argv.Length) {
-				case 1:
-					port = int.Parse(argv[0],null);
-					if(port==0) goto default;
-					break;
-				case 0:
-					port = 3333;
-					break;
-				default:
-					Console.WriteLine("usage: mono TuioDemo [port]");
-					System.Environment.Exit(0);
-					break;
-			}
-			
-			TuioDemo app = new TuioDemo(port);
-			Application.Run(app);
-		}
-	}
+    private Dictionary<string,MaterialInfo> LoadMtls(string dir,List<string> libs)
+    {
+        var res=new Dictionary<string,MaterialInfo>();
+        foreach(string lib in libs){string p=Path.Combine(dir,lib);if(!File.Exists(p))continue;string mdir=Path.GetDirectoryName(p);string cur=null;
+            foreach(string raw in File.ReadAllLines(p)){if(string.IsNullOrWhiteSpace(raw))continue;string line=raw.Trim();if(line.StartsWith("#"))continue;
+                if(line.StartsWith("newmtl ")){cur=line.Substring(7).Trim();if(!res.ContainsKey(cur))res[cur]=new MaterialInfo();continue;}
+                if(string.IsNullOrEmpty(cur)||!res.ContainsKey(cur))continue;
+                if(line.StartsWith("Kd ")){string[] pts=line.Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);if(pts.Length>=4){float r,gg,b;if(TryF(pts[1],out r)&&TryF(pts[2],out gg)&&TryF(pts[3],out b))res[cur].Diffuse=Color.FromArgb(220,(int)(r*255),(int)(gg*255),(int)(b*255));}}
+                if(line.StartsWith("map_Kd ")){string tp=line.Substring(7).Trim();if(!string.IsNullOrEmpty(tp))res[cur].TexPath=Path.Combine(mdir,tp);}
+            }
+            foreach(var kv in res)if(!string.IsNullOrEmpty(kv.Value.TexPath)&&File.Exists(kv.Value.TexPath))try{kv.Value.TexBmp=new Bitmap(kv.Value.TexPath);}catch{}
+        }
+        return res;
+    }
+
+    private bool TryF(string s,out float v){return float.TryParse(s,System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out v);}
+    private int ObjIdx(string tok,int cnt){int i;if(!int.TryParse(tok.Split('/')[0],out i))return -1;return i>0?i-1:i<0?cnt+i:-1;}
+    private int ObjTexIdx(string tok,int cnt){string[] c=tok.Split('/');if(c.Length<2||string.IsNullOrEmpty(c[1]))return -1;int i;if(!int.TryParse(c[1],out i))return -1;return i>0?i-1:i<0?cnt+i:-1;}
+    private string Resolve(string rel){if(string.IsNullOrEmpty(rel))return null;string[] cands={rel,Path.Combine(Application.StartupPath,rel),Path.Combine(AppDomain.CurrentDomain.BaseDirectory,rel)};foreach(string c in cands)if(File.Exists(c))return c;return null;}
+    private Color AvgColor(string imgPath,Color fallback){try{using(Bitmap bmp=new Bitmap(imgPath)){int sx=Math.Max(1,bmp.Width/40),sy=Math.Max(1,bmp.Height/40);long sr=0,sg=0,sb=0,cnt=0;for(int y=0;y<bmp.Height;y+=sy)for(int x=0;x<bmp.Width;x+=sx){Color c=bmp.GetPixel(x,y);sr+=c.R;sg+=c.G;sb+=c.B;cnt++;}if(cnt==0)return fallback;return Color.FromArgb(220,(int)(sr/cnt),(int)(sg/cnt),(int)(sb/cnt));}}catch{return fallback;}}
+
+    // ── TUIO callbacks ────────────────────────────────────────────────────────
+    public void addTuioObject(TuioObject o)
+    {
+        lock(objectList) objectList[o.SessionID]=o;
+        if(verbose) Console.WriteLine("add obj "+o.SymbolID);
+        if(o.SymbolID>=0&&o.SymbolID<ArtifactData.Count)
+            this.BeginInvoke(new MethodInvoker(()=>{ artifactAngle=(float)o.Angle; GoTo(AppScreen.Artifact,o.SymbolID); }));
+    }
+    public void updateTuioObject(TuioObject o)
+    {
+        lock(objectList) if(objectList.ContainsKey(o.SessionID)) objectList[o.SessionID]=o;
+        if(currentScreen==AppScreen.Artifact&&o.SymbolID==artifactID) artifactAngle=(float)o.Angle;
+    }
+    public void removeTuioObject(TuioObject o){lock(objectList)objectList.Remove(o.SessionID);}
+    public void addTuioCursor(TuioCursor c){lock(cursorList)cursorList[c.SessionID]=c;}
+    public void updateTuioCursor(TuioCursor c){}
+    public void removeTuioCursor(TuioCursor c){lock(cursorList)cursorList.Remove(c.SessionID);}
+    public void addTuioBlob(TuioBlob b){lock(blobList)blobList[b.SessionID]=b;}
+    public void updateTuioBlob(TuioBlob b){}
+    public void removeTuioBlob(TuioBlob b){lock(blobList)blobList.Remove(b.SessionID);}
+    public void refresh(TuioTime t){Invalidate();}
+
+    // ── Python socket ─────────────────────────────────────────────────────────
+    private void SocketThread()
+    {
+        while(true)
+        {
+            TcpClient tcp=null; NetworkStream ns=null;
+            try
+            {
+                tcp=new TcpClient("localhost",5000); ns=tcp.GetStream();
+                SetPyStatus(true);
+                byte[] buf=new byte[1024];
+                while(true){int n=ns.Read(buf,0,buf.Length);if(n<=0)break;HandleMsg(Encoding.UTF8.GetString(buf,0,n).Trim());}
+            }
+            catch{}
+            finally{if(ns!=null)try{ns.Close();}catch{}if(tcp!=null)try{tcp.Close();}catch{}}
+            SetPyStatus(false);
+            Thread.Sleep(2000);
+        }
+    }
+
+    private void HandleMsg(string msg)
+    {
+        if(msg.Contains("face:detected:"))
+        {
+            string name=msg.Substring(msg.IndexOf("face:detected:")+"face:detected:".Length).Trim();
+            faceDetected=true;
+            this.BeginInvoke(new MethodInvoker(()=>SetLoggedInUser(name)));
+        }
+        else if(msg.Contains("face:detected")||msg.Contains("face detected")){faceDetected=true;UpdateFaceLabel(true,"");}
+        else if(msg.Contains("face:lost")||msg.Contains("face lost")){faceDetected=false;UpdateFaceLabel(false,"");}
+    }
+
+    private void SetPyStatus(bool connected)
+    {
+        string txt=connected?"Connected":"Disconnected"; Color col=connected?Color.LimeGreen:Color.OrangeRed;
+        if(pythonStatusLabel.InvokeRequired) pythonStatusLabel.BeginInvoke(new MethodInvoker(()=>{pythonStatusLabel.Text="Python: "+txt;pythonStatusLabel.ForeColor=col;}));
+        else{pythonStatusLabel.Text="Python: "+txt;pythonStatusLabel.ForeColor=col;}
+    }
+
+    private void UpdateFaceLabel(bool detected,string name)
+    {
+        string txt=detected?(string.IsNullOrEmpty(name)?"Face Detected":"Logged in: "+name):"Face: Not Detected";
+        Color col=detected?Color.LightGreen:Color.LightCoral;
+        if(faceStatusLabel.InvokeRequired) faceStatusLabel.BeginInvoke(new MethodInvoker(()=>{faceStatusLabel.Text=txt;faceStatusLabel.ForeColor=col;}));
+        else{faceStatusLabel.Text=txt;faceStatusLabel.ForeColor=col;}
+    }
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+    private void InitStatusLabels()
+    {
+        faceStatusLabel=new Label{AutoSize=false,Size=new Size(260,30),Location=new Point(width-270,10),
+            BackColor=Color.Transparent,ForeColor=Color.LightCoral,Font=new Font("Segoe UI Semibold",12f,FontStyle.Bold),
+            TextAlign=ContentAlignment.MiddleRight,Text="Face: Not Detected"};
+        this.Controls.Add(faceStatusLabel);
+        pythonStatusLabel=new Label{AutoSize=false,Size=new Size(260,24),Location=new Point(width-270,42),
+            BackColor=Color.Transparent,ForeColor=Color.OrangeRed,Font=new Font("Segoe UI",9f),
+            TextAlign=ContentAlignment.MiddleRight,Text="Python: Disconnected"};
+        this.Controls.Add(pythonStatusLabel);
+    }
+
+    private void UpdateLayout()
+    {
+        width=this.ClientSize.Width; height=this.ClientSize.Height;
+        if(faceStatusLabel!=null)  faceStatusLabel.Location=new Point(width-270,10);
+        if(pythonStatusLabel!=null) pythonStatusLabel.Location=new Point(width-270,42);
+    }
+
+    private GraphicsPath RoundRect(Rectangle r,int radius)
+    {
+        var path=new GraphicsPath(); int d=radius*2;
+        path.AddArc(r.Left,r.Top,d,d,180,90); path.AddArc(r.Right-d,r.Top,d,d,270,90);
+        path.AddArc(r.Right-d,r.Bottom-d,d,d,0,90); path.AddArc(r.Left,r.Bottom-d,d,d,90,90);
+        path.CloseFigure(); return path;
+    }
+
+    // ── Form events ───────────────────────────────────────────────────────────
+    private void Form_Resized(object sender,EventArgs e){UpdateLayout();}
+
+    private void Form_KeyDown(object sender,KeyEventArgs e)
+    {
+        if(e.KeyCode==Keys.F1)
+        {
+            if(!fullscreen){this.FormBorderStyle=FormBorderStyle.None;this.Left=0;this.Top=0;this.Width=screen_width;this.Height=screen_height;fullscreen=true;}
+            else{this.FormBorderStyle=FormBorderStyle.Sizable;this.Width=1280;this.Height=720;fullscreen=false;}
+        }
+        else if(e.KeyCode==Keys.Escape) this.Close();
+        else if(e.KeyCode==Keys.V) verbose=!verbose;
+        else if(e.KeyCode==Keys.Left&&currentScreen==AppScreen.Explore){carouselFocused=(carouselFocused-1+ArtifactData.Count)%ArtifactData.Count;FocusCard(carouselFocused);}
+        else if(e.KeyCode==Keys.Right&&currentScreen==AppScreen.Explore){carouselFocused=(carouselFocused+1)%ArtifactData.Count;FocusCard(carouselFocused);}
+    }
+
+    private void Form_Closing(object sender,CancelEventArgs e)
+    {
+        foreach(var m in modelCache.Values) if(m!=null) foreach(var t in m.MatTextures.Values) if(t!=null) t.Dispose();
+        client.removeTuioListener(this); client.disconnect();
+        System.Environment.Exit(0);
+    }
+
+    public static void Main(string[] argv)
+    {
+        int port = argv.Length==1 ? int.Parse(argv[0]) : 3333;
+        Application.Run(new TuioDemo(port));
+    }
+}

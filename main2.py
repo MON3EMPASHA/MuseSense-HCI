@@ -158,9 +158,8 @@ def save_faces_to_disk(names, encodings):
 known_names, known_encodings = load_faces_from_disk()
 next_person_id = len(known_names) + 1
 
-# Cosine similarity threshold — insightface embeddings are L2-normalized
-# similarity > 0.4 is a confident match (1.0 = identical)
-RECOGNITION_THRESHOLD = 0.4
+
+RECOGNITION_THRESHOLD = 0.6
 
 frame_count = 0
 last_face_seen_frame = -1

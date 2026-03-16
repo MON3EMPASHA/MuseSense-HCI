@@ -55,9 +55,7 @@
     <Compile Include="OSC.NET\OSCPacket.cs" />
     <Compile Include="OSC.NET\OSCReceiver.cs" />
     <Compile Include="OSC.NET\OSCTransmitter.cs" />
-    <Compile Include="TuioDemo.cs">
-      <SubType>Form</SubType>
-    </Compile>
+    <Compile Include="TuioDemo.cs" />
     <Compile Include="TUIO\TuioClient.cs" />
     <Compile Include="TUIO\TuioContainer.cs" />
     <Compile Include="TUIO\TuioCursor.cs" />
