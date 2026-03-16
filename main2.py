@@ -4,18 +4,15 @@ from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision as mp_vision
 import numpy as np
 import os
-
-# Keep TensorFlow oneDNN optimizations deterministic/noisy-log free unless the user sets it explicitly.
-os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
-
-from deepface import DeepFace
 import socket
 import time
 import urllib.request
 import json
-
-# --- Socket setup ---
 import threading
+
+# insightface with ONNX runtime — no TensorFlow, no compilation needed, very fast
+import insightface
+from insightface.app import FaceAnalysis
 
 print("[INIT] Setting up socket connection...")
 soc = socket.socket()
@@ -48,7 +45,6 @@ old_msg = ''
 # --- MediaPipe setup ---
 print("[INIT] Loading MediaPipe models...")
 
-# Download model files if not present
 def download_model(url, path):
     if not os.path.exists(path):
         print(f"[INIT] Downloading {path}...")
@@ -89,10 +85,13 @@ pose_landmarker = mp_vision.PoseLandmarker.create_from_options(pose_options)
 hand_landmarker = mp_vision.HandLandmarker.create_from_options(hand_options)
 face_landmarker = mp_vision.FaceLandmarker.create_from_options(face_options)
 
-print("[INIT] MediaPipe models loaded.")
+# --- InsightFace setup ---
+print("[INIT] Loading InsightFace model (buffalo_sc = fast, lightweight)...")
+face_app = FaceAnalysis(name="buffalo_sc", providers=["CPUExecutionProvider"])
+face_app.prepare(ctx_id=0, det_size=(320, 320))
+print("[INIT] InsightFace ready.")
 
 def draw_landmarks_cv(image, landmarks, connections, color=(0, 255, 0), radius=2):
-    """Draw landmarks and connections using plain OpenCV."""
     h, w = image.shape[:2]
     pts = [(int(lm.x * w), int(lm.y * h)) for lm in landmarks]
     if connections:
@@ -102,7 +101,6 @@ def draw_landmarks_cv(image, landmarks, connections, color=(0, 255, 0), radius=2
     for pt in pts:
         cv2.circle(image, pt, radius, color, -1)
 
-# Connection sets
 POSE_CONNECTIONS = [
     (0,1),(1,2),(2,3),(3,7),(0,4),(4,5),(5,6),(6,8),
     (9,10),(11,12),(11,13),(13,15),(15,17),(15,19),(15,21),(17,19),
@@ -115,46 +113,62 @@ HAND_CONNECTIONS = [
     (13,17),(17,18),(18,19),(19,20),(0,17)
 ]
 
+# --- Face persistence (shared users.json with main.py) ---
 FACES_FILE = "faces/users.json"
 os.makedirs("faces", exist_ok=True)
 
+# insightface produces 512-d normalized embeddings stored under "encoding_if" key
 def load_faces_from_disk():
-    """Load all face embeddings from the single users.json file."""
-    loaded = {}
+    names = []
+    encodings = []
     if not os.path.exists(FACES_FILE):
-        return loaded
+        return names, encodings
     try:
         with open(FACES_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         for entry in data:
-            embedding = tuple(entry["embedding"])
-            loaded[embedding] = entry["name"]
-        print(f"[FACES] Loaded {len(loaded)} user(s) from {FACES_FILE}")
+            if "encoding_if" in entry:
+                names.append(entry["name"])
+                encodings.append(np.array(entry["encoding_if"], dtype=np.float32))
+        print(f"[FACES] Loaded {len(names)} user(s) from {FACES_FILE}")
     except Exception as e:
         print(f"[FACES] Failed to load {FACES_FILE}: {e}")
-    return loaded
+    return names, encodings
 
-def save_faces_to_disk(face_ids_dict):
-    """Save all face embeddings to the single users.json file."""
-    entries = [{"name": name, "embedding": list(emb)} for emb, name in face_ids_dict.items()]
+def save_faces_to_disk(names, encodings):
+    existing = []
+    if os.path.exists(FACES_FILE):
+        try:
+            with open(FACES_FILE, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        except Exception:
+            existing = []
+    entry_map = {e["name"]: e for e in existing}
+    for name, enc in zip(names, encodings):
+        if name not in entry_map:
+            entry_map[name] = {"name": name}
+        entry_map[name]["encoding_if"] = enc.tolist()
     try:
         with open(FACES_FILE, "w", encoding="utf-8") as f:
-            json.dump(entries, f, indent=2)
-        print(f"[FACES] Saved {len(entries)} user(s) to {FACES_FILE}")
+            json.dump(list(entry_map.values()), f, indent=2)
+        print(f"[FACES] Saved {len(entry_map)} user(s) to {FACES_FILE}")
     except Exception as e:
         print(f"[FACES] Failed to save {FACES_FILE}: {e}")
 
-# Load existing faces from disk, then count for next new person ID
-face_ids = load_faces_from_disk()
-next_person_id = len(face_ids) + 1
+known_names, known_encodings = load_faces_from_disk()
+next_person_id = len(known_names) + 1
+
+# Cosine similarity threshold — insightface embeddings are L2-normalized
+# similarity > 0.4 is a confident match (1.0 = identical)
+RECOGNITION_THRESHOLD = 0.4
 
 frame_count = 0
-last_face_seen_frame = -1       # track when we last saw a face
-face_lost_sent = False          # avoid spamming face:lost
-current_detected_name = ""      # name of the person currently in front of camera
-show_camera = False  # Set to True to show the raw camera window
+last_face_seen_frame = -1
+face_lost_sent = False
+current_detected_name = ""
+show_camera = False
 
-# --- Camera setup ---
+# --- Camera setup (identical to main.py) ---
 camera_config_path = "camera_config.json"
 
 def load_camera_config(path):
@@ -185,7 +199,6 @@ if isinstance(camera_disabled_cfg, str):
 else:
     camera_disabled_cfg = bool(camera_disabled_cfg)
 
-# Optional hard override from terminal: CAMERA_DISABLED=1
 camera_disabled_env = os.getenv("CAMERA_DISABLED", "").strip().lower()
 camera_disabled = camera_disabled_cfg or camera_disabled_env in ("1", "true", "yes", "on")
 
@@ -196,7 +209,6 @@ else:
     primary_source = local_webcam_index
     primary_source_name = f"local webcam (index {primary_source})"
 
-# Optional override for quick testing from terminal, e.g. CAMERA_SOURCE=0 or CAMERA_SOURCE=http://.../video
 camera_source_env = os.getenv("CAMERA_SOURCE", "").strip()
 if camera_source_env:
     if camera_source_env.isdigit():
@@ -223,10 +235,8 @@ camera_retry_interval_sec = 3.0
 last_camera_retry_time = 0.0
 sent_face_lost_when_camera_unavailable = False
 
-# Alternate webcam backends on repeated blank-frame reconnects.
 preferred_webcam_backend = getattr(cv2, "CAP_MSMF", None) if hasattr(cv2, "CAP_MSMF") else None
 
-# Optional override: CAMERA_BACKEND=msmf|dshow|default
 camera_backend_env = os.getenv("CAMERA_BACKEND", "").strip().lower()
 if camera_backend_env == "msmf" and hasattr(cv2, "CAP_MSMF"):
     preferred_webcam_backend = cv2.CAP_MSMF
@@ -245,8 +255,6 @@ def backend_to_name(backend):
 def choose_backend_candidates(source, preferred_backend=None):
     if not isinstance(source, int):
         return [None]
-
-    # Prefer MSMF first on Windows because it is often less exclusive than DirectShow.
     candidates = []
     for candidate in [preferred_backend, getattr(cv2, "CAP_MSMF", None), getattr(cv2, "CAP_DSHOW", None), None]:
         if candidate not in candidates:
@@ -254,19 +262,10 @@ def choose_backend_candidates(source, preferred_backend=None):
     return candidates
 
 def frame_is_effectively_blank(frame):
-    """Detect near-black / near-uniform frames while avoiding false positives in dim scenes."""
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    mean_luma = float(np.mean(gray))
-    std_luma = float(np.std(gray))
-    max_luma = int(np.max(gray))
-    return mean_luma < 8.0 and std_luma < 4.0 and max_luma < 28
+    return float(np.mean(gray)) < 8.0 and float(np.std(gray)) < 4.0 and int(np.max(gray)) < 28
 
 def open_capture_with_retry(source, source_name, retries=3, delay_sec=1.0, preferred_backend=None):
-    """Try to open a capture source multiple times before giving up.
-
-    For local webcams on Windows, try common backends and require one valid frame
-    so we do not treat an unusable capture handle as a successful open.
-    """
     backend_candidates = choose_backend_candidates(source, preferred_backend=preferred_backend)
 
     def open_and_probe(backend):
@@ -274,25 +273,20 @@ def open_capture_with_retry(source, source_name, retries=3, delay_sec=1.0, prefe
         if not cap_obj.isOpened():
             cap_obj.release()
             return None
-
-        # Warm up and verify at least one real frame is readable.
         for _ in range(10):
             ret, frame = cap_obj.read()
             if ret and frame is not None and frame.size > 0:
                 return cap_obj
             time.sleep(0.05)
-
         cap_obj.release()
         return None
 
     for attempt in range(1, retries + 1):
         for backend in backend_candidates:
-            backend_name = backend_to_name(backend)
-
-            print(f"[INIT] Attempt {attempt}/{retries} opening {source_name} via {backend_name}...")
+            print(f"[INIT] Attempt {attempt}/{retries} opening {source_name} via {backend_to_name(backend)}...")
             c = open_and_probe(backend)
             if c is not None:
-                print(f"[INIT] Connected to {source_name} via {backend_name}.")
+                print(f"[INIT] Connected to {source_name} via {backend_to_name(backend)}.")
                 return c
         time.sleep(delay_sec)
     return None
@@ -301,7 +295,6 @@ def reconnect_camera(reason="generic"):
     global cap, preferred_webcam_backend, frames_since_reconnect
     if cap is not None:
         cap.release()
-
     backend_for_attempt = preferred_webcam_backend
     if reason == "blank" and isinstance(primary_source, int):
         if preferred_webcam_backend == getattr(cv2, "CAP_DSHOW", object()) and hasattr(cv2, "CAP_MSMF"):
@@ -309,55 +302,24 @@ def reconnect_camera(reason="generic"):
         elif preferred_webcam_backend == getattr(cv2, "CAP_MSMF", object()) and hasattr(cv2, "CAP_DSHOW"):
             preferred_webcam_backend = cv2.CAP_DSHOW
         backend_for_attempt = preferred_webcam_backend
-        print(f"[CAMERA] Blank-frame recovery: switching preferred backend to {backend_to_name(backend_for_attempt)}")
-
     print(f"[CAMERA] Reconnecting primary source: {primary_source_name}")
-    cap = open_capture_with_retry(
-        primary_source,
-        primary_source_name,
-        retries=2,
-        delay_sec=0.5,
-        preferred_backend=backend_for_attempt
-    )
+    cap = open_capture_with_retry(primary_source, primary_source_name, retries=2, delay_sec=0.5, preferred_backend=backend_for_attempt)
     if cap is None and primary_source != 0:
-        print("[CAMERA] Primary reconnect failed. Trying local webcam fallback (index 0).")
-        cap = open_capture_with_retry(
-            0,
-            "local webcam (index 0)",
-            retries=2,
-            delay_sec=0.5,
-            preferred_backend=backend_for_attempt
-        )
+        cap = open_capture_with_retry(0, "local webcam (index 0)", retries=2, delay_sec=0.5, preferred_backend=backend_for_attempt)
     if cap is not None:
         frames_since_reconnect = 0
     return cap is not None
 
-# Prefer selected source first, then fallback to local webcam.
 if camera_disabled:
-    print("[INIT] CAMERA_DISABLED is enabled. Running in TUIO/socket-only mode.")
-    print("[INIT] Python will not open or retry any camera device.")
+    print("[INIT] CAMERA_DISABLED is enabled. Running in socket-only mode.")
     camera_unavailable_mode = True
 else:
-    cap = open_capture_with_retry(
-        primary_source,
-        primary_source_name,
-        retries=3,
-        delay_sec=1.0,
-        preferred_backend=preferred_webcam_backend
-    )
+    cap = open_capture_with_retry(primary_source, primary_source_name, retries=3, delay_sec=1.0, preferred_backend=preferred_webcam_backend)
     if cap is None and primary_source != 0:
-        print("[WARNING] IP camera is unavailable. Falling back to local webcam (index 0).")
-        cap = open_capture_with_retry(
-            0,
-            "local webcam (index 0)",
-            retries=2,
-            delay_sec=0.5,
-            preferred_backend=preferred_webcam_backend
-        )
-
+        print("[WARNING] Primary camera unavailable. Falling back to local webcam (index 0).")
+        cap = open_capture_with_retry(0, "local webcam (index 0)", retries=2, delay_sec=0.5, preferred_backend=preferred_webcam_backend)
     if cap is None:
-        print("[WARNING] Failed to open both IP camera and local webcam.")
-        print("[WARNING] Entering socket-only mode so C# + TUIO can still run.")
+        print("[WARNING] No camera available. Entering socket-only mode.")
         camera_unavailable_mode = True
 
 print("[LOOP] Starting main loop. Press 'q' to quit.")
@@ -365,44 +327,31 @@ print("[LOOP] Starting main loop. Press 'q' to quit.")
 while True:
     if camera_unavailable_mode:
         now = time.time()
-
         if not sent_face_lost_when_camera_unavailable:
-            lost_msg = "face:lost"
-            print("[SOCKET] Camera unavailable. Sending fallback status: 'face:lost'")
             with conn_lock:
                 if conn:
                     try:
-                        conn.send(lost_msg.encode('utf-8'))
-                    except Exception as e:
-                        print(f"[SOCKET] Send failed: {e}")
+                        conn.send("face:lost".encode('utf-8'))
+                    except Exception:
                         conn = None
             sent_face_lost_when_camera_unavailable = True
-
         if camera_disabled:
             time.sleep(0.1)
             continue
-
         if now - last_camera_retry_time >= camera_retry_interval_sec:
             last_camera_retry_time = now
-            print("[CAMERA] Socket-only mode: retrying camera connection...")
-            if reconnect_camera(reason="generic"):
+            if reconnect_camera():
                 camera_unavailable_mode = False
                 sent_face_lost_when_camera_unavailable = False
-                reconnect_cycle_count = 0
-                read_fail_streak = 0
-                blank_frame_streak = 0
-                print("[CAMERA] Camera recovered. Resuming vision pipeline.")
+                reconnect_cycle_count = read_fail_streak = blank_frame_streak = 0
             else:
                 time.sleep(0.2)
                 continue
-
         time.sleep(0.1)
         continue
 
     if cap is None or not cap.isOpened():
         if not reconnect_camera():
-            print("[WARNING] Camera is unavailable after reconnect attempts.")
-            print("[WARNING] Switching to socket-only mode.")
             camera_unavailable_mode = True
             continue
 
@@ -410,25 +359,19 @@ while True:
     if not ret or frame is None or frame.size == 0:
         read_fail_streak += 1
         if read_fail_streak % warning_every_n_failures == 0:
-            print(f"[WARNING] Failed to read frame from camera ({read_fail_streak} consecutive failures).")
+            print(f"[WARNING] Failed to read frame ({read_fail_streak} consecutive failures).")
         if read_fail_streak >= max_read_fail_before_reconnect:
-            print("[CAMERA] Too many read failures. Attempting reconnect...")
             reconnect_cycle_count += 1
             if reconnect_cycle_count > max_reconnect_cycles:
-                print("[ERROR] Camera keeps opening but cannot deliver stable frames.")
-                print("[WARNING] Switching to socket-only mode so C# + TUIO can continue.")
                 camera_unavailable_mode = True
                 continue
             if not reconnect_camera():
-                print("[WARNING] Reconnect failed after repeated frame read failures.")
-                print("[WARNING] Switching to socket-only mode.")
                 camera_unavailable_mode = True
                 continue
             read_fail_streak = 0
         cv2.waitKey(1)
         continue
     elif read_fail_streak > 0:
-        print(f"[CAMERA] Frame stream recovered after {read_fail_streak} failed read(s).")
         read_fail_streak = 0
         reconnect_cycle_count = 0
 
@@ -436,116 +379,81 @@ while True:
 
     msg = ''
     try:
-        # Show raw camera feed before any processing
         if show_camera:
             cv2.imshow("Raw Camera", frame)
 
         frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
         f_frame = cv2.resize(frame, (480, 640))
 
-        # Skip and recover from near-black / effectively blank frames.
         if frame_is_effectively_blank(f_frame):
             blank_frame_streak += 1
-            if blank_frame_streak % warning_every_n_blank_frames == 0:
-                print(
-                    f"[WARNING] Frame appears blank ({blank_frame_streak} consecutive frames, "
-                    f"{frames_since_reconnect} frames since reconnect)."
-                )
-
             if frames_since_reconnect <= blank_detection_warmup_frames:
                 cv2.waitKey(1)
                 continue
-
             if blank_frame_streak >= max_blank_frames_before_reconnect:
                 reconnect_cycle_count += 1
-                print("[CAMERA] Too many blank frames. Attempting reconnect...")
                 if reconnect_cycle_count > max_reconnect_cycles:
-                    print("[ERROR] Webcam stream stays blank after multiple reconnects.")
-                    print("[WARNING] Switching to socket-only mode so C# + TUIO can continue.")
                     camera_unavailable_mode = True
                     continue
                 if not reconnect_camera(reason="blank"):
-                    print("[WARNING] Reconnect failed after repeated blank frames.")
-                    print("[WARNING] Switching to socket-only mode.")
                     camera_unavailable_mode = True
                     continue
                 blank_frame_streak = 0
-
             cv2.waitKey(1)
             continue
         elif blank_frame_streak > 0:
-            print(f"[CAMERA] Frame brightness recovered after {blank_frame_streak} blank frame(s).")
             blank_frame_streak = 0
             reconnect_cycle_count = 0
 
         frame_rgb = cv2.cvtColor(f_frame, cv2.COLOR_BGR2RGB)
         frame_count += 1
 
-        if frame_count % 60 == 0:
-            # Use MediaPipe face landmarks (already computed above... but we need them first).
-            # Re-detect face landmarks here to get bounding box for the crop.
-            mp_face_check = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(f_frame, cv2.COLOR_BGR2RGB))
-            face_check_result = face_landmarker.detect(mp_face_check)
+        # --- Face recognition every 30 frames ---
+        if frame_count % 30 == 0:
+            # Use insightface directly on the full frame — it handles detection + embedding
+            faces = face_app.get(frame_rgb)
 
-            if len(face_check_result.face_landmarks) == 0:
-                # MediaPipe sees no face — definitely no person present
-                print(f"[FACE] Frame {frame_count}: MediaPipe found no face, skipping DeepFace.")
-                current_detected_name = ""
+            if len(faces) == 0:
+                print(f"[FACE] Frame {frame_count}: no face detected.")
                 if not face_lost_sent and last_face_seen_frame >= 0 and (frame_count - last_face_seen_frame) >= 180:
+                    current_detected_name = ""
                     msg = "face:lost"
                     face_lost_sent = True
                     print("[FACE] No face detected for a while. Sending face:lost.")
             else:
-                # MediaPipe confirmed a face — crop it and pass to DeepFace
-                print(f"[FACE] Running face recognition on frame {frame_count}...")
-                fh, fw = f_frame.shape[:2]
-                lms = face_check_result.face_landmarks[0]
-                xs = [lm.x for lm in lms]
-                ys = [lm.y for lm in lms]
-                pad = 0.20  # 20% padding around the face
-                x1 = max(0, int((min(xs) - pad) * fw))
-                y1 = max(0, int((min(ys) - pad) * fh))
-                x2 = min(fw, int((max(xs) + pad) * fw))
-                y2 = min(fh, int((max(ys) + pad) * fh))
-                face_crop = f_frame[y1:y2, x1:x2]
+                # Use the largest face (closest to camera)
+                face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+                enc = face.normed_embedding  # 512-d L2-normalized vector
+                print(f"[FACE] Frame {frame_count}: face detected, comparing against {len(known_encodings)} known.")
 
-                face_encodings = []
-                if face_crop.size > 0:
-                    try:
-                        # enforce_detection=False because we already confirmed the face via MediaPipe
-                        face_encodings = DeepFace.represent(
-                            face_crop,
-                            model_name="Facenet",
-                            enforce_detection=False
-                        )
-                    except Exception as e:
-                        print(f"[FACE] DeepFace error: {e}")
+                match_name = None
+                if len(known_encodings) > 0:
+                    # Cosine similarity = dot product of normalized vectors
+                    sims = [float(np.dot(enc, k)) for k in known_encodings]
+                    best_idx = int(np.argmax(sims))
+                    best_sim = sims[best_idx]
+                    print(f"[FACE] Best similarity: {best_sim:.4f} (threshold {RECOGNITION_THRESHOLD})")
+                    if best_sim >= RECOGNITION_THRESHOLD:
+                        match_name = known_names[best_idx]
 
-                print(f"[FACE] Detected {len(face_encodings)} face(s).")
+                if match_name:
+                    current_detected_name = match_name
+                    msg = "face:detected:" + match_name
+                    print(f"[FACE] Recognized: {match_name}")
+                else:
+                    new_name = "Person " + str(next_person_id)
+                    next_person_id += 1
+                    known_names.append(new_name)
+                    known_encodings.append(enc)
+                    save_faces_to_disk(known_names, known_encodings)
+                    current_detected_name = new_name
+                    msg = "face:detected:" + new_name
+                    print(f"[FACE] New face registered as: {new_name}")
 
-                if len(face_encodings) > 0:
-                    face_id = tuple(face_encodings[0]["embedding"])
-                    match = None
-                    for k in face_ids:
-                        dist = np.linalg.norm(np.array(face_id) - np.array(k))
-                        if dist < 15:
-                            match = face_ids[k]
-                            msg = "face:detected:" + match
-                            current_detected_name = match
-                            print(f"[FACE] Match found: {match} (distance: {dist:.2f})")
-                            break
-                    if match is None:
-                        new_name = "Person " + str(next_person_id)
-                        next_person_id += 1
-                        face_ids[face_id] = new_name
-                        save_faces_to_disk(face_ids)
-                        msg = "face:detected:" + new_name
-                        current_detected_name = new_name
-                        print(f"[FACE] New face registered as: {new_name}")
-                    last_face_seen_frame = frame_count
-                    face_lost_sent = False
+                last_face_seen_frame = frame_count
+                face_lost_sent = False
 
-
+        # --- MediaPipe landmarks ---
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
         pose_result = pose_landmarker.detect(mp_image)
         hand_result = hand_landmarker.detect(mp_image)
@@ -558,30 +466,25 @@ while True:
             print(f"[HOLISTIC] face={has_face}, pose={has_pose}, hands={has_hands}")
 
         annotated_image = f_frame.copy()
-
-        # Draw face landmarks (just dots, no connections for perf)
         h, w = annotated_image.shape[:2]
+
         for face_lms in face_result.face_landmarks:
             for lm in face_lms:
                 cv2.circle(annotated_image, (int(lm.x * w), int(lm.y * h)), 1, (0, 200, 255), -1)
 
-        # Draw pose landmarks
         for pose_lms in pose_result.pose_landmarks:
             draw_landmarks_cv(annotated_image, pose_lms, POSE_CONNECTIONS, color=(0, 255, 0))
 
-        # Draw hand landmarks
         for hand_lms in hand_result.hand_landmarks:
             draw_landmarks_cv(annotated_image, hand_lms, HAND_CONNECTIONS, color=(255, 0, 128))
 
-        # Only show the current person's name if a face was actively detected this cycle
         if current_detected_name:
             cv2.putText(annotated_image, current_detected_name, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
         cv2.imshow("Output", annotated_image)
 
-        # Send message to Unity
         if msg != '' and msg != old_msg:
-            print(f"[SOCKET] Sending to Unity: '{msg}'")
+            print(f"[SOCKET] Sending: '{msg}'")
             with conn_lock:
                 if conn:
                     try:

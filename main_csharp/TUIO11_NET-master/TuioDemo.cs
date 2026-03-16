@@ -59,6 +59,7 @@ using System.Text;
 		private Label statusLabel;
 		private Label markerInfoLabel;
 		private Label faceStatusLabel;
+		private Label pythonStatusLabel;
         private readonly Dictionary<int, ObjModel> modelCache = new Dictionary<int, ObjModel>();
         private int persistentSymbolID = -1;
         private float persistentAngle = 0.0f;
@@ -125,7 +126,10 @@ using System.Text;
             height = this.ClientSize.Height;
 
             if (faceStatusLabel != null)
-                faceStatusLabel.Location = new Point(width - 230, 10);
+                faceStatusLabel.Location = new Point(width - 270, 10);
+
+            if (pythonStatusLabel != null)
+                pythonStatusLabel.Location = new Point(width - 270, 42);
 
             if (markerInfoLabel != null)
             {
@@ -799,13 +803,26 @@ using System.Text;
         // Face status label (top-right corner)
         faceStatusLabel = new Label();
         faceStatusLabel.AutoSize = false;
-        faceStatusLabel.Size = new Size(200, 30);
-        faceStatusLabel.Location = new Point(width - 210, 10);
+        faceStatusLabel.Size = new Size(260, 30);
+        faceStatusLabel.Location = new Point(width - 270, 10);
         faceStatusLabel.BackColor = Color.Transparent;
         faceStatusLabel.ForeColor = Color.White;
         faceStatusLabel.Font = statusFont;
+        faceStatusLabel.TextAlign = ContentAlignment.MiddleRight;
         faceStatusLabel.Text = "Face: Not Detected";
         this.Controls.Add(faceStatusLabel);
+
+        // Python connection status label (top-right, below face label)
+        pythonStatusLabel = new Label();
+        pythonStatusLabel.AutoSize = false;
+        pythonStatusLabel.Size = new Size(260, 24);
+        pythonStatusLabel.Location = new Point(width - 270, 42);
+        pythonStatusLabel.BackColor = Color.Transparent;
+        pythonStatusLabel.ForeColor = Color.OrangeRed;
+        pythonStatusLabel.Font = font;
+        pythonStatusLabel.TextAlign = ContentAlignment.MiddleRight;
+        pythonStatusLabel.Text = "⬤ Python: Disconnected";
+        this.Controls.Add(pythonStatusLabel);
         
         // Marker info label (top-left corner)
         markerInfoLabel = new Label();
@@ -1020,17 +1037,32 @@ using System.Text;
 	string oldmsg = "";
     public void stream()
     {
-         Client c = new Client();
-        if (!c.connectToSocket("localhost", 5000))    
+        Client c = new Client();
+        // Retry connecting until Python server is ready
+        while (!c.connectToSocket("localhost", 5000))
         {
-            Console.WriteLine("Could not connect.");
-            return;
+            Console.WriteLine("[SOCKET] Retrying connection to Python in 2s...");
+            Thread.Sleep(2000);
         }
+        UpdatePythonStatus(true);
 
         while (true)
         {
             msg = c.recieveMessage();
-            if (msg == null) { Thread.Sleep(50); continue; }
+            if (msg == null) {
+                // Connection lost — try to reconnect
+                Console.WriteLine("[SOCKET] Connection lost. Reconnecting...");
+                UpdatePythonStatus(false);
+                c = new Client();
+                while (!c.connectToSocket("localhost", 5000))
+                {
+                    Console.WriteLine("[SOCKET] Retrying in 2s...");
+                    Thread.Sleep(2000);
+                }
+                Console.WriteLine("[SOCKET] Reconnected.");
+                UpdatePythonStatus(true);
+                continue;
+            }
 
             if (msg == "q")
             {
@@ -1081,6 +1113,24 @@ using System.Text;
         }
     }
     
+    private void UpdatePythonStatus(bool connected)
+    {
+        string text = connected ? "⬤ Python: Connected" : "⬤ Python: Disconnected";
+        Color color = connected ? Color.LimeGreen : Color.OrangeRed;
+        if (pythonStatusLabel.InvokeRequired)
+        {
+            pythonStatusLabel.BeginInvoke(new MethodInvoker(delegate {
+                pythonStatusLabel.Text = text;
+                pythonStatusLabel.ForeColor = color;
+            }));
+        }
+        else
+        {
+            pythonStatusLabel.Text = text;
+            pythonStatusLabel.ForeColor = color;
+        }
+    }
+
     private void UpdateFaceStatus(bool detected, string rawMsg = "")
     {
         string label = detected ? "✓ Face Detected" : "Face: Not Detected";
@@ -1182,7 +1232,7 @@ using System.Text;
 
 			// Draw face detection indicator in top-right corner
 			int indicatorSize = 15;
-			int indicatorX = width - 220;
+			int indicatorX = width - 280;
 			int indicatorY = 45;
 			if (faceDetected && (DateTime.Now - lastFaceDetectionTime).TotalSeconds < 5)
 			{
