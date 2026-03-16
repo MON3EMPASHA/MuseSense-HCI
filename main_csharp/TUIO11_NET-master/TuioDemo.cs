@@ -282,9 +282,23 @@ static class MciAudio
     [DllImport("winmm.dll", CharSet = CharSet.Auto)]
     private static extern int mciSendString(string command, StringBuilder buffer, int bufferSize, IntPtr hwndCallback);
 
+    // waveOutSetVolume sets left+right channel volume on the default wave output device.
+    // volume is a DWORD: high word = right channel, low word = left channel, range 0x0000–0xFFFF.
+    [DllImport("winmm.dll")]
+    private static extern int waveOutSetVolume(IntPtr hwo, uint dwVolume);
+
     public static int Send(string command)
     {
         return mciSendString(command, null, 0, IntPtr.Zero);
+    }
+
+    // volume0to100: 0 = silent, 100 = full. Applied to both channels.
+    public static void SetVolume(int volume0to100)
+    {
+        int v = Math.Max(0, Math.Min(100, volume0to100));
+        uint level = (uint)(v * 0xFFFF / 100);
+        uint dw = (level << 16) | level; // high word = right, low word = left
+        waveOutSetVolume(IntPtr.Zero, dw);
     }
 }
 
@@ -334,9 +348,8 @@ public class TuioDemo : Form, TuioListener
     private const int MaxRotationFrames = 220;
     private const float RotationFrameStep = 0.06f; // radians (~3.4 degrees)
 
-    // Rotating card state — only ONE card rotates at a time
-    private int   _rotatingCardId = -1;  // which carousel card is currently spinning (-1 = none)
-    private float _rotatingCardAngle = 0f;
+    // Rotating card state — only used on Artifact detail screen
+    // (Explore page is fully static for performance)
 
     // Background cache
     private Bitmap bgCache = null;
@@ -410,11 +423,6 @@ public class TuioDemo : Form, TuioListener
             if (currentScreen == AppScreen.Artifact)
             {
                 artifactAngle += 0.022f;
-                isAnimating = true;
-            }
-            if (currentScreen == AppScreen.Explore && _rotatingCardId >= 0)
-            {
-                _rotatingCardAngle += 0.022f;
                 isAnimating = true;
             }
 
@@ -517,9 +525,6 @@ public class TuioDemo : Form, TuioListener
         carouselFocused = idx;
         float step = (float)(2 * Math.PI / ArtifactData.Count);
         carouselTarget = -idx * step;
-        // Start rotating the newly focused card, stop the previous one
-        _rotatingCardId = idx;
-        _rotatingCardAngle = 0f;
         TryGetModelBg(idx);
     }
 
@@ -638,16 +643,8 @@ public class TuioDemo : Form, TuioListener
         if (model != null)
         {
             int ms = (int)(cardW * 0.72f);
-            if (isFocused && _rotatingCardId == idx)
-            {
-                // Only the focused+selected card rotates — rasterize live
-                RenderObjModelDirect(g, model, idx, cx, cardTop + cardH/3, _rotatingCardAngle, ms, ArtifactData.Colors[idx]);
-            }
-            else
-            {
-                // All other cards show a static thumbnail — rendered once, reused forever
-                DrawThumbnail(g, idx, model, cx, cardTop + cardH/3, ms);
-            }
+            // Explore page: always static thumbnail — no animation, no rasterization per frame
+            DrawThumbnail(g, idx, model, cx, cardTop + cardH/3, ms);
         }
 
         using (var br = new SolidBrush(Color.FromArgb(alpha,230,230,255)))
@@ -850,9 +847,7 @@ public class TuioDemo : Form, TuioListener
 
     private void ApplyNarrationVolume()
     {
-        int vv = Math.Max(0, Math.Min(1000, narrationVolume * 10));
-        MciAudio.Send("setaudio " + NarrationAlias + " left volume to " + vv);
-        MciAudio.Send("setaudio " + NarrationAlias + " right volume to " + vv);
+        MciAudio.SetVolume(narrationVolume);
     }
 
     private void UpdateNarrationSliderVisual()
