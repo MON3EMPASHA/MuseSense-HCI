@@ -13,6 +13,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Net.Sockets;
 using System.Text;
+using System.Web.Script.Serialization;
 using TUIO;
 
 // Minimal JSON parser for users.json (no external deps)
@@ -58,40 +59,173 @@ class UserRecord
 // Artifact data
 static class ArtifactData
 {
-    public static readonly string[] Names = {
-        "Mask of Tutankhamun",
-        "Ramses II Statue",
-        "King Senwosret III"
-    };
-    public static readonly string[] Descriptions = {
-        "The golden death mask of Pharaoh Tutankhamun, crafted around 1323 BC. " +
-        "Made of solid gold inlaid with lapis lazuli, quartz, and obsidian.",
-        "Colossal granite statue of Ramses II at the Grand Egyptian Museum, " +
-        "depicting the most celebrated pharaoh of the New Kingdom (1279-1213 BC).",
-        "Quartzite head of Senwosret III (1836-1818 BC), renowned for its " +
-        "strikingly realistic, careworn expression."
-    };
-    public static readonly Color[] Colors = {
-        Color.FromArgb(220, 191, 138, 42),
-        Color.FromArgb(220, 160, 160, 160),
-        Color.FromArgb(220, 205, 170, 125)
-    };
-    public static string GetObjPath(int id)
+    class ArtifactRecord
     {
-        switch (id)
+        public int id;
+        public int tuioId;
+        public string name;
+        public string birthDate;
+        public string era;
+        public string origin;
+        public string description;
+        public string narration;
+        public string objPath;
+        public string audioPath;
+        public string color;
+    }
+
+    class ArtifactRoot
+    {
+        public List<ArtifactRecord> artifacts;
+    }
+
+    private static List<ArtifactRecord> records = new List<ArtifactRecord>();
+    private static Dictionary<int, int> tuioToIndex = new Dictionary<int, int>();
+
+    public static string[] Names = new string[0];
+    public static string[] Descriptions = new string[0];
+    public static string[] Narrations = new string[0];
+    public static string[] BirthDates = new string[0];
+    public static string[] Eras = new string[0];
+    public static string[] Origins = new string[0];
+    public static string[] AudioPaths = new string[0];
+    public static Color[] Colors = new Color[0];
+
+    static ArtifactData()
+    {
+        Load();
+    }
+
+    private static void Load()
+    {
+        string[] cands = {
+            Path.Combine("artifacts.json"),
+            Path.Combine(Application.StartupPath, "artifacts.json"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "artifacts.json"),
+            Path.Combine("..", "..", "artifacts.json"),
+            Path.Combine("..", "..", "..", "artifacts.json")
+        };
+
+        foreach (string p in cands)
         {
-            case 0: return Path.Combine("3d models","Mask of Tutankhamun","Mask of Tutankhamun.obj");
-            case 1: return Path.Combine("3d models","Ramses II statue at the Grand Egyptian Museum","Ramses II statue at the Grand Egyptian Museum .obj");
-            case 2: return Path.Combine("3d models","King Senwosret III (1836-1818 BC)","King Senwosret III (1836-1818 BC).obj");
-            default: return null;
+            if (!File.Exists(p)) continue;
+            try
+            {
+                string json = File.ReadAllText(p);
+                JavaScriptSerializer ser = new JavaScriptSerializer();
+                ArtifactRoot root = ser.Deserialize<ArtifactRoot>(json);
+                if (root != null && root.artifacts != null && root.artifacts.Count > 0)
+                {
+                    records = root.artifacts;
+                    BuildCaches();
+                    return;
+                }
+            }
+            catch { }
+        }
+
+        LoadFallback();
+        BuildCaches();
+    }
+
+    private static void LoadFallback()
+    {
+        records = new List<ArtifactRecord>
+        {
+            new ArtifactRecord {
+                id=0, tuioId=0, name="Mask of Tutankhamun", birthDate="c. 1323 BC", era="New Kingdom",
+                origin="Valley of the Kings", description="Golden funerary mask of Pharaoh Tutankhamun, crafted with gold and semi-precious inlays.",
+                narration="You are viewing the mask of Tutankhamun, one of Ancient Egypt's most iconic royal artifacts.",
+                objPath=Path.Combine("3d models","Mask of Tutankhamun","Mask of Tutankhamun.obj"), audioPath=Path.Combine("audio","tutankhamun.wav"), color="#BFAA2A"
+            },
+            new ArtifactRecord {
+                id=1, tuioId=1, name="Ramses II Statue", birthDate="1279-1213 BC", era="New Kingdom",
+                origin="Grand Egyptian Museum", description="Monumental granite statue representing Ramses II, one of Egypt's most influential pharaohs.",
+                narration="This colossal statue represents Ramses the Great, famous for military power and monumental architecture.",
+                objPath=Path.Combine("3d models","Ramses II statue at the Grand Egyptian Museum","Ramses II statue at the Grand Egyptian Museum .obj"), audioPath=Path.Combine("audio","ramses_ii.wav"), color="#A0A0A0"
+            },
+            new ArtifactRecord {
+                id=2, tuioId=2, name="King Senwosret III", birthDate="1836-1818 BC", era="Middle Kingdom",
+                origin="Ancient Egypt", description="Quartzite portrait with a realistic expression often interpreted as royal responsibility and endurance.",
+                narration="Senwosret the Third is remembered for state reforms and strong military campaigns in the Middle Kingdom.",
+                objPath=Path.Combine("3d models","King Senwosret III (1836-1818 BC)","King Senwosret III (1836-1818 BC).obj"), audioPath=Path.Combine("audio","senwosret_iii.wav"), color="#CDAA7D"
+            },
+            new ArtifactRecord {
+                id=3, tuioId=3, name="Nefertiti Bust", birthDate="c. 1345 BC", era="Amarna Period",
+                origin="Akhetaten", description="A renowned portrait of Queen Nefertiti, celebrated for balanced proportions and elegant facial features.",
+                narration="The bust of Nefertiti is one of the most recognized symbols of artistry in Ancient Egypt.",
+                objPath=Path.Combine("3d models","Mask of Tutankhamun","Mask of Tutankhamun.obj"), audioPath=Path.Combine("audio","nefertiti.wav"), color="#C58B6D"
+            }
+        };
+    }
+
+    private static void BuildCaches()
+    {
+        records.Sort((a, b) => a.id.CompareTo(b.id));
+        Names = new string[records.Count];
+        Descriptions = new string[records.Count];
+        Narrations = new string[records.Count];
+        BirthDates = new string[records.Count];
+        Eras = new string[records.Count];
+        Origins = new string[records.Count];
+        AudioPaths = new string[records.Count];
+        Colors = new Color[records.Count];
+        tuioToIndex.Clear();
+
+        for (int i = 0; i < records.Count; i++)
+        {
+            ArtifactRecord r = records[i];
+            Names[i] = string.IsNullOrEmpty(r.name) ? ("Artifact " + r.id) : r.name;
+            Descriptions[i] = string.IsNullOrEmpty(r.description) ? "No description available." : r.description;
+            Narrations[i] = string.IsNullOrEmpty(r.narration) ? "No narration available." : r.narration;
+            BirthDates[i] = string.IsNullOrEmpty(r.birthDate) ? "Unknown" : r.birthDate;
+            Eras[i] = string.IsNullOrEmpty(r.era) ? "Unknown" : r.era;
+            Origins[i] = string.IsNullOrEmpty(r.origin) ? "Unknown" : r.origin;
+            AudioPaths[i] = string.IsNullOrEmpty(r.audioPath) ? "" : r.audioPath;
+            Colors[i] = ParseColor(r.color, Color.FromArgb(220, 180, 180, 180));
+            if (!tuioToIndex.ContainsKey(r.tuioId)) tuioToIndex.Add(r.tuioId, i);
         }
     }
+
+    private static Color ParseColor(string hex, Color fallback)
+    {
+        if (string.IsNullOrEmpty(hex)) return fallback;
+        string h = hex.Trim().TrimStart('#');
+        if (h.Length != 6) return fallback;
+        try
+        {
+            int r = Convert.ToInt32(h.Substring(0, 2), 16);
+            int g = Convert.ToInt32(h.Substring(2, 2), 16);
+            int b = Convert.ToInt32(h.Substring(4, 2), 16);
+            return Color.FromArgb(220, r, g, b);
+        }
+        catch { return fallback; }
+    }
+
+    public static int GetIndexByTuioId(int tuioId)
+    {
+        int idx;
+        return tuioToIndex.TryGetValue(tuioId, out idx) ? idx : -1;
+    }
+
+    public static string GetObjPath(int id)
+    {
+        if (id < 0 || id >= records.Count) return null;
+        return records[id].objPath;
+    }
+
+    public static string GetAudioPath(int id)
+    {
+        if (id < 0 || id >= records.Count) return null;
+        return AudioPaths[id];
+    }
+
     public static int Count { get { return Names.Length; } }
 }
 
 enum AppScreen { Explore, Favourites, Artifact }
 
-// 3-D geometry helpers
+// 3D geometry helpers
 class Vec3 { public float X,Y,Z; public Vec3(float x,float y,float z){X=x;Y=y;Z=z;} }
 class Vec2 { public float U,V; public Vec2(float u,float v){U=u;V=v;} }
 class Face3 {
@@ -99,13 +233,59 @@ class Face3 {
     public Face3(int a,int b,int c,int ta,int tb,int tc,string m){A=a;B=b;C=c;TA=ta;TB=tb;TC=tc;Mat=m;}
 }
 class MaterialInfo { public Color Diffuse=Color.LightGray; public string TexPath; public Bitmap TexBmp; }
+class TextureData { public int Width; public int Height; public int[] Pixels; }
 class ObjModel {
     public List<Vec3> Verts=new List<Vec3>();
     public List<Vec2> UVs=new List<Vec2>();
     public List<Face3> Faces=new List<Face3>();
     public Dictionary<string,Color> MatColors=new Dictionary<string,Color>();
-    public Dictionary<string,Bitmap> MatTextures=new Dictionary<string,Bitmap>();
+    public Dictionary<string,TextureData> MatTextures=new Dictionary<string,TextureData>();
     public float Radius=1f;
+}
+
+class ThemedPanel : Panel
+{
+    public int Radius = 12;
+    public Color Border = Color.FromArgb(150, 90, 150, 215);
+    public Color FillTop = Color.FromArgb(160, 20, 38, 72);
+    public Color FillBottom = Color.FromArgb(155, 8, 18, 36);
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+        using (GraphicsPath gp = RoundRectPath(r, Radius))
+        using (LinearGradientBrush br = new LinearGradientBrush(r, FillTop, FillBottom, LinearGradientMode.Vertical))
+        using (Pen pen = new Pen(Border, 1.2f))
+        {
+            e.Graphics.FillPath(br, gp);
+            e.Graphics.DrawPath(pen, gp);
+        }
+    }
+
+    private GraphicsPath RoundRectPath(Rectangle r, int radius)
+    {
+        GraphicsPath path = new GraphicsPath();
+        int d = radius * 2;
+        path.AddArc(r.Left, r.Top, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Top, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.Left, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+}
+
+static class MciAudio
+{
+    [DllImport("winmm.dll", CharSet = CharSet.Auto)]
+    private static extern int mciSendString(string command, StringBuilder buffer, int bufferSize, IntPtr hwndCallback);
+
+    public static int Send(string command)
+    {
+        return mciSendString(command, null, 0, IntPtr.Zero);
+    }
 }
 
 public class TuioDemo : Form, TuioListener
@@ -128,23 +308,28 @@ public class TuioDemo : Form, TuioListener
     private float carouselAngle  = 0f;
     private float carouselTarget = 0f;
     private int   carouselFocused = 0;
-    private System.Windows.Forms.Timer carouselTimer;
+    private System.Windows.Forms.Timer mainTimer;
 
     // Users / Favourites
     private List<UserRecord> users = new List<UserRecord>();
     private string loggedInName = "";
     private List<int> userFavourites = new List<int>();
 
-    // 3-D
+    // 3D
     private Dictionary<int,ObjModel> modelCache = new Dictionary<int,ObjModel>();
+    private readonly HashSet<int> modelsBeingLoaded = new HashSet<int>();
     private float artifactAngle = 0f;
-    private System.Windows.Forms.Timer rotateTimer;
+
+    // Background cache
+    private Bitmap bgCache = null;
+    private int bgCacheW = -1, bgCacheH = -1;
 
     // Python socket
     private bool faceDetected = false;
 
     // Fonts
     private Font fontUI    = new Font("Segoe UI", 11f);
+    private Font fontNarration = new Font("Segoe UI", 12.5f, FontStyle.Regular);
     private Font fontTitle = new Font("Segoe UI Semibold", 18f, FontStyle.Bold);
     private Font fontSmall = new Font("Segoe UI", 9f);
     private Font fontTab   = new Font("Segoe UI Semibold", 13f, FontStyle.Bold);
@@ -157,6 +342,18 @@ public class TuioDemo : Form, TuioListener
     // Status labels
     private Label faceStatusLabel;
     private Label pythonStatusLabel;
+    private Panel narrationControlCard;
+    private Button narrationPauseButton;
+    private Label narrationVolumeLabel;
+    private Panel narrationVolumeTrack;
+    private Panel narrationVolumeFill;
+    private Panel narrationVolumeThumb;
+    private bool narrationSliderDragging = false;
+
+    private const string NarrationAlias = "museNarration";
+    private bool narrationPaused = false;
+    private int narrationVolume = 70; // 0..100
+    private string currentNarrationPath = "";
 
     public TuioDemo(int port)
     {
@@ -171,24 +368,28 @@ public class TuioDemo : Form, TuioListener
         this.Resize     += new EventHandler(Form_Resized);
         this.MouseClick += new MouseEventHandler(Form_MouseClick);
         InitStatusLabels();
+        InitNarrationControls();
         this.WindowState = FormWindowState.Maximized;
         UpdateLayout();
 
-        carouselTimer = new System.Windows.Forms.Timer();
-        carouselTimer.Interval = 16;
-        carouselTimer.Tick += (s,e) => { carouselAngle += (carouselTarget - carouselAngle) * 0.08f; if (currentScreen==AppScreen.Explore) Invalidate(); };
-        carouselTimer.Start();
-
-        rotateTimer = new System.Windows.Forms.Timer();
-        rotateTimer.Interval = 16;
-        rotateTimer.Tick += (s,e) => { if (currentScreen==AppScreen.Artifact) { artifactAngle += 0.012f; Invalidate(); } };
-        rotateTimer.Start();
+        // Single timer drives all animation at ~30fps, far less overhead than two 16ms timers
+        mainTimer = new System.Windows.Forms.Timer();
+        mainTimer.Interval = 33;
+        mainTimer.Tick += (s,e) => {
+            carouselAngle += (carouselTarget - carouselAngle) * 0.12f;
+            if (currentScreen == AppScreen.Artifact) artifactAngle += 0.022f;
+            Invalidate();
+        };
+        mainTimer.Start();
 
         LoadUsers();
 
         client = new TuioClient(port);
         client.addTuioListener(this);
         client.connect();
+
+        // Pre-load all artifact models in background so UI is never frozen waiting for a model
+        for (int i = 0; i < ArtifactData.Count; i++) { int ci = i; ThreadPool.QueueUserWorkItem(_ => TryGetModelBg(ci)); }
 
         Thread t = new Thread(SocketThread);
         t.IsBackground = true;
@@ -220,13 +421,31 @@ public class TuioDemo : Form, TuioListener
 
     private void GoTo(AppScreen screen, int id)
     {
+        GoTo(screen, id, true);
+    }
+
+    private void GoTo(AppScreen screen, int id, bool autoPlayNarration)
+    {
+        bool leavingArtifact = (currentScreen == AppScreen.Artifact && screen != AppScreen.Artifact);
+        if (leavingArtifact) StopNarrationAudio();
+
+        int oldArtifact = artifactID;
+        int targetArtifact = (id >= 0) ? id : artifactID;
+        bool sameArtifact = (screen == AppScreen.Artifact && currentScreen == AppScreen.Artifact && targetArtifact >= 0 && targetArtifact == oldArtifact);
+
         currentScreen = screen;
         if (id >= 0) artifactID = id;
-        if (screen == AppScreen.Artifact && artifactID >= 0) artifactAngle = 0f;
+        if (screen == AppScreen.Artifact && artifactID >= 0)
+        {
+            artifactAngle = 0f;
+            // Play narration only for explicit artifact activation (click on artifact card or marker scan).
+            if (autoPlayNarration && !sameArtifact) PlayNarrationAudio(artifactID);
+        }
+        UpdateNarrationControlsVisibility();
         Invalidate();
     }
 
-    private void GoTo(AppScreen screen) { GoTo(screen, -1); }
+    private void GoTo(AppScreen screen) { GoTo(screen, -1, false); }
 
     private void Form_MouseClick(object sender, MouseEventArgs e)
     {
@@ -258,12 +477,13 @@ public class TuioDemo : Form, TuioListener
         carouselTarget = -idx * step;
     }
 
-    // ── Paint ─────────────────────────────────────────────────────────────────
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         Graphics g = e.Graphics;
-        g.SmoothingMode   = SmoothingMode.AntiAlias;
-        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.SmoothingMode   = SmoothingMode.HighSpeed;
+        g.PixelOffsetMode = PixelOffsetMode.None;
+        g.CompositingQuality = CompositingQuality.HighSpeed;
+        g.InterpolationMode = InterpolationMode.Bilinear;
         DrawBg(g);
         DrawHeader(g);
         int top = 64;
@@ -277,9 +497,17 @@ public class TuioDemo : Form, TuioListener
 
     private void DrawBg(Graphics g)
     {
-        using (var br = new LinearGradientBrush(new Rectangle(0,0,width,height),
-            Color.FromArgb(10,22,48), Color.FromArgb(2,8,22), LinearGradientMode.Vertical))
-            g.FillRectangle(br, 0, 0, width, height);
+        if (bgCache == null || bgCacheW != width || bgCacheH != height)
+        {
+            if (bgCache != null) bgCache.Dispose();
+            bgCache = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+            using (Graphics bg = Graphics.FromImage(bgCache))
+            using (var br = new LinearGradientBrush(new Rectangle(0,0,width,height),
+                Color.FromArgb(10,22,48), Color.FromArgb(2,8,22), LinearGradientMode.Vertical))
+                bg.FillRectangle(br, 0, 0, width, height);
+            bgCacheW = width; bgCacheH = height;
+        }
+        g.DrawImageUnscaled(bgCache, 0, 0);
     }
 
     private void DrawHeader(Graphics g)
@@ -315,7 +543,6 @@ public class TuioDemo : Form, TuioListener
         }
     }
 
-    // ── Explore screen ────────────────────────────────────────────────────────
     private void DrawExplore(Graphics g, int top)
     {
         using (var br = new SolidBrush(Color.FromArgb(200,180,210,255)))
@@ -364,7 +591,7 @@ public class TuioDemo : Form, TuioListener
         {
             int ms = (int)(cardW * 0.72f);
             float spin = (float)(DateTime.Now.TimeOfDay.TotalSeconds * 0.5) + idx * 2.1f;
-            RenderObjModel(g, model, cx, cardTop + cardH/3, spin, ms, ArtifactData.Colors[idx]);
+            RenderObjModel(g, model, cx, cardTop + cardH/3, spin, ms, ArtifactData.Colors[idx], false, 0.58f);
         }
 
         using (var br = new SolidBrush(Color.FromArgb(alpha,230,230,255)))
@@ -392,8 +619,6 @@ public class TuioDemo : Form, TuioListener
         int cx = width/2 + (int)x;
         return new Rectangle(cx - cardW/2, cy - cardH/2, cardW, cardH);
     }
-
-    // ── Favourites screen ─────────────────────────────────────────────────────
     private void DrawFavourites(Graphics g, int top)
     {
         using (var br = new SolidBrush(Color.FromArgb(200,180,210,255)))
@@ -437,7 +662,7 @@ public class TuioDemo : Form, TuioListener
         {
             int ms = (int)(r.Width * 0.65f);
             float spin = (float)(DateTime.Now.TimeOfDay.TotalSeconds * 0.4) + id * 1.5f;
-            RenderObjModel(g, model, r.Left+r.Width/2, r.Top+r.Height/3, spin, ms, ArtifactData.Colors[id]);
+            RenderObjModel(g, model, r.Left+r.Width/2, r.Top+r.Height/3, spin, ms, ArtifactData.Colors[id], false, 0.58f);
         }
         using (var br = new SolidBrush(Color.White))
         {
@@ -450,8 +675,6 @@ public class TuioDemo : Form, TuioListener
             g.DrawString("Tap to view", fontSmall, br, r.Left+(r.Width-sz.Width)/2, r.Bottom-sz.Height*1.1f);
         }
     }
-
-    // ── Artifact detail screen ────────────────────────────────────────────────
     private void DrawArtifact(Graphics g, int top)
     {
         if (artifactID < 0 || artifactID >= ArtifactData.Count)
@@ -468,7 +691,7 @@ public class TuioDemo : Form, TuioListener
         {
             using (var br = new SolidBrush(Color.FromArgb(30,100,160,255)))
             { int gs=modelSize+60; g.FillEllipse(br, mx-gs/2, my-gs/2, gs, gs); }
-            RenderObjModel(g, model, mx, my, artifactAngle, modelSize, ArtifactData.Colors[artifactID]);
+            RenderObjModel(g, model, mx, my, artifactAngle, modelSize, ArtifactData.Colors[artifactID], true, 1.0f);
         }
 
         int rx = mx + modelSize/2 + 40;
@@ -481,29 +704,182 @@ public class TuioDemo : Form, TuioListener
             g.DrawLine(pen, rx, ry+44, rx+rw, ry+44);
         using (var br = new SolidBrush(Color.FromArgb(200,200,210,230)))
             g.DrawString(ArtifactData.Descriptions[artifactID], fontUI, br, new RectangleF(rx, ry+56, rw, 200));
+        using (var br = new SolidBrush(Color.FromArgb(220,170,210,255)))
+            g.DrawString("Narration", fontTab, br, rx, ry+265);
+        using (var br = new SolidBrush(Color.FromArgb(210,210,225,245)))
+            g.DrawString(ArtifactData.Narrations[artifactID], fontNarration, br, new RectangleF(rx, ry+300, rw, 250));
         using (var br = new SolidBrush(Color.FromArgb(120,140,200,140)))
-            g.DrawString("Rotate the TUIO marker to spin the model", fontSmall, br, rx, ry+270);
+            g.DrawString("Rotate the TUIO marker to spin the model", fontSmall, br, rx, ry+560);
+
+        DrawArtifactQuickInfo(g, top);
 
         bool isFav = userFavourites.Contains(artifactID);
         using (var br = new SolidBrush(isFav ? Color.FromArgb(220,255,200,50) : Color.FromArgb(80,180,180,180)))
-            g.DrawString(isFav ? "* In your Favourites" : "Not in Favourites", fontSmall, br, rx, ry+300);
+            g.DrawString(isFav ? "* In your Favourites" : "Not in Favourites", fontSmall, br, rx, ry+590);
         using (var br = new SolidBrush(Color.FromArgb(100,100,160,200)))
-            g.DrawString("Marker ID: " + artifactID, fontSmall, br, rx, ry+325);
+            g.DrawString("Marker ID: " + artifactID, fontSmall, br, rx, ry+615);
     }
 
-    // ── 3-D rendering ─────────────────────────────────────────────────────────
+    private void PlayNarrationAudio(int id)
+    {
+        string rel = ArtifactData.GetAudioPath(id);
+        if (string.IsNullOrEmpty(rel)) return;
+        string full = ResolveAsset(rel);
+        if (string.IsNullOrEmpty(full)) return;
+
+        // Always stop current narration before starting another to prevent overlap.
+        StopNarrationAudioInternal();
+
+        try
+        {
+            string escaped = full.Replace("\"", "\\\"");
+            if (MciAudio.Send("open \"" + escaped + "\" type waveaudio alias " + NarrationAlias) != 0) return;
+            ApplyNarrationVolume();
+            if (MciAudio.Send("play " + NarrationAlias + " from 0") != 0)
+            {
+                MciAudio.Send("close " + NarrationAlias);
+                return;
+            }
+            narrationPaused = false;
+            currentNarrationPath = full;
+            if (narrationPauseButton != null) narrationPauseButton.Text = "Pause Narration";
+        }
+        catch { }
+    }
+
+    private void StopNarrationAudio()
+    {
+        StopNarrationAudioInternal();
+    }
+
+    private void StopNarrationAudioInternal()
+    {
+        MciAudio.Send("stop " + NarrationAlias);
+        MciAudio.Send("close " + NarrationAlias);
+        narrationPaused = false;
+        currentNarrationPath = "";
+        if (narrationPauseButton != null) narrationPauseButton.Text = "Pause Narration";
+    }
+
+    private void TogglePauseNarration()
+    {
+        if (string.IsNullOrEmpty(currentNarrationPath)) return;
+        if (narrationPaused)
+        {
+            int rc = MciAudio.Send("resume " + NarrationAlias);
+            if (rc != 0) rc = MciAudio.Send("play " + NarrationAlias);
+            if (rc == 0)
+            {
+                narrationPaused = false;
+                narrationPauseButton.Text = "Pause Narration";
+            }
+        }
+        else
+        {
+            if (MciAudio.Send("pause " + NarrationAlias) == 0)
+            {
+                narrationPaused = true;
+                narrationPauseButton.Text = "Resume Narration";
+            }
+        }
+    }
+
+    private void SetNarrationVolume(int volume0to100)
+    {
+        int v = Math.Max(0, Math.Min(100, volume0to100));
+        narrationVolume = v;
+        if (narrationVolumeLabel != null) narrationVolumeLabel.Text = "Volume " + v + "%";
+        UpdateNarrationSliderVisual();
+        ApplyNarrationVolume();
+    }
+
+    private void ApplyNarrationVolume()
+    {
+        int vv = Math.Max(0, Math.Min(1000, narrationVolume * 10));
+        MciAudio.Send("setaudio " + NarrationAlias + " left volume to " + vv);
+        MciAudio.Send("setaudio " + NarrationAlias + " right volume to " + vv);
+    }
+
+    private void UpdateNarrationSliderVisual()
+    {
+        if (narrationVolumeTrack == null || narrationVolumeFill == null || narrationVolumeThumb == null) return;
+        int trackW = narrationVolumeTrack.Width;
+        if (trackW <= 0) return;
+        int fillW = (int)((trackW * narrationVolume) / 100.0);
+        fillW = Math.Max(6, Math.Min(trackW, fillW));
+        narrationVolumeFill.Width = fillW;
+        narrationVolumeThumb.Left = Math.Max(0, Math.Min(trackW - narrationVolumeThumb.Width, fillW - narrationVolumeThumb.Width / 2));
+    }
+
+    private void SetNarrationVolumeFromTrackX(int x)
+    {
+        int trackW = narrationVolumeTrack.Width;
+        if (trackW <= 0) return;
+        int clamped = Math.Max(0, Math.Min(trackW, x));
+        int v = (int)Math.Round((clamped * 100.0) / trackW);
+        SetNarrationVolume(v);
+    }
+
+    private void DrawArtifactQuickInfo(Graphics g, int top)
+    {
+        if (artifactID < 0 || artifactID >= ArtifactData.Count) return;
+        Rectangle box = new Rectangle(18, top + 14, 300, 150);
+        using (var path = RoundRect(box, 12))
+        using (var br = new SolidBrush(Color.FromArgb(170, 8, 18, 40))) g.FillPath(br, path);
+        using (var path = RoundRect(box, 12))
+        using (var pen = new Pen(Color.FromArgb(130, 120, 170, 220), 1.2f)) g.DrawPath(pen, path);
+
+        int x = box.Left + 12;
+        int y = box.Top + 10;
+        using (var br = new SolidBrush(Color.FromArgb(230, 235, 220, 160)))
+            g.DrawString("Artifact Info", fontSmall, br, x, y);
+        y += 22;
+        using (var br = new SolidBrush(Color.FromArgb(235, 245, 245, 250)))
+            g.DrawString("Name: " + ArtifactData.Names[artifactID], fontSmall, br, x, y);
+        y += 24;
+        using (var br = new SolidBrush(Color.FromArgb(215, 215, 230, 245)))
+            g.DrawString("Birth Date: " + ArtifactData.BirthDates[artifactID], fontSmall, br, x, y);
+        y += 22;
+        using (var br = new SolidBrush(Color.FromArgb(215, 215, 230, 245)))
+            g.DrawString("Era: " + ArtifactData.Eras[artifactID], fontSmall, br, x, y);
+        y += 22;
+        using (var br = new SolidBrush(Color.FromArgb(215, 215, 230, 245)))
+            g.DrawString("Origin: " + ArtifactData.Origins[artifactID], fontSmall, br, x, y);
+    }
+
+    // Called only from UI thread. Returns cached model or null while loading in background.
     private ObjModel TryGetModel(int id)
     {
         if (modelCache.ContainsKey(id)) return modelCache[id];
-        ObjModel m = LoadObjModel(ArtifactData.GetObjPath(id));
-        modelCache[id] = m;
-        return m;
+        TryGetModelBg(id);
+        return null;
     }
 
-    private void RenderObjModel(Graphics g, ObjModel model, int cx, int cy, float angle, int size, Color baseColor)
+    // Thread-safe: queues a background load if not already in progress.
+    private void TryGetModelBg(int id)
+    {
+        lock (modelsBeingLoaded)
+        {
+            if (modelCache.ContainsKey(id)) return;
+            if (modelsBeingLoaded.Contains(id)) return;
+            modelsBeingLoaded.Add(id);
+        }
+        int capturedId = id;
+        ThreadPool.QueueUserWorkItem(_ => {
+            ObjModel m = LoadObjModel(ArtifactData.GetObjPath(capturedId));
+            // Post result back to UI thread so modelCache is only ever written from UI thread
+            if (IsHandleCreated)
+                BeginInvoke(new MethodInvoker(() => { modelCache[capturedId] = m; Invalidate(); }));
+            else
+                modelCache[capturedId] = m;
+        });
+    }
+
+    private void RenderObjModel(Graphics g, ObjModel model, int cx, int cy, float angle, int size, Color baseColor, bool useTextures, float resolutionScale)
     {
         if (model == null) return;
-        int W=size, H=size;
+        int W = Math.Max(100, (int)(size * resolutionScale));
+        int H = W;
         int[] pixels = new int[W*H];
         float[] zBuf = new float[W*H];
         for (int i=0;i<zBuf.Length;i++) zBuf[i]=float.NegativeInfinity;
@@ -526,7 +902,7 @@ public class TuioDemo : Form, TuioListener
             nx/=nl;ny/=nl;nz/=nl;
             float lf=Math.Min(1.18f,0.68f+0.42f*Math.Abs(nx*ld.X+ny*ld.Y+nz*ld.Z));
             Color fc=(!string.IsNullOrEmpty(f.Mat)&&model.MatColors.ContainsKey(f.Mat))?model.MatColors[f.Mat]:baseColor;
-            Bitmap tex=(!string.IsNullOrEmpty(f.Mat)&&model.MatTextures.ContainsKey(f.Mat))?model.MatTextures[f.Mat]:null;
+            TextureData tex=(useTextures&&!string.IsNullOrEmpty(f.Mat)&&model.MatTextures.ContainsKey(f.Mat))?model.MatTextures[f.Mat]:null;
             Vec2 uv1=(f.TA>=0&&f.TA<model.UVs.Count)?model.UVs[f.TA]:null;
             Vec2 uv2=(f.TB>=0&&f.TB<model.UVs.Count)?model.UVs[f.TB]:null;
             Vec2 uv3=(f.TC>=0&&f.TC<model.UVs.Count)?model.UVs[f.TC]:null;
@@ -536,7 +912,7 @@ public class TuioDemo : Form, TuioListener
         {
             BitmapData bd=bmp.LockBits(new Rectangle(0,0,W,H),ImageLockMode.WriteOnly,PixelFormat.Format32bppArgb);
             Marshal.Copy(pixels,0,bd.Scan0,pixels.Length); bmp.UnlockBits(bd);
-            g.DrawImage(bmp,cx-W/2,cy-H/2,W,H);
+            g.DrawImage(bmp,cx-size/2,cy-size/2,size,size);
         }
     }
 
@@ -548,7 +924,7 @@ public class TuioDemo : Form, TuioListener
     }
     private Vec3 Norm(Vec3 v){float l=(float)Math.Sqrt(v.X*v.X+v.Y*v.Y+v.Z*v.Z);return l<1e-5f?v:new Vec3(v.X/l,v.Y/l,v.Z/l);}
 
-    private void RasterTri(int[] px,float[] zb,int W,int H,PointF p1,PointF p2,PointF p3,float z1,float z2,float z3,Vec2 uv1,Vec2 uv2,Vec2 uv3,Bitmap tex,Color fc,float lf)
+    private void RasterTri(int[] px,float[] zb,int W,int H,PointF p1,PointF p2,PointF p3,float z1,float z2,float z3,Vec2 uv1,Vec2 uv2,Vec2 uv3,TextureData tex,Color fc,float lf)
     {
         int x0=(int)Math.Max(0,Math.Floor(Math.Min(p1.X,Math.Min(p2.X,p3.X))));
         int x1=(int)Math.Min(W-1,Math.Ceiling(Math.Max(p1.X,Math.Max(p2.X,p3.X))));
@@ -568,13 +944,13 @@ public class TuioDemo : Form, TuioListener
             Color sc=fc;
             if(useTex){float u=w1*uv1.U+w2*uv2.U+w3*uv3.U,v=w1*uv1.V+w2*uv2.V+w3*uv3.V;
                 u=Math.Max(0f,Math.Min(1f,u));v=Math.Max(0f,Math.Min(1f,v));
-                sc=tex.GetPixel(Math.Max(0,Math.Min(tex.Width-1,(int)(u*(tex.Width-1)))),Math.Max(0,Math.Min(tex.Height-1,(int)((1f-v)*(tex.Height-1)))));}
+                int tx = Math.Max(0,Math.Min(tex.Width-1,(int)(u*(tex.Width-1))));
+                int ty = Math.Max(0,Math.Min(tex.Height-1,(int)((1f-v)*(tex.Height-1))));
+                sc=Color.FromArgb(tex.Pixels[ty*tex.Width+tx]);}
             float exp=1.12f;
             px[idx]=Color.FromArgb(255,Math.Max(0,Math.Min(255,(int)(sc.R*lf*exp+8))),Math.Max(0,Math.Min(255,(int)(sc.G*lf*exp+8))),Math.Max(0,Math.Min(255,(int)(sc.B*lf*exp+8)))).ToArgb();
         }
     }
-
-    // ── OBJ / MTL loader ──────────────────────────────────────────────────────
     private ObjModel LoadObjModel(string rel)
     {
         string path=Resolve(rel); if(string.IsNullOrEmpty(path))return null;
@@ -607,7 +983,13 @@ public class TuioDemo : Form, TuioListener
             }
         }
         var mats=LoadMtls(dir,mtlLibs);
-        foreach(var kv in mats){Color fc=kv.Value.Diffuse;if(!string.IsNullOrEmpty(kv.Value.TexPath)&&File.Exists(kv.Value.TexPath))fc=AvgColor(kv.Value.TexPath,fc);m.MatColors[kv.Key]=fc;if(kv.Value.TexBmp!=null)m.MatTextures[kv.Key]=kv.Value.TexBmp;}
+        foreach(var kv in mats)
+        {
+            Color fc=kv.Value.Diffuse;
+            if (kv.Value.TexBmp != null) fc = AvgColor(kv.Value.TexBmp, fc);
+            m.MatColors[kv.Key]=fc;
+            if(kv.Value.TexBmp!=null) m.MatTextures[kv.Key]=ToTextureData(kv.Value.TexBmp);
+        }
         if(m.Verts.Count==0||m.Faces.Count==0)return null;
         float cx=0,cy=0,cz=0; foreach(var v in m.Verts){cx+=v.X;cy+=v.Y;cz+=v.Z;} cx/=m.Verts.Count;cy/=m.Verts.Count;cz/=m.Verts.Count;
         float maxR=1e-4f; foreach(var v in m.Verts){v.X-=cx;v.Y-=cy;v.Z-=cz;float r=(float)Math.Sqrt(v.X*v.X+v.Y*v.Y+v.Z*v.Z);if(r>maxR)maxR=r;} m.Radius=maxR;
@@ -630,34 +1012,97 @@ public class TuioDemo : Form, TuioListener
     }
 
     private bool TryF(string s,out float v){return float.TryParse(s,System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out v);}
+    private TextureData ToTextureData(Bitmap bmp)
+    {
+        int w = bmp.Width, h = bmp.Height;
+        int[] pix = new int[w * h];
+        BitmapData bd = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try { Marshal.Copy(bd.Scan0, pix, 0, pix.Length); }
+        finally { bmp.UnlockBits(bd); }
+        return new TextureData { Width = w, Height = h, Pixels = pix };
+    }
+    private Color AvgColor(Bitmap bmp, Color fallback)
+    {
+        try
+        {
+            TextureData t = ToTextureData(bmp);
+            int sx = Math.Max(1, t.Width / 60), sy = Math.Max(1, t.Height / 60);
+            long sr = 0, sg = 0, sb = 0, cnt = 0;
+            for (int y = 0; y < t.Height; y += sy)
+            for (int x = 0; x < t.Width; x += sx)
+            {
+                Color c = Color.FromArgb(t.Pixels[y * t.Width + x]);
+                sr += c.R; sg += c.G; sb += c.B; cnt++;
+            }
+            if (cnt == 0) return fallback;
+            return Color.FromArgb(220, (int)(sr / cnt), (int)(sg / cnt), (int)(sb / cnt));
+        }
+        catch { return fallback; }
+    }
     private int ObjIdx(string tok,int cnt){int i;if(!int.TryParse(tok.Split('/')[0],out i))return -1;return i>0?i-1:i<0?cnt+i:-1;}
     private int ObjTexIdx(string tok,int cnt){string[] c=tok.Split('/');if(c.Length<2||string.IsNullOrEmpty(c[1]))return -1;int i;if(!int.TryParse(c[1],out i))return -1;return i>0?i-1:i<0?cnt+i:-1;}
     private string Resolve(string rel){if(string.IsNullOrEmpty(rel))return null;string[] cands={rel,Path.Combine(Application.StartupPath,rel),Path.Combine(AppDomain.CurrentDomain.BaseDirectory,rel)};foreach(string c in cands)if(File.Exists(c))return c;return null;}
-    private Color AvgColor(string imgPath,Color fallback){try{using(Bitmap bmp=new Bitmap(imgPath)){int sx=Math.Max(1,bmp.Width/40),sy=Math.Max(1,bmp.Height/40);long sr=0,sg=0,sb=0,cnt=0;for(int y=0;y<bmp.Height;y+=sy)for(int x=0;x<bmp.Width;x+=sx){Color c=bmp.GetPixel(x,y);sr+=c.R;sg+=c.G;sb+=c.B;cnt++;}if(cnt==0)return fallback;return Color.FromArgb(220,(int)(sr/cnt),(int)(sg/cnt),(int)(sb/cnt));}}catch{return fallback;}}
+    private string ResolveAsset(string rel)
+    {
+        if (string.IsNullOrEmpty(rel)) return null;
+        string[] cands = {
+            rel,
+            Path.Combine(Application.StartupPath, rel),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, rel),
+            Path.Combine("..", "..", rel),
+            Path.Combine("..", "..", "..", rel),
+            Path.Combine("..", "..", "..", "..", rel)
+        };
+        foreach (string c in cands) if (File.Exists(c)) return c;
+        return null;
+    }
 
-    // ── TUIO callbacks ────────────────────────────────────────────────────────
     public void addTuioObject(TuioObject o)
     {
         lock(objectList) objectList[o.SessionID]=o;
         if(verbose) Console.WriteLine("add obj "+o.SymbolID);
-        if(o.SymbolID>=0&&o.SymbolID<ArtifactData.Count)
-            this.BeginInvoke(new MethodInvoker(()=>{ artifactAngle=(float)o.Angle; GoTo(AppScreen.Artifact,o.SymbolID); }));
+        int idx = ArtifactData.GetIndexByTuioId(o.SymbolID);
+        if(idx>=0 && IsHandleCreated)
+            this.BeginInvoke(new MethodInvoker(()=>{ artifactAngle=(float)o.Angle; GoTo(AppScreen.Artifact,idx); }));
     }
     public void updateTuioObject(TuioObject o)
     {
         lock(objectList) if(objectList.ContainsKey(o.SessionID)) objectList[o.SessionID]=o;
-        if(currentScreen==AppScreen.Artifact&&o.SymbolID==artifactID) artifactAngle=(float)o.Angle;
+        // Compare against artifactID (array index) not raw symbol ID
+        int idx = ArtifactData.GetIndexByTuioId(o.SymbolID);
+        if(currentScreen==AppScreen.Artifact && idx==artifactID) artifactAngle=(float)o.Angle;
     }
-    public void removeTuioObject(TuioObject o){lock(objectList)objectList.Remove(o.SessionID);}
+    public void removeTuioObject(TuioObject o)
+    {
+        lock(objectList) objectList.Remove(o.SessionID);
+
+        // If the currently shown artifact marker is removed, stop narration and return to Explore.
+        if (currentScreen == AppScreen.Artifact)
+        {
+            bool hasCurrentArtifactMarker = false;
+            lock (objectList)
+            {
+                foreach (TuioObject obj in objectList.Values)
+                {
+                    if (ArtifactData.GetIndexByTuioId(obj.SymbolID) == artifactID)
+                    {
+                        hasCurrentArtifactMarker = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasCurrentArtifactMarker && IsHandleCreated)
+                BeginInvoke(new MethodInvoker(() => GoTo(AppScreen.Explore)));
+        }
+    }
     public void addTuioCursor(TuioCursor c){lock(cursorList)cursorList[c.SessionID]=c;}
     public void updateTuioCursor(TuioCursor c){}
     public void removeTuioCursor(TuioCursor c){lock(cursorList)cursorList.Remove(c.SessionID);}
     public void addTuioBlob(TuioBlob b){lock(blobList)blobList[b.SessionID]=b;}
     public void updateTuioBlob(TuioBlob b){}
     public void removeTuioBlob(TuioBlob b){lock(blobList)blobList.Remove(b.SessionID);}
-    public void refresh(TuioTime t){Invalidate();}
-
-    // ── Python socket ─────────────────────────────────────────────────────────
+    // mainTimer already drives Invalidate at 30fps; TUIO refresh is a no-op to avoid redundant repaints
+    public void refresh(TuioTime t) { }
     private void SocketThread()
     {
         while(true)
@@ -703,8 +1148,6 @@ public class TuioDemo : Form, TuioListener
         if(faceStatusLabel.InvokeRequired) faceStatusLabel.BeginInvoke(new MethodInvoker(()=>{faceStatusLabel.Text=txt;faceStatusLabel.ForeColor=col;}));
         else{faceStatusLabel.Text=txt;faceStatusLabel.ForeColor=col;}
     }
-
-    // ── UI helpers ────────────────────────────────────────────────────────────
     private void InitStatusLabels()
     {
         faceStatusLabel=new Label{AutoSize=false,Size=new Size(260,30),Location=new Point(width-270,10),
@@ -717,11 +1160,122 @@ public class TuioDemo : Form, TuioListener
         this.Controls.Add(pythonStatusLabel);
     }
 
+    private void InitNarrationControls()
+    {
+        narrationControlCard = new ThemedPanel
+        {
+            Size = new Size(236, 126),
+            Visible = false
+        };
+        this.Controls.Add(narrationControlCard);
+
+        narrationPauseButton = new Button
+        {
+            Text = "Pause Narration",
+            Size = new Size(206, 34),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(30, 92, 166),
+            ForeColor = Color.FromArgb(235, 245, 255),
+            Visible = false,
+            Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold)
+        };
+        narrationPauseButton.FlatAppearance.BorderColor = Color.FromArgb(140, 190, 235);
+        narrationPauseButton.FlatAppearance.BorderSize = 1;
+        narrationPauseButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(46, 118, 198);
+        narrationPauseButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(28, 72, 132);
+        narrationPauseButton.Click += (s, e) => TogglePauseNarration();
+        narrationControlCard.Controls.Add(narrationPauseButton);
+
+        narrationVolumeLabel = new Label
+        {
+            Text = "Volume 70%",
+            AutoSize = false,
+            Size = new Size(160, 22),
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.FromArgb(220, 235, 255),
+            BackColor = Color.FromArgb(0, 0, 0, 0),
+            Font = new Font("Segoe UI Semibold", 9f, FontStyle.Bold),
+            Visible = false
+        };
+        narrationControlCard.Controls.Add(narrationVolumeLabel);
+
+        narrationVolumeTrack = new Panel
+        {
+            Size = new Size(206, 18),
+            BackColor = Color.FromArgb(24, 44, 75),
+            Visible = false
+        };
+        narrationVolumeTrack.Paint += (s, e) =>
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle r = new Rectangle(0, 0, narrationVolumeTrack.Width - 1, narrationVolumeTrack.Height - 1);
+            using (GraphicsPath gp = new GraphicsPath())
+            {
+                int rad = 8; int d = rad * 2;
+                gp.AddArc(r.Left, r.Top, d, d, 180, 90);
+                gp.AddArc(r.Right - d, r.Top, d, d, 270, 90);
+                gp.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+                gp.AddArc(r.Left, r.Bottom - d, d, d, 90, 90);
+                gp.CloseFigure();
+                using (SolidBrush br = new SolidBrush(Color.FromArgb(30, 52, 86))) e.Graphics.FillPath(br, gp);
+                using (Pen p = new Pen(Color.FromArgb(90, 150, 210), 1f)) e.Graphics.DrawPath(p, gp);
+            }
+        };
+        narrationVolumeTrack.MouseDown += (s, e) => { narrationSliderDragging = true; SetNarrationVolumeFromTrackX(e.X); };
+        narrationVolumeTrack.MouseMove += (s, e) => { if (narrationSliderDragging) SetNarrationVolumeFromTrackX(e.X); };
+        narrationVolumeTrack.MouseUp += (s, e) => { narrationSliderDragging = false; };
+        narrationControlCard.Controls.Add(narrationVolumeTrack);
+
+        narrationVolumeFill = new Panel
+        {
+            Height = 18,
+            Width = 1,
+            BackColor = Color.FromArgb(72, 170, 255),
+            Enabled = false
+        };
+        narrationVolumeTrack.Controls.Add(narrationVolumeFill);
+
+        narrationVolumeThumb = new Panel
+        {
+            Size = new Size(14, 18),
+            BackColor = Color.FromArgb(235, 246, 255),
+            Cursor = Cursors.Hand
+        };
+        narrationVolumeThumb.Paint += (s, e) =>
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (SolidBrush b = new SolidBrush(Color.FromArgb(235, 246, 255)))
+                e.Graphics.FillEllipse(b, 0, 2, narrationVolumeThumb.Width - 1, narrationVolumeThumb.Height - 5);
+            using (Pen p = new Pen(Color.FromArgb(70, 120, 180), 1f))
+                e.Graphics.DrawEllipse(p, 0, 2, narrationVolumeThumb.Width - 1, narrationVolumeThumb.Height - 5);
+        };
+        narrationVolumeThumb.MouseDown += (s, e) => { narrationSliderDragging = true; SetNarrationVolumeFromTrackX(narrationVolumeThumb.Left + e.X); };
+        narrationVolumeThumb.MouseMove += (s, e) => { if (narrationSliderDragging) SetNarrationVolumeFromTrackX(narrationVolumeThumb.Left + e.X); };
+        narrationVolumeThumb.MouseUp += (s, e) => { narrationSliderDragging = false; };
+        narrationVolumeTrack.Controls.Add(narrationVolumeThumb);
+
+        narrationPauseButton.Visible = true;
+        narrationVolumeLabel.Visible = true;
+        narrationVolumeTrack.Visible = true;
+        UpdateNarrationSliderVisual();
+    }
+
+    private void UpdateNarrationControlsVisibility()
+    {
+        bool show = (currentScreen == AppScreen.Artifact && artifactID >= 0);
+        if (narrationControlCard != null) narrationControlCard.Visible = show;
+    }
+
     private void UpdateLayout()
     {
         width=this.ClientSize.Width; height=this.ClientSize.Height;
         if(faceStatusLabel!=null)  faceStatusLabel.Location=new Point(width-270,10);
         if(pythonStatusLabel!=null) pythonStatusLabel.Location=new Point(width-270,42);
+        if (narrationControlCard != null) narrationControlCard.Location = new Point(width - 266, 72);
+        if (narrationPauseButton != null) narrationPauseButton.Location = new Point(14, 12);
+        if (narrationVolumeLabel != null) narrationVolumeLabel.Location = new Point(14, 54);
+        if (narrationVolumeTrack != null) narrationVolumeTrack.Location = new Point(14, 80);
+        UpdateNarrationSliderVisual();
     }
 
     private GraphicsPath RoundRect(Rectangle r,int radius)
@@ -732,8 +1286,7 @@ public class TuioDemo : Form, TuioListener
         path.CloseFigure(); return path;
     }
 
-    // ── Form events ───────────────────────────────────────────────────────────
-    private void Form_Resized(object sender,EventArgs e){UpdateLayout();}
+    private void Form_Resized(object sender,EventArgs e){UpdateLayout(); bgCacheW=-1; /* invalidate bg cache on resize */}
 
     private void Form_KeyDown(object sender,KeyEventArgs e)
     {
@@ -750,7 +1303,9 @@ public class TuioDemo : Form, TuioListener
 
     private void Form_Closing(object sender,CancelEventArgs e)
     {
-        foreach(var m in modelCache.Values) if(m!=null) foreach(var t in m.MatTextures.Values) if(t!=null) t.Dispose();
+        if (mainTimer != null) mainTimer.Stop();
+        StopNarrationAudio();
+        if (bgCache != null) bgCache.Dispose();
         client.removeTuioListener(this); client.disconnect();
         System.Environment.Exit(0);
     }
