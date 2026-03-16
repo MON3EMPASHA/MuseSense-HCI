@@ -1,0 +1,6 @@
+{
+  "camera_mode": "phone_ip",
+  "phone_ip_url": "http://192.168.1.18:8080/video",
+  "local_webcam_index": 1,
+  "camera_disabled": false
+}

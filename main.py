@@ -3,11 +3,16 @@ import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision as mp_vision
 import numpy as np
+import os
+
+# Keep TensorFlow oneDNN optimizations deterministic/noisy-log free unless the user sets it explicitly.
+os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+
 from deepface import DeepFace
 import socket
 import time
 import urllib.request
-import os
+import json
 
 # --- Socket setup ---
 import threading
@@ -115,23 +120,284 @@ frame_count = 0
 show_camera = False  # Set to True to show the raw camera window
 
 # --- Camera setup ---
-cam_url = "http://192.168.1.100:8080/video"
-print(f"[INIT] Opening camera stream: {cam_url}")
-cap = cv2.VideoCapture(cam_url)
+camera_config_path = "camera_config.json"
 
-if not cap.isOpened():
-    print("[ERROR] Failed to open camera stream. Check the URL or connection.")
+def load_camera_config(path):
+    default_cfg = {
+        "camera_mode": "local_webcam",
+        "phone_ip_url": "http://192.168.1.18:8080/video",
+        "local_webcam_index": 0,
+    }
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            user_cfg = json.load(f)
+        if isinstance(user_cfg, dict):
+            default_cfg.update(user_cfg)
+    except FileNotFoundError:
+        print(f"[INIT] Camera config not found at {path}. Using defaults.")
+    except Exception as e:
+        print(f"[INIT] Failed to read camera config at {path}: {e}. Using defaults.")
+    return default_cfg
+
+camera_cfg = load_camera_config(camera_config_path)
+camera_mode = str(camera_cfg.get("camera_mode", "local_webcam")).strip().lower()
+phone_ip_url = str(camera_cfg.get("phone_ip_url", "http://192.168.1.18:8080/video")).strip()
+local_webcam_index = int(camera_cfg.get("local_webcam_index", 0))
+
+camera_disabled_cfg = camera_cfg.get("camera_disabled", False)
+if isinstance(camera_disabled_cfg, str):
+    camera_disabled_cfg = camera_disabled_cfg.strip().lower() in ("1", "true", "yes", "on")
 else:
-    print("[INIT] Camera stream opened successfully.")
+    camera_disabled_cfg = bool(camera_disabled_cfg)
+
+# Optional hard override from terminal: CAMERA_DISABLED=1
+camera_disabled_env = os.getenv("CAMERA_DISABLED", "").strip().lower()
+camera_disabled = camera_disabled_cfg or camera_disabled_env in ("1", "true", "yes", "on")
+
+if camera_mode == "phone_ip":
+    primary_source = phone_ip_url
+    primary_source_name = f"IP camera ({primary_source})"
+else:
+    primary_source = local_webcam_index
+    primary_source_name = f"local webcam (index {primary_source})"
+
+# Optional override for quick testing from terminal, e.g. CAMERA_SOURCE=0 or CAMERA_SOURCE=http://.../video
+camera_source_env = os.getenv("CAMERA_SOURCE", "").strip()
+if camera_source_env:
+    if camera_source_env.isdigit():
+        primary_source = int(camera_source_env)
+        primary_source_name = f"local webcam (index {primary_source}) via env"
+    else:
+        primary_source = camera_source_env
+        primary_source_name = f"IP camera ({primary_source}) via env"
+
+print(f"[INIT] Opening camera source: {primary_source_name}")
+cap = None
+read_fail_streak = 0
+max_read_fail_before_reconnect = 15
+warning_every_n_failures = 5
+reconnect_cycle_count = 0
+max_reconnect_cycles = 8
+blank_frame_streak = 0
+max_blank_frames_before_reconnect = 45
+warning_every_n_blank_frames = 10
+blank_detection_warmup_frames = 20
+frames_since_reconnect = 0
+camera_unavailable_mode = False
+camera_retry_interval_sec = 3.0
+last_camera_retry_time = 0.0
+sent_face_lost_when_camera_unavailable = False
+
+# Alternate webcam backends on repeated blank-frame reconnects.
+preferred_webcam_backend = getattr(cv2, "CAP_MSMF", None) if hasattr(cv2, "CAP_MSMF") else None
+
+# Optional override: CAMERA_BACKEND=msmf|dshow|default
+camera_backend_env = os.getenv("CAMERA_BACKEND", "").strip().lower()
+if camera_backend_env == "msmf" and hasattr(cv2, "CAP_MSMF"):
+    preferred_webcam_backend = cv2.CAP_MSMF
+elif camera_backend_env == "dshow" and hasattr(cv2, "CAP_DSHOW"):
+    preferred_webcam_backend = cv2.CAP_DSHOW
+elif camera_backend_env == "default":
+    preferred_webcam_backend = None
+
+def backend_to_name(backend):
+    if backend == getattr(cv2, "CAP_DSHOW", object()):
+        return "CAP_DSHOW"
+    if backend == getattr(cv2, "CAP_MSMF", object()):
+        return "CAP_MSMF"
+    return "default"
+
+def choose_backend_candidates(source, preferred_backend=None):
+    if not isinstance(source, int):
+        return [None]
+
+    # Prefer MSMF first on Windows because it is often less exclusive than DirectShow.
+    candidates = []
+    for candidate in [preferred_backend, getattr(cv2, "CAP_MSMF", None), getattr(cv2, "CAP_DSHOW", None), None]:
+        if candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
+
+def frame_is_effectively_blank(frame):
+    """Detect near-black / near-uniform frames while avoiding false positives in dim scenes."""
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    mean_luma = float(np.mean(gray))
+    std_luma = float(np.std(gray))
+    max_luma = int(np.max(gray))
+    return mean_luma < 8.0 and std_luma < 4.0 and max_luma < 28
+
+def open_capture_with_retry(source, source_name, retries=3, delay_sec=1.0, preferred_backend=None):
+    """Try to open a capture source multiple times before giving up.
+
+    For local webcams on Windows, try common backends and require one valid frame
+    so we do not treat an unusable capture handle as a successful open.
+    """
+    backend_candidates = choose_backend_candidates(source, preferred_backend=preferred_backend)
+
+    def open_and_probe(backend):
+        cap_obj = cv2.VideoCapture(source) if backend is None else cv2.VideoCapture(source, backend)
+        if not cap_obj.isOpened():
+            cap_obj.release()
+            return None
+
+        # Warm up and verify at least one real frame is readable.
+        for _ in range(10):
+            ret, frame = cap_obj.read()
+            if ret and frame is not None and frame.size > 0:
+                return cap_obj
+            time.sleep(0.05)
+
+        cap_obj.release()
+        return None
+
+    for attempt in range(1, retries + 1):
+        for backend in backend_candidates:
+            backend_name = backend_to_name(backend)
+
+            print(f"[INIT] Attempt {attempt}/{retries} opening {source_name} via {backend_name}...")
+            c = open_and_probe(backend)
+            if c is not None:
+                print(f"[INIT] Connected to {source_name} via {backend_name}.")
+                return c
+        time.sleep(delay_sec)
+    return None
+
+def reconnect_camera(reason="generic"):
+    global cap, preferred_webcam_backend, frames_since_reconnect
+    if cap is not None:
+        cap.release()
+
+    backend_for_attempt = preferred_webcam_backend
+    if reason == "blank" and isinstance(primary_source, int):
+        if preferred_webcam_backend == getattr(cv2, "CAP_DSHOW", object()) and hasattr(cv2, "CAP_MSMF"):
+            preferred_webcam_backend = cv2.CAP_MSMF
+        elif preferred_webcam_backend == getattr(cv2, "CAP_MSMF", object()) and hasattr(cv2, "CAP_DSHOW"):
+            preferred_webcam_backend = cv2.CAP_DSHOW
+        backend_for_attempt = preferred_webcam_backend
+        print(f"[CAMERA] Blank-frame recovery: switching preferred backend to {backend_to_name(backend_for_attempt)}")
+
+    print(f"[CAMERA] Reconnecting primary source: {primary_source_name}")
+    cap = open_capture_with_retry(
+        primary_source,
+        primary_source_name,
+        retries=2,
+        delay_sec=0.5,
+        preferred_backend=backend_for_attempt
+    )
+    if cap is None and primary_source != 0:
+        print("[CAMERA] Primary reconnect failed. Trying local webcam fallback (index 0).")
+        cap = open_capture_with_retry(
+            0,
+            "local webcam (index 0)",
+            retries=2,
+            delay_sec=0.5,
+            preferred_backend=backend_for_attempt
+        )
+    if cap is not None:
+        frames_since_reconnect = 0
+    return cap is not None
+
+# Prefer selected source first, then fallback to local webcam.
+if camera_disabled:
+    print("[INIT] CAMERA_DISABLED is enabled. Running in TUIO/socket-only mode.")
+    print("[INIT] Python will not open or retry any camera device.")
+    camera_unavailable_mode = True
+else:
+    cap = open_capture_with_retry(
+        primary_source,
+        primary_source_name,
+        retries=3,
+        delay_sec=1.0,
+        preferred_backend=preferred_webcam_backend
+    )
+    if cap is None and primary_source != 0:
+        print("[WARNING] IP camera is unavailable. Falling back to local webcam (index 0).")
+        cap = open_capture_with_retry(
+            0,
+            "local webcam (index 0)",
+            retries=2,
+            delay_sec=0.5,
+            preferred_backend=preferred_webcam_backend
+        )
+
+    if cap is None:
+        print("[WARNING] Failed to open both IP camera and local webcam.")
+        print("[WARNING] Entering socket-only mode so C# + TUIO can still run.")
+        camera_unavailable_mode = True
 
 print("[LOOP] Starting main loop. Press 'q' to quit.")
 
-while cap.isOpened():
+while True:
+    if camera_unavailable_mode:
+        now = time.time()
+
+        if not sent_face_lost_when_camera_unavailable:
+            lost_msg = "face:lost"
+            print("[SOCKET] Camera unavailable. Sending fallback status: 'face:lost'")
+            with conn_lock:
+                if conn:
+                    try:
+                        conn.send(lost_msg.encode('utf-8'))
+                    except Exception as e:
+                        print(f"[SOCKET] Send failed: {e}")
+                        conn = None
+            sent_face_lost_when_camera_unavailable = True
+
+        if camera_disabled:
+            time.sleep(0.1)
+            continue
+
+        if now - last_camera_retry_time >= camera_retry_interval_sec:
+            last_camera_retry_time = now
+            print("[CAMERA] Socket-only mode: retrying camera connection...")
+            if reconnect_camera(reason="generic"):
+                camera_unavailable_mode = False
+                sent_face_lost_when_camera_unavailable = False
+                reconnect_cycle_count = 0
+                read_fail_streak = 0
+                blank_frame_streak = 0
+                print("[CAMERA] Camera recovered. Resuming vision pipeline.")
+            else:
+                time.sleep(0.2)
+                continue
+
+        time.sleep(0.1)
+        continue
+
+    if cap is None or not cap.isOpened():
+        if not reconnect_camera():
+            print("[WARNING] Camera is unavailable after reconnect attempts.")
+            print("[WARNING] Switching to socket-only mode.")
+            camera_unavailable_mode = True
+            continue
+
     ret, frame = cap.read()
     if not ret or frame is None or frame.size == 0:
-        print("[WARNING] Failed to read frame from camera. Skipping...")
+        read_fail_streak += 1
+        if read_fail_streak % warning_every_n_failures == 0:
+            print(f"[WARNING] Failed to read frame from camera ({read_fail_streak} consecutive failures).")
+        if read_fail_streak >= max_read_fail_before_reconnect:
+            print("[CAMERA] Too many read failures. Attempting reconnect...")
+            reconnect_cycle_count += 1
+            if reconnect_cycle_count > max_reconnect_cycles:
+                print("[ERROR] Camera keeps opening but cannot deliver stable frames.")
+                print("[WARNING] Switching to socket-only mode so C# + TUIO can continue.")
+                camera_unavailable_mode = True
+                continue
+            if not reconnect_camera():
+                print("[WARNING] Reconnect failed after repeated frame read failures.")
+                print("[WARNING] Switching to socket-only mode.")
+                camera_unavailable_mode = True
+                continue
+            read_fail_streak = 0
         cv2.waitKey(1)
         continue
+    elif read_fail_streak > 0:
+        print(f"[CAMERA] Frame stream recovered after {read_fail_streak} failed read(s).")
+        read_fail_streak = 0
+        reconnect_cycle_count = 0
+
+    frames_since_reconnect += 1
 
     msg = ''
     try:
@@ -142,11 +408,40 @@ while cap.isOpened():
         frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
         f_frame = cv2.resize(frame, (480, 640))
 
-        # Skip blank/black frames
-        if cv2.mean(f_frame)[0] < 5:
-            print("[WARNING] Frame appears blank, skipping processing.")
+        # Skip and recover from near-black / effectively blank frames.
+        if frame_is_effectively_blank(f_frame):
+            blank_frame_streak += 1
+            if blank_frame_streak % warning_every_n_blank_frames == 0:
+                print(
+                    f"[WARNING] Frame appears blank ({blank_frame_streak} consecutive frames, "
+                    f"{frames_since_reconnect} frames since reconnect)."
+                )
+
+            if frames_since_reconnect <= blank_detection_warmup_frames:
+                cv2.waitKey(1)
+                continue
+
+            if blank_frame_streak >= max_blank_frames_before_reconnect:
+                reconnect_cycle_count += 1
+                print("[CAMERA] Too many blank frames. Attempting reconnect...")
+                if reconnect_cycle_count > max_reconnect_cycles:
+                    print("[ERROR] Webcam stream stays blank after multiple reconnects.")
+                    print("[WARNING] Switching to socket-only mode so C# + TUIO can continue.")
+                    camera_unavailable_mode = True
+                    continue
+                if not reconnect_camera(reason="blank"):
+                    print("[WARNING] Reconnect failed after repeated blank frames.")
+                    print("[WARNING] Switching to socket-only mode.")
+                    camera_unavailable_mode = True
+                    continue
+                blank_frame_streak = 0
+
             cv2.waitKey(1)
             continue
+        elif blank_frame_streak > 0:
+            print(f"[CAMERA] Frame brightness recovered after {blank_frame_streak} blank frame(s).")
+            blank_frame_streak = 0
+            reconnect_cycle_count = 0
 
         frame_rgb = cv2.cvtColor(f_frame, cv2.COLOR_BGR2RGB)
         frame_count += 1
@@ -242,5 +537,6 @@ while cap.isOpened():
         break
 
 print("[SHUTDOWN] Releasing camera and closing windows.")
-cap.release()
+if cap is not None:
+    cap.release()
 cv2.destroyAllWindows()

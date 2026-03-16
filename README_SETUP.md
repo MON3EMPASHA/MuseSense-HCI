@@ -1,8 +1,17 @@
 # MuseSense - Setup and Running Guide
 
+## Python Version Requirement
+
+- Use Python 3.11 (recommended) or 3.10 for this project.
+- Python 3.12 is not compatible with the pinned TensorFlow 2.15 dependency stack in `requirements.txt`.
+- `install_requirements.bat` now checks this automatically and will stop early with guidance if the version is incompatible.
+
 ## Improvements Made to C# GUI
+
 ### inital steps to run this project:
+
 make sure to download the python venv from: https://drive.google.com/drive/folders/1-ELzpc3rc3XIZVDMCU7gUKK2pYLnFa56?usp=sharing
+
 ### 1. **Face Detection Display**
 
 - Added visual indicator (green/red circle) in top-right corner
