@@ -326,6 +326,14 @@ public class TuioDemo : Form, TuioListener
     private const int ThumbSize = 100; // px — small enough to be fast, big enough to look good
     private const float ThumbAngle = 0.6f; // fixed display angle for thumbnails
 
+    // Quantized frame cache for rotating models (artifact view + focused card)
+    // Avoids expensive per-frame full rasterization and bitmap allocation.
+    private readonly object _frameCacheLock = new object();
+    private Dictionary<string, Bitmap> _rotationFrameCache = new Dictionary<string, Bitmap>();
+    private Queue<string> _rotationFrameOrder = new Queue<string>();
+    private const int MaxRotationFrames = 220;
+    private const float RotationFrameStep = 0.06f; // radians (~3.4 degrees)
+
     // Rotating card state — only ONE card rotates at a time
     private int   _rotatingCardId = -1;  // which carousel card is currently spinning (-1 = none)
     private float _rotatingCardAngle = 0f;
@@ -386,12 +394,34 @@ public class TuioDemo : Form, TuioListener
         mainTimer = new System.Windows.Forms.Timer();
         mainTimer.Interval = 33;
         mainTimer.Tick += (s,e) => {
-            carouselAngle += (carouselTarget - carouselAngle) * 0.12f;
+            bool isAnimating = false;
+
+            float delta = carouselTarget - carouselAngle;
+            if (Math.Abs(delta) > 0.0004f)
+            {
+                carouselAngle += delta * 0.12f;
+                isAnimating = true;
+            }
+            else
+            {
+                carouselAngle = carouselTarget;
+            }
+
             if (currentScreen == AppScreen.Artifact)
+            {
                 artifactAngle += 0.022f;
+                isAnimating = true;
+            }
             if (currentScreen == AppScreen.Explore && _rotatingCardId >= 0)
+            {
                 _rotatingCardAngle += 0.022f;
-            Invalidate();
+                isAnimating = true;
+            }
+
+            if (isAnimating) Invalidate();
+
+            int targetInterval = isAnimating ? 33 : 80;
+            if (mainTimer.Interval != targetInterval) mainTimer.Interval = targetInterval;
         };
         mainTimer.Start();
 
@@ -401,8 +431,7 @@ public class TuioDemo : Form, TuioListener
         client.addTuioListener(this);
         client.connect();
 
-        // Pre-load all artifact models in background so UI is never frozen waiting for a model
-        for (int i = 0; i < ArtifactData.Count; i++) { int ci = i; ThreadPool.QueueUserWorkItem(_ => TryGetModelBg(ci)); }
+        PrimeInitialModels();
 
         Thread t = new Thread(SocketThread);
         t.IsBackground = true;
@@ -491,6 +520,15 @@ public class TuioDemo : Form, TuioListener
         // Start rotating the newly focused card, stop the previous one
         _rotatingCardId = idx;
         _rotatingCardAngle = 0f;
+        TryGetModelBg(idx);
+    }
+
+    private void PrimeInitialModels()
+    {
+        if (ArtifactData.Count <= 0) return;
+        TryGetModelBg(carouselFocused);
+        if (ArtifactData.Count > 1) TryGetModelBg((carouselFocused + 1) % ArtifactData.Count);
+        if (ArtifactData.Count > 2) TryGetModelBg((carouselFocused - 1 + ArtifactData.Count) % ArtifactData.Count);
     }
 
     protected override void OnPaintBackground(PaintEventArgs e)
@@ -569,19 +607,13 @@ public class TuioDemo : Form, TuioListener
 
         int cy = top + 80 + (height - top - 80) / 2;
         float step = (float)(2 * Math.PI / ArtifactData.Count);
-        int[] order = BackToFrontOrder(carouselFocused, ArtifactData.Count);
-        foreach (int i in order) DrawCarouselCard(g, i, carouselAngle + i*step, cy);
+        for (int i = 0; i < ArtifactData.Count; i++)
+            if (i != carouselFocused) DrawCarouselCard(g, i, carouselAngle + i*step, cy);
+        if (carouselFocused >= 0 && carouselFocused < ArtifactData.Count)
+            DrawCarouselCard(g, carouselFocused, carouselAngle + carouselFocused*step, cy);
 
         using (var br = new SolidBrush(Color.FromArgb(100,160,180,200)))
             g.DrawString("Arrow keys or click to rotate", fontSmall, br, width/2-100, height-28);
-    }
-
-    private int[] BackToFrontOrder(int focused, int count)
-    {
-        var order = new List<int>();
-        for (int i = 0; i < count; i++) if (i != focused) order.Add(i);
-        order.Add(focused);
-        return order.ToArray();
     }
 
     private void DrawCarouselCard(Graphics g, int idx, float angle, int cy)
@@ -609,7 +641,7 @@ public class TuioDemo : Form, TuioListener
             if (isFocused && _rotatingCardId == idx)
             {
                 // Only the focused+selected card rotates — rasterize live
-                RenderObjModelDirect(g, model, cx, cardTop + cardH/3, _rotatingCardAngle, ms, ArtifactData.Colors[idx]);
+                RenderObjModelDirect(g, model, idx, cx, cardTop + cardH/3, _rotatingCardAngle, ms, ArtifactData.Colors[idx]);
             }
             else
             {
@@ -714,7 +746,7 @@ public class TuioDemo : Form, TuioListener
         {
             using (var br = new SolidBrush(Color.FromArgb(30,100,160,255)))
             { int gs=modelSize+60; g.FillEllipse(br, mx-gs/2, my-gs/2, gs, gs); }
-            RenderObjModelDirect(g, model, mx, my, artifactAngle, modelSize, ArtifactData.Colors[artifactID]);
+            RenderObjModelDirect(g, model, artifactID, mx, my, artifactAngle, modelSize, ArtifactData.Colors[artifactID]);
         }
 
         int rx = mx + modelSize/2 + 40;
@@ -843,6 +875,25 @@ public class TuioDemo : Form, TuioListener
         SetNarrationVolume(v);
     }
 
+    private void BeginNarrationSliderDrag(int trackX)
+    {
+        narrationSliderDragging = true;
+        if (narrationVolumeTrack != null) narrationVolumeTrack.Capture = true;
+        SetNarrationVolumeFromTrackX(trackX);
+    }
+
+    private void ContinueNarrationSliderDrag(int trackX)
+    {
+        if (!narrationSliderDragging) return;
+        SetNarrationVolumeFromTrackX(trackX);
+    }
+
+    private void EndNarrationSliderDrag()
+    {
+        narrationSliderDragging = false;
+        if (narrationVolumeTrack != null) narrationVolumeTrack.Capture = false;
+    }
+
     private void DrawArtifactQuickInfo(Graphics g, int top)
     {
         if (artifactID < 0 || artifactID >= ArtifactData.Count) return;
@@ -919,7 +970,7 @@ public class TuioDemo : Form, TuioListener
     private readonly object _thumbLock = new object();
     private void BuildThumbnail(int id, ObjModel model)
     {
-        Bitmap bmp = RasterizeSingle(model, ThumbSize, ThumbSize, ThumbAngle, ArtifactData.Colors[id], false);
+        Bitmap bmp = RasterizeSingle(model, ThumbSize, ThumbSize, ThumbAngle, ArtifactData.Colors[id], true);
         lock (_thumbLock)
         {
             if (_thumbnailCache.ContainsKey(id)) { bmp.Dispose(); return; }
@@ -941,13 +992,57 @@ public class TuioDemo : Form, TuioListener
     }
 
     // Renders the rotating model directly to the Graphics surface (used only for the one active card)
-    private void RenderObjModelDirect(Graphics g, ObjModel model, int cx, int cy, float angle, int size, Color baseColor)
+    private void RenderObjModelDirect(Graphics g, ObjModel model, int cacheId, int cx, int cy, float angle, int size, Color baseColor)
     {
         if (model == null) return;
         int W = Math.Max(60, size);
-        Bitmap bmp = RasterizeSingle(model, W, W, angle, baseColor, false);
+        int internalW = Math.Min(W, 420);
+        bool useTextures = model.MatTextures.Count > 0;
+        int qAngle = (int)Math.Round(angle / RotationFrameStep);
+        string key = cacheId + "|" + internalW + "|" + qAngle + "|" + baseColor.ToArgb() + "|" + (useTextures ? 1 : 0);
+
+        Bitmap bmp;
+        lock (_frameCacheLock)
+        {
+            if (!_rotationFrameCache.TryGetValue(key, out bmp))
+            {
+                bmp = RasterizeSingle(model, internalW, internalW, qAngle * RotationFrameStep, baseColor, useTextures);
+                _rotationFrameCache[key] = bmp;
+                _rotationFrameOrder.Enqueue(key);
+
+                while (_rotationFrameOrder.Count > MaxRotationFrames)
+                {
+                    string oldKey = _rotationFrameOrder.Dequeue();
+                    Bitmap oldBmp;
+                    if (_rotationFrameCache.TryGetValue(oldKey, out oldBmp))
+                    {
+                        _rotationFrameCache.Remove(oldKey);
+                        oldBmp.Dispose();
+                    }
+                }
+            }
+        }
+
         g.DrawImage(bmp, cx - size/2, cy - size/2, size, size);
-        bmp.Dispose();
+    }
+
+    private void ClearRotationFrameCache()
+    {
+        lock (_frameCacheLock)
+        {
+            foreach (Bitmap bmp in _rotationFrameCache.Values) bmp.Dispose();
+            _rotationFrameCache.Clear();
+            _rotationFrameOrder.Clear();
+        }
+    }
+
+    private void ClearThumbnailCache()
+    {
+        lock (_thumbLock)
+        {
+            foreach (Bitmap bmp in _thumbnailCache.Values) bmp.Dispose();
+            _thumbnailCache.Clear();
+        }
     }
 
     // Core rasterizer — allocates its own buffers so it is fully thread-safe
@@ -959,41 +1054,68 @@ public class TuioDemo : Form, TuioListener
 
         float scale = (W * 0.95f) / model.Radius;
         float yaw = angle, pitch = -0.35f, camZ = W * 3.2f, proj = W * 1.7f;
+        float cy = (float)Math.Cos(yaw), sy = (float)Math.Sin(yaw);
+        float cp = (float)Math.Cos(pitch), sp = (float)Math.Sin(pitch);
         int vc = model.Verts.Count;
-        Vec3[]  trans = new Vec3[vc];
+        float[] transX = new float[vc];
+        float[] transY = new float[vc];
+        float[] transZ = new float[vc];
         PointF[] proj2 = new PointF[vc];
-        float[]  depth = new float[vc];
+        float[] depth = new float[vc];
 
         for (int i = 0; i < vc; i++)
         {
-            Vec3 tv = RotV(model.Verts[i], yaw, pitch);
-            tv.X *= scale; tv.Y *= scale; tv.Z *= scale;
-            trans[i] = tv;
-            float z = tv.Z + camZ; if (z < 1f) z = 1f;
-            depth[i] = tv.Z;
-            proj2[i] = new PointF(W * 0.5f + tv.X * proj / z, H * 0.5f - tv.Y * proj / z);
+            Vec3 v = model.Verts[i];
+            float x1 = v.X * cy + v.Z * sy;
+            float z1 = -v.X * sy + v.Z * cy;
+            float y1 = v.Y;
+            float tx = x1 * scale;
+            float ty = (y1 * cp - z1 * sp) * scale;
+            float tz = (y1 * sp + z1 * cp) * scale;
+
+            transX[i] = tx;
+            transY[i] = ty;
+            transZ[i] = tz;
+
+            float z = tz + camZ; if (z < 1f) z = 1f;
+            depth[i] = tz;
+            proj2[i] = new PointF(W * 0.5f + tx * proj / z, H * 0.5f - ty * proj / z);
         }
 
-        Vec3 ld = Norm(new Vec3(0.2f, -0.5f, 1f));
+        const float ldx = 0.1760902f;
+        const float ldy = -0.4402255f;
+        const float ldz = 0.8804509f;
         int faceCount = model.Faces.Count;
         for (int i = 0; i < faceCount; i++)
         {
             Face3 f = model.Faces[i];
-            Vec3 a = trans[f.A], b = trans[f.B], c = trans[f.C];
-            float nx = (b.Y-a.Y)*(c.Z-a.Z)-(b.Z-a.Z)*(c.Y-a.Y);
-            float ny = (b.Z-a.Z)*(c.X-a.X)-(b.X-a.X)*(c.Z-a.Z);
-            float nz = (b.X-a.X)*(c.Y-a.Y)-(b.Y-a.Y)*(c.X-a.X);
+            int ia = f.A, ib = f.B, ic = f.C;
+            float ax = transX[ia], ay = transY[ia], az = transZ[ia];
+            float bx = transX[ib], by = transY[ib], bz = transZ[ib];
+            float cx = transX[ic], cy2 = transY[ic], cz = transZ[ic];
+
+            float nx = (by - ay) * (cz - az) - (bz - az) * (cy2 - ay);
+            float ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+            float nz = (bx - ax) * (cy2 - ay) - (by - ay) * (cx - ax);
             float nl = (float)Math.Sqrt(nx*nx+ny*ny+nz*nz);
             if (nl < 1e-5f) continue;
             nx /= nl; ny /= nl; nz /= nl;
             if (nz < 0f) continue; // back-face cull — skip ~50% of triangles
-            float lf = Math.Min(1.18f, 0.68f + 0.42f * Math.Abs(nx*ld.X+ny*ld.Y+nz*ld.Z));
-            Color fc = (!string.IsNullOrEmpty(f.Mat) && model.MatColors.ContainsKey(f.Mat)) ? model.MatColors[f.Mat] : baseColor;
-            TextureData tex = (useTextures && !string.IsNullOrEmpty(f.Mat) && model.MatTextures.ContainsKey(f.Mat)) ? model.MatTextures[f.Mat] : null;
+            float lf = Math.Min(1.18f, 0.68f + 0.42f * Math.Abs(nx * ldx + ny * ldy + nz * ldz));
+
+            Color fc = baseColor;
+            TextureData tex = null;
+            if (!string.IsNullOrEmpty(f.Mat))
+            {
+                Color materialColor;
+                if (model.MatColors.TryGetValue(f.Mat, out materialColor)) fc = materialColor;
+                if (useTextures) model.MatTextures.TryGetValue(f.Mat, out tex);
+            }
+
             Vec2 uv1 = (f.TA>=0&&f.TA<model.UVs.Count)?model.UVs[f.TA]:null;
             Vec2 uv2 = (f.TB>=0&&f.TB<model.UVs.Count)?model.UVs[f.TB]:null;
             Vec2 uv3 = (f.TC>=0&&f.TC<model.UVs.Count)?model.UVs[f.TC]:null;
-            RasterTri(pixels, zBuf, W, H, proj2[f.A], proj2[f.B], proj2[f.C], depth[f.A], depth[f.B], depth[f.C], uv1, uv2, uv3, tex, fc, lf);
+            RasterTri(pixels, zBuf, W, H, proj2[ia], proj2[ib], proj2[ic], depth[ia], depth[ib], depth[ic], uv1, uv2, uv3, tex, fc, lf);
         }
 
         Bitmap bmp = new Bitmap(W, H, PixelFormat.Format32bppArgb);
@@ -1020,6 +1142,13 @@ public class TuioDemo : Form, TuioListener
         float denom=((p2.Y-p3.Y)*(p1.X-p3.X)+(p3.X-p2.X)*(p1.Y-p3.Y));
         if(Math.Abs(denom)<1e-5f)return;
         bool useTex=tex!=null&&uv1!=null&&uv2!=null&&uv3!=null;
+        float exp = 1.12f;
+        int staticLit = Color.FromArgb(
+            255,
+            Math.Max(0,Math.Min(255,(int)(fc.R*lf*exp+8))),
+            Math.Max(0,Math.Min(255,(int)(fc.G*lf*exp+8))),
+            Math.Max(0,Math.Min(255,(int)(fc.B*lf*exp+8)))
+        ).ToArgb();
         for(int y=y0;y<=y1;y++) for(int x=x0;x<=x1;x++)
         {
             float w1=((p2.Y-p3.Y)*(x-p3.X)+(p3.X-p2.X)*(y-p3.Y))/denom;
@@ -1028,13 +1157,13 @@ public class TuioDemo : Form, TuioListener
             if(w1<0||w2<0||w3<0)continue;
             float z=w1*z1+w2*z2+w3*z3; int idx=y*W+x;
             if(z<=zb[idx])continue; zb[idx]=z;
-            Color sc=fc;
-            if(useTex){float u=w1*uv1.U+w2*uv2.U+w3*uv3.U,v=w1*uv1.V+w2*uv2.V+w3*uv3.V;
+            if(!useTex){px[idx]=staticLit;continue;}
+            Color sc;
+            {float u=w1*uv1.U+w2*uv2.U+w3*uv3.U,v=w1*uv1.V+w2*uv2.V+w3*uv3.V;
                 u=Math.Max(0f,Math.Min(1f,u));v=Math.Max(0f,Math.Min(1f,v));
                 int tx = Math.Max(0,Math.Min(tex.Width-1,(int)(u*(tex.Width-1))));
                 int ty = Math.Max(0,Math.Min(tex.Height-1,(int)((1f-v)*(tex.Height-1))));
                 sc=Color.FromArgb(tex.Pixels[ty*tex.Width+tx]);}
-            float exp=1.12f;
             px[idx]=Color.FromArgb(255,Math.Max(0,Math.Min(255,(int)(sc.R*lf*exp+8))),Math.Max(0,Math.Min(255,(int)(sc.G*lf*exp+8))),Math.Max(0,Math.Min(255,(int)(sc.B*lf*exp+8)))).ToArgb();
         }
     }
@@ -1075,7 +1204,12 @@ public class TuioDemo : Form, TuioListener
             Color fc=kv.Value.Diffuse;
             if (kv.Value.TexBmp != null) fc = AvgColor(kv.Value.TexBmp, fc);
             m.MatColors[kv.Key]=fc;
-            if(kv.Value.TexBmp!=null) m.MatTextures[kv.Key]=ToTextureData(kv.Value.TexBmp);
+            if(kv.Value.TexBmp!=null)
+            {
+                m.MatTextures[kv.Key]=ToTextureData(kv.Value.TexBmp);
+                kv.Value.TexBmp.Dispose();
+                kv.Value.TexBmp = null;
+            }
         }
         if(m.Verts.Count==0||m.Faces.Count==0)return null;
         float cx=0,cy=0,cz=0; foreach(var v in m.Verts){cx+=v.X;cy+=v.Y;cz+=v.Z;} cx/=m.Verts.Count;cy/=m.Verts.Count;cz/=m.Verts.Count;
@@ -1091,11 +1225,40 @@ public class TuioDemo : Form, TuioListener
                 if(line.StartsWith("newmtl ")){cur=line.Substring(7).Trim();if(!res.ContainsKey(cur))res[cur]=new MaterialInfo();continue;}
                 if(string.IsNullOrEmpty(cur)||!res.ContainsKey(cur))continue;
                 if(line.StartsWith("Kd ")){string[] pts=line.Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);if(pts.Length>=4){float r,gg,b;if(TryF(pts[1],out r)&&TryF(pts[2],out gg)&&TryF(pts[3],out b))res[cur].Diffuse=Color.FromArgb(220,(int)(r*255),(int)(gg*255),(int)(b*255));}}
-                if(line.StartsWith("map_Kd ")){string tp=line.Substring(7).Trim();if(!string.IsNullOrEmpty(tp))res[cur].TexPath=Path.Combine(mdir,tp);}
+                if(line.StartsWith("map_Kd "))
+                {
+                    string tp=line.Substring(7).Trim();
+                    if(!string.IsNullOrEmpty(tp))
+                    {
+                        string[] parts=tp.Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);
+                        string texRel=parts.Length>0?parts[parts.Length-1]:tp;
+                        if(!string.IsNullOrEmpty(texRel))res[cur].TexPath=ResolveTexturePath(mdir,texRel);
+                    }
+                }
             }
             foreach(var kv in res)if(!string.IsNullOrEmpty(kv.Value.TexPath)&&File.Exists(kv.Value.TexPath))try{kv.Value.TexBmp=new Bitmap(kv.Value.TexPath);}catch{}
         }
         return res;
+    }
+
+    private string ResolveTexturePath(string materialDir, string textureRef)
+    {
+        if (string.IsNullOrEmpty(textureRef)) return null;
+
+        string cleaned = textureRef.Trim().Trim('"').Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+        string[] candidates = {
+            cleaned,
+            Path.Combine(materialDir, cleaned),
+            Path.Combine(materialDir, Path.GetFileName(cleaned)),
+            Path.Combine(materialDir, "textures", Path.GetFileName(cleaned)),
+            Path.Combine(Directory.GetParent(materialDir) != null ? Directory.GetParent(materialDir).FullName : materialDir, Path.GetFileName(cleaned)),
+            Path.Combine(Directory.GetParent(materialDir) != null ? Directory.GetParent(materialDir).FullName : materialDir, "textures", Path.GetFileName(cleaned))
+        };
+
+        foreach (string candidate in candidates)
+            if (!string.IsNullOrEmpty(candidate) && File.Exists(candidate)) return candidate;
+
+        return Path.Combine(materialDir, cleaned);
     }
 
     private bool TryF(string s,out float v){return float.TryParse(s,System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out v);}
@@ -1290,9 +1453,9 @@ public class TuioDemo : Form, TuioListener
                 using (Pen p = new Pen(Color.FromArgb(90, 150, 210), 1f)) e.Graphics.DrawPath(p, gp);
             }
         };
-        narrationVolumeTrack.MouseDown += (s, e) => { narrationSliderDragging = true; SetNarrationVolumeFromTrackX(e.X); };
-        narrationVolumeTrack.MouseMove += (s, e) => { if (narrationSliderDragging) SetNarrationVolumeFromTrackX(e.X); };
-        narrationVolumeTrack.MouseUp += (s, e) => { narrationSliderDragging = false; };
+        narrationVolumeTrack.MouseDown += (s, e) => BeginNarrationSliderDrag(e.X);
+        narrationVolumeTrack.MouseMove += (s, e) => ContinueNarrationSliderDrag(e.X);
+        narrationVolumeTrack.MouseUp += (s, e) => EndNarrationSliderDrag();
         narrationControlCard.Controls.Add(narrationVolumeTrack);
 
         narrationVolumeFill = new Panel
@@ -1303,6 +1466,9 @@ public class TuioDemo : Form, TuioListener
             Enabled = false
         };
         narrationVolumeTrack.Controls.Add(narrationVolumeFill);
+        narrationVolumeFill.MouseDown += (s, e) => BeginNarrationSliderDrag(narrationVolumeFill.Left + e.X);
+        narrationVolumeFill.MouseMove += (s, e) => ContinueNarrationSliderDrag(narrationVolumeFill.Left + e.X);
+        narrationVolumeFill.MouseUp += (s, e) => EndNarrationSliderDrag();
 
         narrationVolumeThumb = new Panel
         {
@@ -1318,10 +1484,14 @@ public class TuioDemo : Form, TuioListener
             using (Pen p = new Pen(Color.FromArgb(70, 120, 180), 1f))
                 e.Graphics.DrawEllipse(p, 0, 2, narrationVolumeThumb.Width - 1, narrationVolumeThumb.Height - 5);
         };
-        narrationVolumeThumb.MouseDown += (s, e) => { narrationSliderDragging = true; SetNarrationVolumeFromTrackX(narrationVolumeThumb.Left + e.X); };
-        narrationVolumeThumb.MouseMove += (s, e) => { if (narrationSliderDragging) SetNarrationVolumeFromTrackX(narrationVolumeThumb.Left + e.X); };
-        narrationVolumeThumb.MouseUp += (s, e) => { narrationSliderDragging = false; };
+        narrationVolumeThumb.MouseDown += (s, e) => BeginNarrationSliderDrag(narrationVolumeThumb.Left + e.X);
+        narrationVolumeThumb.MouseMove += (s, e) => ContinueNarrationSliderDrag(narrationVolumeThumb.Left + e.X);
+        narrationVolumeThumb.MouseUp += (s, e) => EndNarrationSliderDrag();
         narrationVolumeTrack.Controls.Add(narrationVolumeThumb);
+        narrationVolumeThumb.BringToFront();
+
+        narrationControlCard.MouseUp += (s, e) => EndNarrationSliderDrag();
+        this.MouseUp += (s, e) => EndNarrationSliderDrag();
 
         narrationPauseButton.Visible = true;
         narrationVolumeLabel.Visible = true;
@@ -1340,7 +1510,12 @@ public class TuioDemo : Form, TuioListener
         width=this.ClientSize.Width; height=this.ClientSize.Height;
         if(faceStatusLabel!=null)  faceStatusLabel.Location=new Point(width-270,10);
         if(pythonStatusLabel!=null) pythonStatusLabel.Location=new Point(width-270,42);
-        if (narrationControlCard != null) narrationControlCard.Location = new Point(width - 266, 72);
+        if (narrationControlCard != null)
+        {
+            int left = 18;
+            int top = Math.Max(72, height - narrationControlCard.Height - 22);
+            narrationControlCard.Location = new Point(left, top);
+        }
         if (narrationPauseButton != null) narrationPauseButton.Location = new Point(14, 12);
         if (narrationVolumeLabel != null) narrationVolumeLabel.Location = new Point(14, 54);
         if (narrationVolumeTrack != null) narrationVolumeTrack.Location = new Point(14, 80);
@@ -1355,7 +1530,7 @@ public class TuioDemo : Form, TuioListener
         path.CloseFigure(); return path;
     }
 
-    private void Form_Resized(object sender,EventArgs e){UpdateLayout(); bgCacheW=-1; /* invalidate bg cache on resize */}
+    private void Form_Resized(object sender,EventArgs e){UpdateLayout(); bgCacheW=-1; ClearRotationFrameCache(); /* invalidate bg cache on resize */}
 
     private void Form_KeyDown(object sender,KeyEventArgs e)
     {
@@ -1375,6 +1550,8 @@ public class TuioDemo : Form, TuioListener
         if (mainTimer != null) mainTimer.Stop();
         StopNarrationAudio();
         if (bgCache != null) bgCache.Dispose();
+        ClearRotationFrameCache();
+        ClearThumbnailCache();
         client.removeTuioListener(this); client.disconnect();
         System.Environment.Exit(0);
     }
