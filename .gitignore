@@ -39,3 +39,11 @@ desktop.ini
 *.onnx
 *.pkl
 *.pickle
+
+# Keep runtime 3D assets in git for the C# demo
+!main_csharp/TUIO11_NET-master/bin/
+main_csharp/TUIO11_NET-master/bin/*
+!main_csharp/TUIO11_NET-master/bin/Debug/
+main_csharp/TUIO11_NET-master/bin/Debug/*
+!main_csharp/TUIO11_NET-master/bin/Debug/3d models/
+!main_csharp/TUIO11_NET-master/bin/Debug/3d models/**
