@@ -7,6 +7,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Windows.Forms;
 using System.ComponentModel;
+using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using System.IO;
@@ -31,7 +32,7 @@ static class TinyJson
             int q1 = json.IndexOf('"', colon + 1);
             int q2 = json.IndexOf('"', q1 + 1);
             string name = json.Substring(q1 + 1, q2 - q1 - 1);
-            var favs = new List<int>();
+            var favs = new List<string>();
             int fi = json.IndexOf("\"favourites\"", q2);
             int nextName = json.IndexOf("\"name\"", q2 + 1);
             if (fi >= 0 && (nextName < 0 || fi < nextName))
@@ -40,12 +41,51 @@ static class TinyJson
                 int arrEnd   = json.IndexOf(']', arrStart);
                 string inner = json.Substring(arrStart + 1, arrEnd - arrStart - 1).Trim();
                 if (!string.IsNullOrWhiteSpace(inner))
-                    foreach (string tok in inner.Split(','))
-                    { int v; if (int.TryParse(tok.Trim(), out v)) favs.Add(v); }
+                    favs.AddRange(ParseFavouriteNames(inner));
             }
             result.Add(new UserRecord { Name = name, Favourites = favs });
             pos = q2 + 1;
         }
+        return result;
+    }
+
+    private static List<string> ParseFavouriteNames(string inner)
+    {
+        var result = new List<string>();
+        int pos = 0;
+
+        while (pos < inner.Length)
+        {
+            while (pos < inner.Length && (char.IsWhiteSpace(inner[pos]) || inner[pos] == ',')) pos++;
+            if (pos >= inner.Length) break;
+
+            if (inner[pos] == '"')
+            {
+                int end = pos + 1;
+                while (end < inner.Length)
+                {
+                    if (inner[end] == '"' && inner[end - 1] != '\\') break;
+                    end++;
+                }
+
+                if (end < inner.Length)
+                {
+                    string name = inner.Substring(pos + 1, end - pos - 1);
+                    if (!string.IsNullOrWhiteSpace(name)) result.Add(name);
+                    pos = end + 1;
+                    continue;
+                }
+            }
+
+            int tokenEnd = pos;
+            while (tokenEnd < inner.Length && inner[tokenEnd] != ',') tokenEnd++;
+            string token = inner.Substring(pos, tokenEnd - pos).Trim();
+            int favouriteId;
+            if (int.TryParse(token, out favouriteId) && favouriteId >= 0 && favouriteId < ArtifactData.Count)
+                result.Add(ArtifactData.Names[favouriteId]);
+            pos = tokenEnd + 1;
+        }
+
         return result;
     }
 }
@@ -53,7 +93,7 @@ static class TinyJson
 class UserRecord
 {
     public string Name;
-    public List<int> Favourites = new List<int>();
+    public List<string> Favourites = new List<string>();
 }
 
 // Artifact data
@@ -304,6 +344,20 @@ static class MciAudio
 
 public class TuioDemo : Form, TuioListener
 {
+    private struct ModelOrientation
+    {
+        public float Yaw;
+        public float Pitch;
+        public float Roll;
+
+        public ModelOrientation(float yaw, float pitch, float roll)
+        {
+            Yaw = yaw;
+            Pitch = pitch;
+            Roll = roll;
+        }
+    }
+
     private TuioClient client;
     private Dictionary<long,TuioObject> objectList = new Dictionary<long,TuioObject>(128);
     private Dictionary<long,TuioCursor> cursorList = new Dictionary<long,TuioCursor>(128);
@@ -328,11 +382,15 @@ public class TuioDemo : Form, TuioListener
     private List<UserRecord> users = new List<UserRecord>();
     private string loggedInName = "";
     private List<int> userFavourites = new List<int>();
+    private string usersJsonPath = "";
+    private string favouritesJsonPath = "";
 
     // 3D
     private Dictionary<int,ObjModel> modelCache = new Dictionary<int,ObjModel>();
     private readonly HashSet<int> modelsBeingLoaded = new HashSet<int>();
     private float artifactAngle = 0f;
+    private bool artifactAngleControlledByMarker = false;
+    private long activeMarkerSessionId = -1;
 
     // Static thumbnail cache — one small bitmap per artifact, rendered once at a fixed angle
     // Used for all non-rotating cards (carousel background cards, favourites)
@@ -347,6 +405,9 @@ public class TuioDemo : Form, TuioListener
     private Queue<string> _rotationFrameOrder = new Queue<string>();
     private const int MaxRotationFrames = 220;
     private const float RotationFrameStep = 0.06f; // radians (~3.4 degrees)
+    private const float DefaultArtifactPitch = -0.35f;
+    private const float MarkerPitchAmplitude = 0.65f;
+    private const float MarkerRollAmplitude = 0.42f;
 
     // Rotating card state — only used on Artifact detail screen
     // (Explore page is fully static for performance)
@@ -369,6 +430,7 @@ public class TuioDemo : Form, TuioListener
     private Rectangle tabExplore    = Rectangle.Empty;
     private Rectangle tabFavourites = Rectangle.Empty;
     private Rectangle tabArtifact   = Rectangle.Empty;
+    private Rectangle favouriteButtonRect = Rectangle.Empty;
 
     // Status labels
     private Label faceStatusLabel;
@@ -422,7 +484,14 @@ public class TuioDemo : Form, TuioListener
 
             if (currentScreen == AppScreen.Artifact)
             {
-                artifactAngle += 0.022f;
+                if (artifactAngleControlledByMarker)
+                {
+                    artifactAngle = NormalizeAngle(artifactAngle);
+                }
+                else
+                {
+                    artifactAngle = NormalizeAngle(artifactAngle + 0.022f);
+                }
                 isAnimating = true;
             }
 
@@ -455,27 +524,243 @@ public class TuioDemo : Form, TuioListener
             Path.Combine("..","..","faces","users.json"),
             Path.Combine("..","..","..","faces","users.json")
         };
+
+        usersJsonPath = "";
         foreach (string p in cands)
-            if (File.Exists(p)) { try { users = TinyJson.ParseUsers(File.ReadAllText(p)); } catch {} break; }
+            if (File.Exists(p))
+            {
+                usersJsonPath = p;
+                try { users = TinyJson.ParseUsers(File.ReadAllText(p)); } catch { users = new List<UserRecord>(); }
+                break;
+            }
+
+        if (string.IsNullOrEmpty(usersJsonPath)) usersJsonPath = cands[0];
+
+        ResolveFavouritesPath();
+        LoadFavouriteStore();
+    }
+
+    private void ResolveFavouritesPath()
+    {
+        string[] cands = {
+            Path.Combine("faces", "favorites.json"),
+            Path.Combine(Application.StartupPath, "faces", "favorites.json"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "faces", "favorites.json"),
+            Path.Combine("..", "..", "faces", "favorites.json"),
+            Path.Combine("..", "..", "..", "faces", "favorites.json")
+        };
+
+        favouritesJsonPath = "";
+        foreach (string p in cands)
+            if (File.Exists(p))
+            {
+                favouritesJsonPath = p;
+                break;
+            }
+
+        if (string.IsNullOrEmpty(favouritesJsonPath)) favouritesJsonPath = cands[0];
+    }
+
+    private void LoadFavouriteStore()
+    {
+        if (string.IsNullOrEmpty(favouritesJsonPath) || !File.Exists(favouritesJsonPath)) return;
+
+        List<UserRecord> storedFavourites;
+        try
+        {
+            storedFavourites = TinyJson.ParseUsers(File.ReadAllText(favouritesJsonPath));
+        }
+        catch
+        {
+            return;
+        }
+
+        foreach (UserRecord user in users)
+            user.Favourites.Clear();
+
+        foreach (UserRecord storedUser in storedFavourites)
+        {
+            UserRecord targetUser = GetOrCreateUserRecord(storedUser.Name);
+            targetUser.Favourites.Clear();
+            foreach (string favouriteName in storedUser.Favourites)
+                if (!targetUser.Favourites.Exists(delegate(string value) { return value.Equals(favouriteName, StringComparison.OrdinalIgnoreCase); }))
+                    targetUser.Favourites.Add(favouriteName);
+        }
     }
 
     private void SetLoggedInUser(string name)
     {
         loggedInName = name;
         userFavourites.Clear();
-        foreach (UserRecord u in users)
-            if (u.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
-            { userFavourites.AddRange(u.Favourites); break; }
+        UserRecord currentUser = GetOrCreateUserRecord(name);
+        foreach (string favouriteName in currentUser.Favourites)
+        {
+            int favouriteId = GetArtifactIdByName(favouriteName);
+            if (favouriteId >= 0 && !userFavourites.Contains(favouriteId)) userFavourites.Add(favouriteId);
+        }
         UpdateFaceLabel(true, name);
+        Invalidate();
+    }
+
+    private void ClearLoggedInUser()
+    {
+        loggedInName = "";
+        userFavourites.Clear();
+        favouriteButtonRect = Rectangle.Empty;
+        UpdateFaceLabel(false, "");
+        if (currentScreen == AppScreen.Favourites)
+            GoTo(AppScreen.Explore, -1, false, false);
+        else
+            Invalidate();
+    }
+
+    private UserRecord GetOrCreateUserRecord(string name)
+    {
+        foreach (UserRecord user in users)
+            if (user.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return user;
+
+        UserRecord created = new UserRecord { Name = name };
+        users.Add(created);
+        return created;
+    }
+
+    private int GetArtifactIdByName(string artifactName)
+    {
+        for (int i = 0; i < ArtifactData.Count; i++)
+            if (ArtifactData.Names[i].Equals(artifactName, StringComparison.OrdinalIgnoreCase))
+                return i;
+        return -1;
+    }
+
+    private bool IsUserLoggedIn()
+    {
+        return !string.IsNullOrEmpty(loggedInName);
+    }
+
+    private bool SaveFavourites()
+    {
+        try
+        {
+            string json = File.Exists(favouritesJsonPath) ? File.ReadAllText(favouritesJsonPath) : "[]";
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            object root = serializer.DeserializeObject(json);
+            object[] items = root as object[];
+            List<Dictionary<string, object>> records = new List<Dictionary<string, object>>();
+
+            if (items != null)
+            {
+                foreach (object item in items)
+                {
+                    Dictionary<string, object> record = item as Dictionary<string, object>;
+                    if (record != null) records.Add(record);
+                }
+            }
+
+            Dictionary<string, object> targetRecord = null;
+            foreach (Dictionary<string, object> record in records)
+            {
+                object nameValue;
+                if (record.TryGetValue("name", out nameValue) && string.Equals(Convert.ToString(nameValue), loggedInName, StringComparison.OrdinalIgnoreCase))
+                {
+                    targetRecord = record;
+                    break;
+                }
+            }
+
+            UserRecord currentUser = GetOrCreateUserRecord(loggedInName);
+            ArrayList savedFavourites = new ArrayList();
+            foreach (string favouriteName in currentUser.Favourites)
+                savedFavourites.Add(favouriteName);
+
+            if (targetRecord == null)
+            {
+                targetRecord = new Dictionary<string, object>();
+                targetRecord["name"] = loggedInName;
+                records.Add(targetRecord);
+            }
+
+            targetRecord["favourites"] = savedFavourites;
+            string dir = Path.GetDirectoryName(favouritesJsonPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            File.WriteAllText(favouritesJsonPath, serializer.Serialize(records));
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void ShowLoginRequiredPopup()
+    {
+        MessageBox.Show(this,
+            "Please log in with face detection first, then you can add this artifact to your favourites.",
+            "Login Required",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
+    }
+
+    private void AddCurrentArtifactToFavourites()
+    {
+        if (artifactID < 0 || artifactID >= ArtifactData.Count) return;
+
+        if (!IsUserLoggedIn())
+        {
+            ShowLoginRequiredPopup();
+            return;
+        }
+
+        string artifactName = ArtifactData.Names[artifactID];
+        UserRecord currentUser = GetOrCreateUserRecord(loggedInName);
+
+        if (userFavourites.Contains(artifactID) || currentUser.Favourites.Exists(delegate(string favourite) { return favourite.Equals(artifactName, StringComparison.OrdinalIgnoreCase); }))
+        {
+            MessageBox.Show(this,
+                "This artifact is already in your favourites.",
+                "Already Saved",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        userFavourites.Add(artifactID);
+        currentUser.Favourites.Add(artifactName);
+
+        if (!SaveFavourites())
+        {
+            currentUser.Favourites.RemoveAll(delegate(string favourite) { return favourite.Equals(artifactName, StringComparison.OrdinalIgnoreCase); });
+            userFavourites.Remove(artifactID);
+            MessageBox.Show(this,
+            "The favourite could not be saved to favorites.json.",
+                "Save Failed",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return;
+        }
+
+        Invalidate();
     }
 
     private void GoTo(AppScreen screen, int id)
     {
-        GoTo(screen, id, true);
+        GoTo(screen, id, true, true);
     }
 
     private void GoTo(AppScreen screen, int id, bool autoPlayNarration)
     {
+        GoTo(screen, id, autoPlayNarration, true);
+    }
+
+    private void GoTo(AppScreen screen, int id, bool autoPlayNarration, bool resetArtifactAngle)
+    {
+        if (screen == AppScreen.Favourites && !IsUserLoggedIn())
+        {
+            currentScreen = AppScreen.Explore;
+            Invalidate();
+            return;
+        }
+
         bool leavingArtifact = (currentScreen == AppScreen.Artifact && screen != AppScreen.Artifact);
         if (leavingArtifact) StopNarrationAudio();
 
@@ -487,7 +772,7 @@ public class TuioDemo : Form, TuioListener
         if (id >= 0) artifactID = id;
         if (screen == AppScreen.Artifact && artifactID >= 0)
         {
-            artifactAngle = 0f;
+            if (resetArtifactAngle) artifactAngle = 0f;
             // Play narration only for explicit artifact activation (click on artifact card or marker scan).
             if (autoPlayNarration && !sameArtifact) PlayNarrationAudio(artifactID);
         }
@@ -503,6 +788,7 @@ public class TuioDemo : Form, TuioListener
         if (tabExplore.Contains(p))    { GoTo(AppScreen.Explore);    return; }
         if (tabFavourites.Contains(p)) { GoTo(AppScreen.Favourites); return; }
         if (tabArtifact.Contains(p) && artifactID >= 0) { GoTo(AppScreen.Artifact); return; }
+        if (currentScreen == AppScreen.Artifact && favouriteButtonRect.Contains(p)) { AddCurrentArtifactToFavourites(); return; }
 
         if (currentScreen == AppScreen.Explore)
             for (int i = 0; i < ArtifactData.Count; i++)
@@ -578,15 +864,24 @@ public class TuioDemo : Form, TuioListener
         using (var br = new SolidBrush(Color.FromArgb(200,180,220,255)))
             g.DrawString("MuseSense", fontTitle, br, 18, 12);
 
-        string[] labels = { "Explore", "Favourites", "Artifact" };
-        AppScreen[] screens = { AppScreen.Explore, AppScreen.Favourites, AppScreen.Artifact };
+        string[] labels = IsUserLoggedIn()
+            ? new string[] { "Explore", "Favourites", "Artifact" }
+            : new string[] { "Explore", "Artifact" };
+        AppScreen[] screens = IsUserLoggedIn()
+            ? new AppScreen[] { AppScreen.Explore, AppScreen.Favourites, AppScreen.Artifact }
+            : new AppScreen[] { AppScreen.Explore, AppScreen.Artifact };
         int tabW=130, tabH=36, tabY=12;
         int startX = width/2 - (labels.Length*tabW)/2;
+        tabExplore = Rectangle.Empty;
+        tabFavourites = Rectangle.Empty;
+        tabArtifact = Rectangle.Empty;
 
         for (int i = 0; i < labels.Length; i++)
         {
             Rectangle r = new Rectangle(startX + i*tabW, tabY, tabW-4, tabH);
-            if (i==0) tabExplore=r; else if (i==1) tabFavourites=r; else tabArtifact=r;
+            if (screens[i] == AppScreen.Explore) tabExplore = r;
+            else if (screens[i] == AppScreen.Favourites) tabFavourites = r;
+            else tabArtifact = r;
             bool active   = (currentScreen == screens[i]);
             bool disabled = (screens[i] == AppScreen.Artifact && artifactID < 0);
             Color bg = active ? Color.FromArgb(200,60,120,200) : Color.FromArgb(80,40,60,100);
@@ -731,6 +1026,7 @@ public class TuioDemo : Form, TuioListener
     {
         if (artifactID < 0 || artifactID >= ArtifactData.Count)
         {
+            favouriteButtonRect = Rectangle.Empty;
             using (var br = new SolidBrush(Color.White)) g.DrawString("No artifact selected.", fontUI, br, 20, top+20);
             return;
         }
@@ -743,7 +1039,7 @@ public class TuioDemo : Form, TuioListener
         {
             using (var br = new SolidBrush(Color.FromArgb(30,100,160,255)))
             { int gs=modelSize+60; g.FillEllipse(br, mx-gs/2, my-gs/2, gs, gs); }
-            RenderObjModelDirect(g, model, artifactID, mx, my, artifactAngle, modelSize, ArtifactData.Colors[artifactID]);
+            RenderObjModelDirect(g, model, artifactID, mx, my, GetArtifactOrientation(), modelSize, ArtifactData.Colors[artifactID]);
         }
 
         int rx = mx + modelSize/2 + 40;
@@ -756,16 +1052,40 @@ public class TuioDemo : Form, TuioListener
             g.DrawLine(pen, rx, ry+44, rx+rw, ry+44);
         using (var br = new SolidBrush(Color.FromArgb(200,200,210,230)))
             g.DrawString(ArtifactData.Descriptions[artifactID], fontUI, br, new RectangleF(rx, ry+56, rw, 200));
+
+        int favouriteButtonWidth = Math.Min(190, rw);
+        favouriteButtonRect = new Rectangle(rx, ry + 214, favouriteButtonWidth, 42);
+        bool isFav = userFavourites.Contains(artifactID);
+        Color favouriteFill = isFav ? Color.FromArgb(210, 176, 131, 36) : Color.FromArgb(185, 36, 72, 126);
+        Color favouriteBorder = isFav ? Color.FromArgb(255, 255, 211, 96) : Color.FromArgb(220, 120, 180, 255);
+        using (var path = RoundRect(favouriteButtonRect, 10))
+        using (var brush = new SolidBrush(favouriteFill))
+        using (var pen = new Pen(favouriteBorder, 1.8f))
+        {
+            g.FillPath(brush, path);
+            g.DrawPath(pen, path);
+        }
+        using (var br = new SolidBrush(Color.White))
+        {
+            string favouriteText = isFav ? "Favourited" : "Favourite";
+            SizeF textSize = g.MeasureString(favouriteText, fontTab);
+            g.DrawString(favouriteText, fontTab, br,
+                favouriteButtonRect.Left + (favouriteButtonRect.Width - textSize.Width) / 2,
+                favouriteButtonRect.Top + (favouriteButtonRect.Height - textSize.Height) / 2);
+        }
+
         using (var br = new SolidBrush(Color.FromArgb(220,170,210,255)))
             g.DrawString("Narration", fontTab, br, rx, ry+265);
         using (var br = new SolidBrush(Color.FromArgb(210,210,225,245)))
             g.DrawString(ArtifactData.Narrations[artifactID], fontNarration, br, new RectangleF(rx, ry+300, rw, 250));
         using (var br = new SolidBrush(Color.FromArgb(120,140,200,140)))
-            g.DrawString("Rotate the TUIO marker to spin the model", fontSmall, br, rx, ry+560);
+            g.DrawString(artifactAngleControlledByMarker
+                ? "Marker detected: rotate the TUIO marker to tilt and spin the model in 3D"
+                : "Marker not detected: the model is rotating automatically",
+                fontSmall, br, rx, ry+560);
 
         DrawArtifactQuickInfo(g, top);
 
-        bool isFav = userFavourites.Contains(artifactID);
         using (var br = new SolidBrush(isFav ? Color.FromArgb(220,255,200,50) : Color.FromArgb(80,180,180,180)))
             g.DrawString(isFav ? "* In your Favourites" : "Not in Favourites", fontSmall, br, rx, ry+590);
         using (var br = new SolidBrush(Color.FromArgb(100,100,160,200)))
@@ -965,7 +1285,7 @@ public class TuioDemo : Form, TuioListener
     private readonly object _thumbLock = new object();
     private void BuildThumbnail(int id, ObjModel model)
     {
-        Bitmap bmp = RasterizeSingle(model, ThumbSize, ThumbSize, ThumbAngle, ArtifactData.Colors[id], true);
+        Bitmap bmp = RasterizeSingle(model, ThumbSize, ThumbSize, new ModelOrientation(ThumbAngle, DefaultArtifactPitch, 0f), ArtifactData.Colors[id], true);
         lock (_thumbLock)
         {
             if (_thumbnailCache.ContainsKey(id)) { bmp.Dispose(); return; }
@@ -987,21 +1307,29 @@ public class TuioDemo : Form, TuioListener
     }
 
     // Renders the rotating model directly to the Graphics surface (used only for the one active card)
-    private void RenderObjModelDirect(Graphics g, ObjModel model, int cacheId, int cx, int cy, float angle, int size, Color baseColor)
+    private void RenderObjModelDirect(Graphics g, ObjModel model, int cacheId, int cx, int cy, ModelOrientation orientation, int size, Color baseColor)
     {
         if (model == null) return;
         int W = Math.Max(60, size);
         int internalW = Math.Min(W, 420);
         bool useTextures = model.MatTextures.Count > 0;
-        int qAngle = (int)Math.Round(angle / RotationFrameStep);
-        string key = cacheId + "|" + internalW + "|" + qAngle + "|" + baseColor.ToArgb() + "|" + (useTextures ? 1 : 0);
+        int qYaw = (int)Math.Round(orientation.Yaw / RotationFrameStep);
+        int qPitch = (int)Math.Round(orientation.Pitch / RotationFrameStep);
+        int qRoll = (int)Math.Round(orientation.Roll / RotationFrameStep);
+        string key = cacheId + "|" + internalW + "|" + qYaw + "|" + qPitch + "|" + qRoll + "|" + baseColor.ToArgb() + "|" + (useTextures ? 1 : 0);
 
         Bitmap bmp;
         lock (_frameCacheLock)
         {
             if (!_rotationFrameCache.TryGetValue(key, out bmp))
             {
-                bmp = RasterizeSingle(model, internalW, internalW, qAngle * RotationFrameStep, baseColor, useTextures);
+                bmp = RasterizeSingle(
+                    model,
+                    internalW,
+                    internalW,
+                    new ModelOrientation(qYaw * RotationFrameStep, qPitch * RotationFrameStep, qRoll * RotationFrameStep),
+                    baseColor,
+                    useTextures);
                 _rotationFrameCache[key] = bmp;
                 _rotationFrameOrder.Enqueue(key);
 
@@ -1041,16 +1369,17 @@ public class TuioDemo : Form, TuioListener
     }
 
     // Core rasterizer — allocates its own buffers so it is fully thread-safe
-    private Bitmap RasterizeSingle(ObjModel model, int W, int H, float angle, Color baseColor, bool useTextures)
+    private Bitmap RasterizeSingle(ObjModel model, int W, int H, ModelOrientation orientation, Color baseColor, bool useTextures)
     {
         int[] pixels = new int[W * H];
         float[] zBuf = new float[W * H];
         for (int i = 0; i < zBuf.Length; i++) zBuf[i] = float.NegativeInfinity;
 
         float scale = (W * 0.95f) / model.Radius;
-        float yaw = angle, pitch = -0.35f, camZ = W * 3.2f, proj = W * 1.7f;
+        float yaw = orientation.Yaw, pitch = orientation.Pitch, roll = orientation.Roll, camZ = W * 3.2f, proj = W * 1.7f;
         float cy = (float)Math.Cos(yaw), sy = (float)Math.Sin(yaw);
         float cp = (float)Math.Cos(pitch), sp = (float)Math.Sin(pitch);
+        float cr = (float)Math.Cos(roll), sr = (float)Math.Sin(roll);
         int vc = model.Verts.Count;
         float[] transX = new float[vc];
         float[] transY = new float[vc];
@@ -1064,9 +1393,13 @@ public class TuioDemo : Form, TuioListener
             float x1 = v.X * cy + v.Z * sy;
             float z1 = -v.X * sy + v.Z * cy;
             float y1 = v.Y;
-            float tx = x1 * scale;
-            float ty = (y1 * cp - z1 * sp) * scale;
-            float tz = (y1 * sp + z1 * cp) * scale;
+            float y2 = y1 * cp - z1 * sp;
+            float z2 = y1 * sp + z1 * cp;
+            float x3 = x1 * cr - y2 * sr;
+            float y3 = x1 * sr + y2 * cr;
+            float tx = x3 * scale;
+            float ty = y3 * scale;
+            float tz = z2 * scale;
 
             transX[i] = tx;
             transY[i] = ty;
@@ -1120,11 +1453,12 @@ public class TuioDemo : Form, TuioListener
         return bmp;
     }
 
-    private Vec3 RotV(Vec3 v,float yaw,float pitch)
+    private Vec3 RotV(Vec3 v,float yaw,float pitch,float roll)
     {
-        float cy=(float)Math.Cos(yaw),sy=(float)Math.Sin(yaw),cp=(float)Math.Cos(pitch),sp=(float)Math.Sin(pitch);
+        float cy=(float)Math.Cos(yaw),sy=(float)Math.Sin(yaw),cp=(float)Math.Cos(pitch),sp=(float)Math.Sin(pitch),cr=(float)Math.Cos(roll),sr=(float)Math.Sin(roll);
         float x1=v.X*cy+v.Z*sy,z1=-v.X*sy+v.Z*cy,y1=v.Y;
-        return new Vec3(x1,y1*cp-z1*sp,y1*sp+z1*cp);
+        float y2=y1*cp-z1*sp,z2=y1*sp+z1*cp;
+        return new Vec3(x1*cr-y2*sr,x1*sr+y2*cr,z2);
     }
     private Vec3 Norm(Vec3 v){float l=(float)Math.Sqrt(v.X*v.X+v.Y*v.Y+v.Z*v.Z);return l<1e-5f?v:new Vec3(v.X/l,v.Y/l,v.Z/l);}
 
@@ -1302,25 +1636,80 @@ public class TuioDemo : Form, TuioListener
         return null;
     }
 
+    private static float NormalizeAngle(float angle)
+    {
+        float fullTurn = (float)(Math.PI * 2.0);
+        while (angle >= fullTurn) angle -= fullTurn;
+        while (angle < 0f) angle += fullTurn;
+        return angle;
+    }
+
+    private static float Clamp(float value, float min, float max)
+    {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+    }
+
+    private ModelOrientation GetArtifactOrientation()
+    {
+        float yaw = NormalizeAngle(artifactAngle);
+        if (!artifactAngleControlledByMarker)
+            return new ModelOrientation(yaw, DefaultArtifactPitch, 0f);
+
+        float pitch = DefaultArtifactPitch + (float)Math.Sin(yaw) * MarkerPitchAmplitude;
+        float roll = (float)Math.Cos(yaw * 0.85f) * MarkerRollAmplitude;
+        return new ModelOrientation(yaw, Clamp(pitch, -1.15f, 1.15f), roll);
+    }
+
+    private void ApplyMarkerControl(TuioObject o, bool navigateToArtifact)
+    {
+        int idx = ArtifactData.GetIndexByTuioId(o.SymbolID);
+        if (idx < 0 || !IsHandleCreated) return;
+
+        BeginInvoke(new MethodInvoker(() =>
+        {
+            artifactAngleControlledByMarker = true;
+            activeMarkerSessionId = o.SessionID;
+            artifactAngle = NormalizeAngle((float)o.Angle);
+
+            if (navigateToArtifact)
+                GoTo(AppScreen.Artifact, idx, true, false);
+            else if (currentScreen == AppScreen.Artifact && artifactID == idx)
+                Invalidate();
+        }));
+    }
+
+    private void ReleaseMarkerControl(long sessionId)
+    {
+        if (activeMarkerSessionId != sessionId || !IsHandleCreated) return;
+
+        BeginInvoke(new MethodInvoker(() =>
+        {
+            if (activeMarkerSessionId != sessionId) return;
+
+            artifactAngleControlledByMarker = false;
+            activeMarkerSessionId = -1;
+            Invalidate();
+        }));
+    }
+
     public void addTuioObject(TuioObject o)
     {
         lock(objectList) objectList[o.SessionID]=o;
         if(verbose) Console.WriteLine("add obj "+o.SymbolID);
-        int idx = ArtifactData.GetIndexByTuioId(o.SymbolID);
-        if(idx>=0 && IsHandleCreated)
-            this.BeginInvoke(new MethodInvoker(()=>{ artifactAngle=(float)o.Angle; GoTo(AppScreen.Artifact,idx); }));
+        ApplyMarkerControl(o, true);
     }
     public void updateTuioObject(TuioObject o)
     {
         lock(objectList) if(objectList.ContainsKey(o.SessionID)) objectList[o.SessionID]=o;
-        // Compare against artifactID (array index) not raw symbol ID
-        int idx = ArtifactData.GetIndexByTuioId(o.SymbolID);
-        if(currentScreen==AppScreen.Artifact && idx==artifactID) artifactAngle=(float)o.Angle;
+        if (activeMarkerSessionId == o.SessionID || ArtifactData.GetIndexByTuioId(o.SymbolID) >= 0)
+            ApplyMarkerControl(o, false);
     }
     public void removeTuioObject(TuioObject o)
     {
         lock(objectList) objectList.Remove(o.SessionID);
-        // Artifact screen stays visible even when the marker is no longer detected.
+        ReleaseMarkerControl(o.SessionID);
     }
     public void addTuioCursor(TuioCursor c){lock(cursorList)cursorList[c.SessionID]=c;}
     public void updateTuioCursor(TuioCursor c){}
@@ -1358,7 +1747,11 @@ public class TuioDemo : Form, TuioListener
             this.BeginInvoke(new MethodInvoker(()=>SetLoggedInUser(name)));
         }
         else if(msg.Contains("face:detected")||msg.Contains("face detected")){faceDetected=true;UpdateFaceLabel(true,"");}
-        else if(msg.Contains("face:lost")||msg.Contains("face lost")){faceDetected=false;UpdateFaceLabel(false,"");}
+        else if(msg.Contains("face:lost")||msg.Contains("face lost"))
+        {
+            faceDetected=false;
+            this.BeginInvoke(new MethodInvoker(ClearLoggedInUser));
+        }
     }
 
     private void SetPyStatus(bool connected)
