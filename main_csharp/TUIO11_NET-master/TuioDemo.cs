@@ -1,6 +1,3 @@
-// MuseSense - Interactive Museum Guide
-// Multi-screen: Explore | Favourites | Artifact Detail
-// TUIO marker detection auto-navigates to Artifact page.
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -14,10 +11,10 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 using TUIO;
 
-// Minimal JSON parser for users.json (no external deps)
 static class TinyJson
 {
     public static List<UserRecord> ParseUsers(string json)
@@ -116,7 +113,7 @@ static class ArtifactData
 
     class ArtifactRoot
     {
-        public List<ArtifactRecord> artifacts;
+        public List<ArtifactRecord> artifacts = new List<ArtifactRecord>();
     }
 
     private static List<ArtifactRecord> records = new List<ArtifactRecord>();
@@ -418,6 +415,12 @@ public class TuioDemo : Form, TuioListener
 
     // Python socket
     private bool faceDetected = false;
+    private bool bluetoothLoggedIn = false;
+    private string bluetoothLoginName = "";
+    private string lastFaceRawName = "";
+    private string lastFaceName = "";
+    private Dictionary<string, string> faceNameOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    private DateTime bluetoothWelcomeUntil = DateTime.MinValue;
 
     // Fonts
     private Font fontUI    = new Font("Segoe UI", 11f);
@@ -435,6 +438,10 @@ public class TuioDemo : Form, TuioListener
     // Status labels
     private Label faceStatusLabel;
     private Label pythonStatusLabel;
+    private Label movementStatusLabel;
+    private Label bluetoothStatusLabel;
+    private Label sessionStatusLabel;
+    private Button renameFaceButton;
     private Panel narrationControlCard;
     private Button narrationPauseButton;
     private Label narrationVolumeLabel;
@@ -522,7 +529,8 @@ public class TuioDemo : Form, TuioListener
             Path.Combine(Application.StartupPath,"faces","users.json"),
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"faces","users.json"),
             Path.Combine("..","..","faces","users.json"),
-            Path.Combine("..","..","..","faces","users.json")
+            Path.Combine("..","..","..","faces","users.json"),
+            Path.Combine("..","..","..","..","faces","users.json")
         };
 
         usersJsonPath = "";
@@ -534,7 +542,15 @@ public class TuioDemo : Form, TuioListener
                 break;
             }
 
-        if (string.IsNullOrEmpty(usersJsonPath)) usersJsonPath = cands[0];
+        if (string.IsNullOrEmpty(usersJsonPath)) usersJsonPath = cands[cands.Length - 1];
+
+        try
+        {
+            string dir = Path.GetDirectoryName(usersJsonPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            if (!File.Exists(usersJsonPath)) File.WriteAllText(usersJsonPath, "[]");
+        }
+        catch { }
 
         ResolveFavouritesPath();
         LoadFavouriteStore();
@@ -638,8 +654,294 @@ public class TuioDemo : Form, TuioListener
         return !string.IsNullOrEmpty(loggedInName);
     }
 
+    private bool IsGenericBluetoothSessionName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return true;
+
+        string normalized = name.Trim();
+        if (normalized.Equals("IoT User", StringComparison.OrdinalIgnoreCase)) return true;
+        if (normalized.StartsWith("IoT ", StringComparison.OrdinalIgnoreCase)) return true;
+
+        return false;
+    }
+
+    private string ParseBluetoothUserName(string btId)
+    {
+        if (string.IsNullOrWhiteSpace(btId)) return "";
+
+        string raw = btId.Trim();
+        if (raw.Equals("unknown", StringComparison.OrdinalIgnoreCase)) return "";
+
+        string[] parts = raw.Split('|');
+        if (parts.Length >= 2)
+        {
+            string name = parts[1].Trim();
+            if (!string.IsNullOrEmpty(name) && !name.Equals("Unknown", StringComparison.OrdinalIgnoreCase)) return name;
+        }
+
+        if (parts.Length >= 1)
+        {
+            string idPart = parts[0].Trim();
+            if (!string.IsNullOrEmpty(idPart)) return "IoT " + idPart;
+        }
+
+        return "IoT User";
+    }
+
+    private void HandleBluetoothLogin(string btId)
+    {
+        string name = ParseBluetoothUserName(btId);
+        if (string.IsNullOrEmpty(name)) return;
+
+        // Bluetooth is used as the entry gate (unlock), not the final identity label.
+        bluetoothLoggedIn = true;
+        bluetoothLoginName = name;
+        bluetoothWelcomeUntil = DateTime.Now.AddSeconds(6);
+
+        // If face is already known, keep the face name as active user.
+        if (faceDetected && !string.IsNullOrWhiteSpace(lastFaceName))
+            SetLoggedInUser(lastFaceName);
+        UpdateSessionStatusLabel();
+        Invalidate();
+    }
+
+    private void HandleFaceDetected(string name)
+    {
+        // face-based profile this is the identity point coming from Python.
+        lastFaceRawName = name == null ? "" : name.Trim();
+
+        faceDetected = true;
+        // UI rename map: show custom name without changing the incoming raw socket label.
+        if (!string.IsNullOrEmpty(lastFaceRawName) && faceNameOverrides.ContainsKey(lastFaceRawName))
+            lastFaceName = faceNameOverrides[lastFaceRawName];
+        else
+            lastFaceName = lastFaceRawName;
+
+        UpdateRenameFaceButton();
+
+        if (!bluetoothLoggedIn)
+        {
+            UpdateFaceLabel(true, lastFaceName);
+            UpdateSessionStatusLabel();
+            return;
+        }
+
+        // With Bluetooth unlocked, face name becomes the visible session identity.
+        if (!string.IsNullOrWhiteSpace(lastFaceName))
+            SetLoggedInUser(lastFaceName);
+
+        UpdateFaceLabel(true, lastFaceName);
+        UpdateSessionStatusLabel();
+    }
+
+    private void HandleFaceLost()
+    {
+        faceDetected = false;
+        lastFaceRawName = "";
+        lastFaceName = "";
+        UpdateRenameFaceButton();
+
+        if (!bluetoothLoggedIn)
+            ClearLoggedInUser();
+        else
+            UpdateFaceLabel(false, "");
+
+        UpdateSessionStatusLabel();
+    }
+
+    private void UpdateSessionStatusLabel()
+    {
+        // One place to describe current authentication/session state in the UI.
+        string text;
+        Color color;
+
+        if (!bluetoothLoggedIn)
+        {
+            text = "Session: Locked (Bluetooth required)";
+            color = Color.Orange;
+        }
+        else if (!faceDetected)
+        {
+            text = "Session: Bluetooth unlocked (waiting face)";
+            color = Color.Khaki;
+        }
+        else if (!string.IsNullOrWhiteSpace(lastFaceName))
+        {
+            // Any detected face after Bluetooth unlock is treated as confirmed.
+            text = "Session: Confirmed (Bluetooth + Face)";
+            color = Color.LightGreen;
+        }
+        else
+        {
+            text = "Session: Bluetooth active";
+            color = Color.LightGoldenrodYellow;
+        }
+
+        if (sessionStatusLabel == null) return;
+
+        if (sessionStatusLabel.InvokeRequired)
+            sessionStatusLabel.BeginInvoke(new MethodInvoker(() => { sessionStatusLabel.Text = text; sessionStatusLabel.ForeColor = color; }));
+        else
+        {
+            sessionStatusLabel.Text = text;
+            sessionStatusLabel.ForeColor = color;
+        }
+    }
+
+    private void UpdateRenameFaceButton()
+    {
+        if (renameFaceButton == null) return;
+
+        bool show = !string.IsNullOrWhiteSpace(lastFaceRawName)
+            && lastFaceRawName.StartsWith("Person ", StringComparison.OrdinalIgnoreCase);
+
+        renameFaceButton.Visible = show;
+    }
+
+    private string PromptForFaceName(string currentName)
+    {
+        Form prompt = new Form();
+        prompt.Text = "Rename User";
+        prompt.StartPosition = FormStartPosition.CenterParent;
+        prompt.FormBorderStyle = FormBorderStyle.FixedDialog;
+        prompt.MinimizeBox = false;
+        prompt.MaximizeBox = false;
+        prompt.ClientSize = new Size(360, 130);
+
+        Label text = new Label();
+        text.Text = "Enter the new name:";
+        text.Left = 12;
+        text.Top = 12;
+        text.Width = 320;
+
+        TextBox input = new TextBox();
+        input.Left = 12;
+        input.Top = 38;
+        input.Width = 334;
+        input.Text = currentName;
+
+        Button ok = new Button();
+        ok.Text = "OK";
+        ok.Left = 190;
+        ok.Top = 78;
+        ok.Width = 74;
+        ok.DialogResult = DialogResult.OK;
+
+        Button cancel = new Button();
+        cancel.Text = "Cancel";
+        cancel.Left = 272;
+        cancel.Top = 78;
+        cancel.Width = 74;
+        cancel.DialogResult = DialogResult.Cancel;
+
+        prompt.Controls.Add(text);
+        prompt.Controls.Add(input);
+        prompt.Controls.Add(ok);
+        prompt.Controls.Add(cancel);
+        prompt.AcceptButton = ok;
+        prompt.CancelButton = cancel;
+
+        string value = "";
+        if (prompt.ShowDialog(this) == DialogResult.OK)
+            value = input.Text.Trim();
+
+        prompt.Dispose();
+        return value;
+    }
+
+    private void RenameCurrentFaceFromUi()
+    {
+        // Optional profile personalization: convert Person N into a human name from the UI.
+        if (string.IsNullOrWhiteSpace(lastFaceRawName)) return;
+        if (!lastFaceRawName.StartsWith("Person ", StringComparison.OrdinalIgnoreCase)) return;
+
+        string suggested = string.IsNullOrWhiteSpace(lastFaceName) ? "" : lastFaceName;
+        string newName = PromptForFaceName(suggested);
+        if (string.IsNullOrWhiteSpace(newName)) return;
+
+        if (!RenameFaceIdentityInStore(lastFaceRawName, newName))
+        {
+            MessageBox.Show(this,
+                "Could not save the new name to faces/users.json.",
+                "Rename Failed",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        UserRecord oldUser = null;
+        foreach (UserRecord user in users)
+        {
+            if (user.Name.Equals(lastFaceRawName, StringComparison.OrdinalIgnoreCase))
+            {
+                oldUser = user;
+                break;
+            }
+        }
+        if (oldUser != null) oldUser.Name = newName;
+
+        if (!string.IsNullOrEmpty(loggedInName) && loggedInName.Equals(lastFaceRawName, StringComparison.OrdinalIgnoreCase))
+            loggedInName = newName;
+
+        faceNameOverrides[lastFaceRawName] = newName;
+        lastFaceName = newName;
+        UpdateFaceLabel(true, lastFaceName);
+        UpdateSessionStatusLabel();
+        Invalidate();
+    }
+
+    private bool RenameFaceIdentityInStore(string oldName, string newName)
+    {
+        try
+        {
+            string targetPath = usersJsonPath;
+            if (string.IsNullOrWhiteSpace(targetPath) || !File.Exists(targetPath))
+            {
+                string[] cands = {
+                    Path.Combine("faces","users.json"),
+                    Path.Combine(Application.StartupPath,"faces","users.json"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"faces","users.json"),
+                    Path.Combine("..","..","faces","users.json"),
+                    Path.Combine("..","..","..","faces","users.json"),
+                    Path.Combine("..","..","..","..","faces","users.json")
+                };
+
+                foreach (string p in cands)
+                {
+                    if (File.Exists(p))
+                    {
+                        targetPath = p;
+                        break;
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(targetPath) || !File.Exists(targetPath)) return false;
+
+            string json = File.ReadAllText(targetPath);
+            string oldEscaped = Regex.Escape(oldName);
+            string newEscaped = newName.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            string pattern = "(\"name\"\\s*:\\s*\")" + oldEscaped + "(\")";
+
+            // Replace only the first matching name field to avoid accidental bulk rename.
+            Regex renameRegex = new Regex(pattern, RegexOptions.IgnoreCase);
+            string replaced = renameRegex.Replace(json, "$1" + newEscaped + "$2", 1);
+
+            if (string.Equals(replaced, json, StringComparison.Ordinal)) return false;
+
+            File.WriteAllText(targetPath, replaced);
+            usersJsonPath = targetPath;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private bool SaveFavourites()
     {
+        // profile lists write per-user favourites to JSON.
         try
         {
             string json = File.Exists(favouritesJsonPath) ? File.ReadAllText(favouritesJsonPath) : "[]";
@@ -695,7 +997,7 @@ public class TuioDemo : Form, TuioListener
     private void ShowLoginRequiredPopup()
     {
         MessageBox.Show(this,
-            "Please log in with face detection first, then you can add this artifact to your favourites.",
+            "Please connect via Bluetooth first. Face detection is used for session confirmation.",
             "Login Required",
             MessageBoxButtons.OK,
             MessageBoxIcon.Warning);
@@ -791,6 +1093,8 @@ public class TuioDemo : Form, TuioListener
         if (currentScreen == AppScreen.Artifact && favouriteButtonRect.Contains(p)) { AddCurrentArtifactToFavourites(); return; }
 
         if (currentScreen == AppScreen.Explore)
+        {
+            if (!bluetoothLoggedIn) return;
             for (int i = 0; i < ArtifactData.Count; i++)
             {
                 if (GetCarouselCardRect(i).Contains(p))
@@ -800,6 +1104,7 @@ public class TuioDemo : Form, TuioListener
                     return;
                 }
             }
+        }
 
         if (currentScreen == AppScreen.Favourites)
             for (int fi = 0; fi < userFavourites.Count; fi++)
@@ -899,11 +1204,31 @@ public class TuioDemo : Form, TuioListener
 
     private void DrawExplore(Graphics g, int top)
     {
+        // Main home screen locked until Bluetooth, then interactive.
         using (var br = new SolidBrush(Color.FromArgb(200,180,210,255)))
             g.DrawString("Explore Artifacts", fontTitle, br, 20, top+10);
+
+        if (!bluetoothLoggedIn)
+        {
+            using (var br = new SolidBrush(Color.FromArgb(180,220,220,220)))
+                g.DrawString("Home screen is waiting for Bluetooth login.", fontUI, br, 20, top+56);
+            using (var br = new SolidBrush(Color.FromArgb(150,180,200,220)))
+                g.DrawString("Keep your phone Bluetooth discoverable, then wait for detection.", fontSmall, br, 20, top+86);
+            return;
+        }
+
+        string welcome = "Welcome back";
+        string welcomeName = "";
+        if (!string.IsNullOrWhiteSpace(lastFaceName)) welcomeName = lastFaceName;
+        else if (!string.IsNullOrWhiteSpace(loggedInName) && !IsGenericBluetoothSessionName(loggedInName)) welcomeName = loggedInName;
+        if (!string.IsNullOrWhiteSpace(welcomeName)) welcome += ", " + welcomeName;
+
+        using (var br = new SolidBrush(Color.FromArgb(190,170,235,170)))
+            g.DrawString(welcome, fontUI, br, 20, top+46);
+
         using (var br = new SolidBrush(Color.FromArgb(140,180,200,220)))
             g.DrawString("Click a card to select  |  Click again to open  |  Place TUIO marker to jump directly",
-                fontSmall, br, 20, top+46);
+                fontSmall, br, 20, top+74);
 
         int cy = top + 80 + (height - top - 80) / 2;
         float step = (float)(2 * Math.PI / ArtifactData.Count);
@@ -1664,6 +1989,9 @@ public class TuioDemo : Form, TuioListener
 
     private void ApplyMarkerControl(TuioObject o, bool navigateToArtifact)
     {
+        // marker ID maps to artifact and controls orientation.
+        if (!bluetoothLoggedIn) return;
+
         int idx = ArtifactData.GetIndexByTuioId(o.SymbolID);
         if (idx < 0 || !IsHandleCreated) return;
 
@@ -1717,10 +2045,10 @@ public class TuioDemo : Form, TuioListener
     public void addTuioBlob(TuioBlob b){lock(blobList)blobList[b.SessionID]=b;}
     public void updateTuioBlob(TuioBlob b){}
     public void removeTuioBlob(TuioBlob b){lock(blobList)blobList.Remove(b.SessionID);}
-    // mainTimer already drives Invalidate at 30fps; TUIO refresh is a no-op to avoid redundant repaints
     public void refresh(TuioTime t) { }
     private void SocketThread()
     {
+        // python C# bridge thread where it keeps listening and reconnects automatically.
         while(true)
         {
             TcpClient tcp=null; NetworkStream ns=null;
@@ -1729,7 +2057,31 @@ public class TuioDemo : Form, TuioListener
                 tcp=new TcpClient("localhost",5000); ns=tcp.GetStream();
                 SetPyStatus(true);
                 byte[] buf=new byte[1024];
-                while(true){int n=ns.Read(buf,0,buf.Length);if(n<=0)break;HandleMsg(Encoding.UTF8.GetString(buf,0,n).Trim());}
+
+                // buffer and split on newline because python sends newline-delimited messages.
+                StringBuilder pending = new StringBuilder();
+                while(true)
+                {
+                    int n=ns.Read(buf,0,buf.Length);
+                    if(n<=0)break;
+
+                    pending.Append(Encoding.UTF8.GetString(buf,0,n));
+
+                    while(true)
+                    {
+                        string current = pending.ToString();
+                        int cut = current.IndexOf('\n');
+                        if (cut < 0) break;
+
+                        string line = current.Substring(0, cut).Trim();
+                        pending.Remove(0, cut + 1);
+
+                        if (!string.IsNullOrEmpty(line)) HandleMsg(line);
+                    }
+                }
+
+                string tail = pending.ToString().Trim();
+                if (!string.IsNullOrEmpty(tail)) HandleMsg(tail);
             }
             catch{}
             finally{if(ns!=null)try{ns.Close();}catch{}if(tcp!=null)try{tcp.Close();}catch{}}
@@ -1740,17 +2092,34 @@ public class TuioDemo : Form, TuioListener
 
     private void HandleMsg(string msg)
     {
+        // Router for incoming Python events (face, movement, Bluetooth).
         if(msg.Contains("face:detected:"))
         {
             string name=msg.Substring(msg.IndexOf("face:detected:")+"face:detected:".Length).Trim();
-            faceDetected=true;
-            this.BeginInvoke(new MethodInvoker(()=>SetLoggedInUser(name)));
+            this.BeginInvoke(new MethodInvoker(()=>HandleFaceDetected(name)));
         }
-        else if(msg.Contains("face:detected")||msg.Contains("face detected")){faceDetected=true;UpdateFaceLabel(true,"");}
+        else if(msg.Contains("face:detected")||msg.Contains("face detected"))
+        {
+            this.BeginInvoke(new MethodInvoker(()=>HandleFaceDetected("")));
+        }
         else if(msg.Contains("face:lost")||msg.Contains("face lost"))
         {
-            faceDetected=false;
-            this.BeginInvoke(new MethodInvoker(ClearLoggedInUser));
+            this.BeginInvoke(new MethodInvoker(HandleFaceLost));
+        }
+        else if (msg.StartsWith("movement:"))
+        {
+            string move = msg.Substring("movement:".Length).Trim();
+            this.BeginInvoke(new MethodInvoker(() => UpdateMovementLabel(move)));
+        }
+        else if (msg.Contains("bluetooth:id:"))
+        {
+            int start = msg.IndexOf("bluetooth:id:") + "bluetooth:id:".Length;
+            string btId = msg.Substring(start).Trim();
+
+            int newLineIndex = btId.IndexOf('\n');
+            if (newLineIndex >= 0) btId = btId.Substring(0, newLineIndex).Trim();
+
+            this.BeginInvoke(new MethodInvoker(() => { UpdateBluetoothLabel(btId); HandleBluetoothLogin(btId); }));
         }
     }
 
@@ -1768,6 +2137,25 @@ public class TuioDemo : Form, TuioListener
         if(faceStatusLabel.InvokeRequired) faceStatusLabel.BeginInvoke(new MethodInvoker(()=>{faceStatusLabel.Text=txt;faceStatusLabel.ForeColor=col;}));
         else{faceStatusLabel.Text=txt;faceStatusLabel.ForeColor=col;}
     }
+
+    private void UpdateMovementLabel(string movement)
+    {
+        string txt = string.IsNullOrEmpty(movement) ? "Move: idle" : "Move: " + movement;
+        if (movementStatusLabel.InvokeRequired)
+            movementStatusLabel.BeginInvoke(new MethodInvoker(() => movementStatusLabel.Text = txt));
+        else
+            movementStatusLabel.Text = txt;
+    }
+
+    private void UpdateBluetoothLabel(string btId)
+    {
+        string txt = string.IsNullOrEmpty(btId) ? "Bluetooth ID: unknown" : "Bluetooth ID: " + btId;
+        if (bluetoothStatusLabel.InvokeRequired)
+            bluetoothStatusLabel.BeginInvoke(new MethodInvoker(() => bluetoothStatusLabel.Text = txt));
+        else
+            bluetoothStatusLabel.Text = txt;
+    }
+
     private void InitStatusLabels()
     {
         faceStatusLabel=new Label{AutoSize=false,Size=new Size(260,30),Location=new Point(width-270,10),
@@ -1778,6 +2166,38 @@ public class TuioDemo : Form, TuioListener
             BackColor=Color.Transparent,ForeColor=Color.OrangeRed,Font=new Font("Segoe UI",9f),
             TextAlign=ContentAlignment.MiddleRight,Text="Python: Disconnected"};
         this.Controls.Add(pythonStatusLabel);
+        movementStatusLabel=new Label{AutoSize=false,Size=new Size(260,22),Location=new Point(width-270,66),
+            BackColor=Color.Transparent,ForeColor=Color.LightBlue,Font=new Font("Segoe UI",9f),
+            TextAlign=ContentAlignment.MiddleRight,Text="Move: idle"};
+        this.Controls.Add(movementStatusLabel);
+        bluetoothStatusLabel=new Label{AutoSize=false,Size=new Size(260,22),Location=new Point(width-270,88),
+            BackColor=Color.Transparent,ForeColor=Color.LightGoldenrodYellow,Font=new Font("Segoe UI",9f),
+            TextAlign=ContentAlignment.MiddleRight,Text="Bluetooth ID: unknown"};
+        this.Controls.Add(bluetoothStatusLabel);
+
+        sessionStatusLabel=new Label{AutoSize=false,Size=new Size(300,22),Location=new Point(width-310,110),
+            BackColor=Color.Transparent,ForeColor=Color.Orange,Font=new Font("Segoe UI",9f),
+            TextAlign=ContentAlignment.MiddleRight,Text="Session: Locked (Bluetooth required)"};
+        this.Controls.Add(sessionStatusLabel);
+
+        renameFaceButton = new Button
+        {
+            Text = "Rename",
+            Size = new Size(74, 24),
+            Location = new Point(width - 388, 10),
+            Visible = false,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(28, 88, 152),
+            ForeColor = Color.FromArgb(235, 245, 255),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+        };
+        renameFaceButton.FlatAppearance.BorderColor = Color.FromArgb(120, 170, 220);
+        renameFaceButton.FlatAppearance.BorderSize = 1;
+        renameFaceButton.Click += (s, e) => RenameCurrentFaceFromUi();
+        this.Controls.Add(renameFaceButton);
+
+        UpdateSessionStatusLabel();
+        UpdateRenameFaceButton();
     }
 
     private void InitNarrationControls()
@@ -1896,8 +2316,12 @@ public class TuioDemo : Form, TuioListener
     private void UpdateLayout()
     {
         width=this.ClientSize.Width; height=this.ClientSize.Height;
+        if(renameFaceButton!=null) renameFaceButton.Location=new Point(width-388,10);
         if(faceStatusLabel!=null)  faceStatusLabel.Location=new Point(width-270,10);
         if(pythonStatusLabel!=null) pythonStatusLabel.Location=new Point(width-270,42);
+        if(movementStatusLabel!=null) movementStatusLabel.Location=new Point(width-270,66);
+        if(bluetoothStatusLabel!=null) bluetoothStatusLabel.Location=new Point(width-270,88);
+        if(sessionStatusLabel!=null) sessionStatusLabel.Location=new Point(width-310,110);
         if (narrationControlCard != null)
         {
             int left = 18;

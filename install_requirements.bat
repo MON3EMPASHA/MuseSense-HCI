@@ -40,13 +40,35 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [3/3] Installing packages...
-call "%~dp0venv\Scripts\pip.exe" install -r "%~dp0requirements.txt"
+echo [3/5] Installing core packages...
+findstr /V /I "face_recognition==" "%~dp0requirements.txt" > "%~dp0requirements_core.tmp"
+call "%~dp0venv\Scripts\pip.exe" install -r "%~dp0requirements_core.tmp"
 if errorlevel 1 (
-    echo ERROR: Failed to install packages.
+    del "%~dp0requirements_core.tmp" >nul 2>&1
+    echo ERROR: Failed to install core packages.
     pause
     exit /b 1
 )
+
+echo [4/5] Installing dlib binary wheel...
+call "%~dp0venv\Scripts\pip.exe" install dlib-bin==19.24.6
+if errorlevel 1 (
+    del "%~dp0requirements_core.tmp" >nul 2>&1
+    echo ERROR: Failed to install dlib-bin.
+    pause
+    exit /b 1
+)
+
+echo [5/5] Installing face_recognition without source build...
+call "%~dp0venv\Scripts\pip.exe" install face_recognition==1.3.0 --no-deps
+if errorlevel 1 (
+    del "%~dp0requirements_core.tmp" >nul 2>&1
+    echo ERROR: Failed to install face_recognition.
+    pause
+    exit /b 1
+)
+
+del "%~dp0requirements_core.tmp" >nul 2>&1
 
 echo Done. Run "venv\Scripts\activate" to activate the environment.
 pause
