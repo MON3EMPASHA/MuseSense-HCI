@@ -1,4 +1,3 @@
-# pyright: reportMissingImports=false
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -39,7 +38,7 @@ except Exception:
 print("[INIT] Starting MuseSense...")
 
 
-# ---------------- Socket ----------------
+# Socket 
 soc = socket.socket()
 soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 hostname = "localhost"
@@ -92,9 +91,18 @@ def capture_bluetooth_user_id():
         return "unknown"
 
     try:
-        devices = bluetooth.discover_devices(lookup_names=True, duration=8)
-        if len(devices) > 0:
-            addr, name = devices[0]
+        print("Scanning for nearby devices...")
+        nearby_devices = bluetooth.discover_devices(duration=8, lookup_names=True)
+        print(f"Found {len(nearby_devices)} devices.")
+
+        for addr, name in nearby_devices:
+            if name:
+                print(f"  Device Name: {name}, MAC Address: {addr}")
+            else:
+                print(f"  Device Name: Unknown, MAC Address: {addr}")
+
+        if len(nearby_devices) > 0:
+            addr, name = nearby_devices[0]
             device_name = name if name else "Unknown"
             return str(addr) + "|" + str(device_name)
     except Exception as e:
@@ -103,7 +111,7 @@ def capture_bluetooth_user_id():
     return "unknown"
 
 
-# ---------------- Camera config ----------------
+# Camera config
 def load_camera_config(path):
     default_cfg = {
         "camera_mode": "local_webcam",
@@ -593,7 +601,6 @@ with mp_holistic.Holistic(
 
                 if name == "":
                     # Avoid adding a new person from one noisy frame.
-                    # We require the unknown face to be stable for a few checks first.
                     if pending_face_encoding is None:
                         pending_face_encoding = face_encoding
                         pending_face_hits = 1
