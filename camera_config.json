@@ -1,6 +1,14 @@
 {
   "camera_mode": "phone_ip",
-  "phone_ip_url": "http://192.168.1.102:8080/video",
+  "phone_ip_url": "http://192.168.100.37:8080/video",
   "local_webcam_index": 1,
-  "camera_disabled": false
+  "camera_disabled": false,
+  "camera_rotation": "right",
+  "mirror_frame": false,
+  "processing_scale": 0.75,
+  "holistic_every_n_frames": 2,
+  "holistic_model_complexity": 0,
+  "ip_frame_drop_grabs": 2,
+  "face_check_every": 12,
+  "movement_check_every": 12
 }
