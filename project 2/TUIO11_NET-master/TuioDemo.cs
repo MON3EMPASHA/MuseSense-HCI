@@ -255,6 +255,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 	string oldmsg = "";
     int login = 0;
     int page = 0;
+    string btStatus = "Waiting...";
     public void stream()
     {
 		
@@ -268,6 +269,12 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
         while (true)
         {
             msg = c.recieveMessage();
+            if (string.IsNullOrWhiteSpace(msg))
+            {
+                btStatus = "Waiting...";
+                Invoke((Action)(Invalidate));
+                continue;
+            }
             //MessageBox.Show(msg);
             if (msg == "q")
             {
@@ -278,8 +285,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
             }
             if(login==0)
             {
-                
-                string[] parts = System.IO.File.ReadAllLines("users.csv")[1].Split(',');
+                bool found = false;
                 foreach (var line in System.IO.File.ReadLines("users.csv"))
                 {
                     var p = line.Split(',');
@@ -288,17 +294,15 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
                     {
                         uname = p[0].Trim();
                         upic = Image.FromFile(p[4].Trim());
-                        Invoke((Action)(Invalidate));
                         login = 1;
+                        btStatus = "Matched";
+                        found = true;
                         break;
                     }
                 }
-                if (login == 0) // no match found so we finna use the first user wekhalas
+                if (!found) // no match found in the csv file
                 {
-                   
-                    uname = parts[0].Trim();
-                    upic = Image.FromFile(parts[4].Trim());
-                    login = 1;
+                    btStatus = "No match for this device in the system";
                 }
                 Invoke((Action)(Invalidate));
 
@@ -349,9 +353,6 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
             SolidBrush avatarBrsh = new SolidBrush(Color.FromArgb(80, 80, 120));
             g.FillEllipse(avatarBrsh, cX + 190, cY + 60, 120, 120);
             Font hellofont = new Font("Arial", 22f, FontStyle.Bold);
-            string[] parts = System.IO.File.ReadAllLines("users.csv")[1].Split(',');
-
-
             if (upic != null)
                 g.DrawImage(upic, cX + 190, cY + 60, 120, 120);
             else
@@ -362,7 +363,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
             g.DrawString("Bluetooth Verification", otherfont, silverboibush, cX + 140, cY + 270);
             Font statusfont = new Font("Arial", 11f, FontStyle.Italic);
             SolidBrush bluebsh = new SolidBrush(Color.FromArgb(100, 200, 255));
-            g.DrawString("Waiting...", statusfont, bluebsh, cX + 210, cY + 330);
+            g.DrawString(btStatus, statusfont, bluebsh, cX + 120, cY + 330);
            
             //end of gui for login
         }
@@ -504,7 +505,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
                     if (tobj.SymbolID == 0)
                     {
                         Image bgimg = Image.FromFile("background1.png");
-                        Image objimg = Image.FromFile("obj1.png");
+                        Image objimg = Image.FromFile("assets/objects/obj1.png");
                         ox = tobj.getScreenX(width);
                         oy = tobj.getScreenY(height);
                         g.DrawImage(bgimg, 0, 0, width, height);
@@ -519,7 +520,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
                     if (tobj.SymbolID == 1)
                     {
                         Image bgimg = Image.FromFile("background2.png");
-                        Image objimg = Image.FromFile("obj2.png");
+                        Image objimg = Image.FromFile("assets/objects/obj2.png");
                         ox = tobj.getScreenX(width);
                         oy = tobj.getScreenY(height);
                         g.DrawImage(bgimg, 0, 0, width, height);
@@ -534,7 +535,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
                     if (tobj.SymbolID == 2)
                     {
                         Image bgimg = Image.FromFile("background3.png");
-                        Image objimg = Image.FromFile("obj3.png");
+                        Image objimg = Image.FromFile("assets/objects/obj3.png");
                         ox = tobj.getScreenX(width);
                         oy = tobj.getScreenY(height);
                         g.DrawImage(bgimg, 0, 0, width, height);
