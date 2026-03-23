@@ -43,3 +43,13 @@ A:\CS MSA\Year 4 Term 2\HCI\project\project 2\TUIO11_NET-master\obj\Debug\TUIO_D
 A:\CS MSA\Year 4 Term 2\HCI\project\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.CoreCompileInputs.cache
 A:\CS MSA\Year 4 Term 2\HCI\project\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.exe
 A:\CS MSA\Year 4 Term 2\HCI\project\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.pdb
+E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\bin\Debug\TuioDemo.exe.config
+E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\bin\Debug\TuioDemo.exe
+E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\bin\Debug\TuioDemo.pdb
+E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.AssemblyReference.cache
+E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.exe.config
+E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.resources
+E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.GenerateResource.cache
+E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.CoreCompileInputs.cache
+E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.exe
+E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.pdb
