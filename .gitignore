@@ -1,3 +1,4 @@
+venv
 # Compiled source #
 ###################
 *.com
@@ -6,8 +7,7 @@
 *.o
 *.so
 *.pdb
-bin/
-obj/
+
 Help/
 TestResults/
 *.userprefs
