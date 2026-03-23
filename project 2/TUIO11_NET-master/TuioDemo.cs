@@ -98,7 +98,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 			client.connect();
 			Thread socketThread = new Thread(stream);
 			socketThread.IsBackground = true;
-			socketThread.Start();//this right here is to recive stuff from our python code: hand gestures anf facial recognition
+			socketThread.Start();//this right here is to recive stuff from our python code: hand gestures and facial recognition
     }
 
 		private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e) {
