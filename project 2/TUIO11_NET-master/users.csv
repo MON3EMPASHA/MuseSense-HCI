@@ -1,6 +1,6 @@
 name,age,gender,mac,Profile
-Ayad Zewail,999,non-binary,43:6F:AB:C8:FA:F6,assets/objects/obj1.png
-Youssef Abdulghany,12,female,54:C4:E5:20:E2:C8,assets/objects/obj2.png
-Mohamed Taha,21,male,9C:6B:72:01:A3:DA,assets/objects/obj3.png
-Abdelmonem Hatem,21,male,64:D0:D6:AE:32:C1,assets/objects/obj4.png
-Mohamed Ibrahim,21,male,AC:39:71:38:60:60,assets/objects/obj5.png
+Ayad Zewail,999,non-binary,43:6F:AB:C8:FA:F6,objects/obj1.png
+Youssef Abdulghany,12,female,54:C4:E5:20:E2:C8,objects/obj2.png
+Mohamed Taha,21,male,9C:6B:72:01:A3:DA,objects/obj3.png
+Abdelmonem Hatem,21,male,64:D0:D6:AE:32:C1,objects/obj4.png
+Mohamed Ibrahim,21,male,AC:39:71:38:60:60,objects/obj5.png

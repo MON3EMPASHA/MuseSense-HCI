@@ -45,3 +45,8 @@ TestResults/
 ehthumbs.db
 Icon?
 Thumbs.db
+
+# Visual Studio / build artifacts
+.vs/
+**/.vs/
+**/obj/
