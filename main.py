@@ -77,6 +77,72 @@ bluetooth_user_id = ""
 bluetooth_sent = False
 
 
+def _parse_discovered_device(entry):
+    """Normalize discover_devices tuple shapes into (addr, name)."""
+    if entry is None:
+        return "", ""
+
+    if isinstance(entry, tuple) or isinstance(entry, list):
+        if len(entry) >= 2:
+            addr = "" if entry[0] is None else str(entry[0]).strip()
+            name = "" if entry[1] is None else str(entry[1]).strip()
+            return addr, name
+        if len(entry) == 1:
+            addr = "" if entry[0] is None else str(entry[0]).strip()
+            return addr, ""
+
+    text = str(entry).strip()
+    return text, ""
+
+
+def _pick_best_bluetooth_device(entries):
+    """Pick the most useful discovery candidate (prefer named phones)."""
+    best_addr = ""
+    best_name = ""
+    best_score = -1
+
+    for entry in entries:
+        addr, name = _parse_discovered_device(entry)
+        if addr == "":
+            continue
+
+        normalized_name = name.strip()
+        has_name = normalized_name != "" and normalized_name.lower() != "unknown"
+        score = 0
+
+        # Named devices are much more useful than anonymous MAC-only hits.
+        if has_name:
+            score += 5
+
+        # Prefer realistic MAC addresses.
+        if addr.count(":") == 5:
+            score += 2
+
+        vendor_hint = normalized_name.lower()
+        if (
+            "samsung" in vendor_hint
+            or "galaxy" in vendor_hint
+            or "realme" in vendor_hint
+            or "xiaomi" in vendor_hint
+            or "iphone" in vendor_hint
+            or "pixel" in vendor_hint
+        ):
+            score += 1
+
+        if score > best_score:
+            best_score = score
+            best_addr = addr
+            best_name = normalized_name
+
+    if best_addr == "":
+        return ""
+
+    if best_name == "":
+        return best_addr + "|Unknown"
+
+    return best_addr + "|" + best_name
+
+
 def accept_client():
     global conn, bluetooth_sent, old_msg
     print(f"[SOCKET] Listening on {hostname}:{port}...")
@@ -114,27 +180,30 @@ threading.Thread(target=accept_client, daemon=True).start()
 
 def capture_bluetooth_user_id():
     if bluetooth is None:
-        return "unknown"
+        return ""
 
     try:
         print("Scanning for nearby devices...")
-        nearby_devices = bluetooth.discover_devices(duration=8, lookup_names=True)
+        try:
+            nearby_devices = bluetooth.discover_devices(duration=8, lookup_names=True, flush_cache=True)
+        except TypeError:
+            nearby_devices = bluetooth.discover_devices(duration=8, lookup_names=True)
         print(f"Found {len(nearby_devices)} devices.")
 
-        for addr, name in nearby_devices:
+        for entry in nearby_devices:
+            addr, name = _parse_discovered_device(entry)
             if name:
                 print(f"  Device Name: {name}, MAC Address: {addr}")
             else:
                 print(f"  Device Name: Unknown, MAC Address: {addr}")
 
-        if len(nearby_devices) > 0:
-            addr, name = nearby_devices[0]
-            device_name = name if name else "Unknown"
-            return str(addr) + "|" + str(device_name)
+        chosen = _pick_best_bluetooth_device(nearby_devices)
+        if chosen != "":
+            return chosen
     except Exception as e:
         print(f"[BLUETOOTH] Scan failed: {e}")
 
-    return "unknown"
+    return ""
 
 
 # Camera config
@@ -655,6 +724,8 @@ def bluetooth_worker():
             bluetooth_sent = False
             last_seen = scanned
             print(f"[BLUETOOTH] User ID: {bluetooth_user_id}")
+        elif scanned == "":
+            print("[BLUETOOTH] No usable device detected in this scan window.")
 
         time.sleep(8)
 
