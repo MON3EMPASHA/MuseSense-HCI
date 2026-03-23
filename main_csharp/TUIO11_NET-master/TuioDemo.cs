@@ -2049,25 +2049,30 @@ public class TuioDemo : Form, TuioListener
     private void SocketThread()
     {
         // python C# bridge thread where it keeps listening and reconnects automatically.
-        while(true)
+        while (true)
         {
-            TcpClient tcp=null; NetworkStream ns=null;
+            TcpClient tcp = null;
+            NetworkStream ns = null;
             try
             {
-                tcp=new TcpClient("localhost",5000); ns=tcp.GetStream();
+                tcp = new TcpClient("localhost", 5000);
+                ns = tcp.GetStream();
                 SetPyStatus(true);
-                byte[] buf=new byte[1024];
+                byte[] buf = new byte[1024];
 
                 // buffer and split on newline because python sends newline-delimited messages.
                 StringBuilder pending = new StringBuilder();
-                while(true)
+                while (true)
                 {
-                    int n=ns.Read(buf,0,buf.Length);
-                    if(n<=0)break;
+                    int n = ns.Read(buf, 0, buf.Length);
+                    if (n <= 0)
+                    {
+                        break;
+                    }
 
-                    pending.Append(Encoding.UTF8.GetString(buf,0,n));
+                    pending.Append(Encoding.UTF8.GetString(buf, 0, n));
 
-                    while(true)
+                    while (true)
                     {
                         string current = pending.ToString();
                         int cut = current.IndexOf('\n');
@@ -2083,8 +2088,35 @@ public class TuioDemo : Form, TuioListener
                 string tail = pending.ToString().Trim();
                 if (!string.IsNullOrEmpty(tail)) HandleMsg(tail);
             }
-            catch{}
-            finally{if(ns!=null)try{ns.Close();}catch{}if(tcp!=null)try{tcp.Close();}catch{}}
+            catch (Exception ex)
+            {
+                Console.WriteLine("[PY SOCKET] " + ex.Message);
+            }
+            finally
+            {
+                if (ns != null)
+                {
+                    try
+                    {
+                        ns.Close();
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (tcp != null)
+                {
+                    try
+                    {
+                        tcp.Close();
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+
             SetPyStatus(false);
             Thread.Sleep(2000);
         }

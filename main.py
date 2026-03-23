@@ -5,7 +5,6 @@ import socket
 import threading
 import json
 import os
-import importlib
 import time
 from urllib.parse import urlparse, urlunparse
 
@@ -15,22 +14,23 @@ TemplateClass = None
 PointClass = None
 
 try:
-    face_recognition = importlib.import_module("face_recognition")
+    import face_recognition
 except Exception:
     face_recognition = None
 
 try:
-    dollarpy_module = importlib.import_module("dollarpy")
-    RecognizerClass = dollarpy_module.Recognizer
-    TemplateClass = dollarpy_module.Template
-    PointClass = dollarpy_module.Point
+    from dollarpy import Point, Recognizer, Template
+
+    RecognizerClass = Recognizer
+    TemplateClass = Template
+    PointClass = Point
 except Exception:
     RecognizerClass = None
     TemplateClass = None
     PointClass = None
 
 try:
-    bluetooth = importlib.import_module("bluetooth")
+    import bluetooth
 except Exception:
     bluetooth = None
 
