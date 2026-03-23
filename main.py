@@ -6,6 +6,7 @@ import threading
 import json
 import os
 import time
+import re
 from urllib.parse import urlparse, urlunparse
 
 face_recognition = None
@@ -38,7 +39,32 @@ except Exception:
 print("[INIT] Starting MuseSense...")
 
 
-# Socket 
+def resolve_mediapipe_solutions():
+    try:
+        return mp.solutions
+    except Exception:
+        pass
+
+    try:
+        from mediapipe.python import solutions as mp_solutions
+
+        return mp_solutions
+    except Exception:
+        return None
+
+
+mp_solutions = resolve_mediapipe_solutions()
+if mp_solutions is None:
+    print("[ERROR] Incompatible MediaPipe install: 'solutions' API not available.")
+    print("[ERROR] Install a compatible build, e.g. pip install mediapipe==0.10.14")
+    raise SystemExit
+
+mp_holistic = mp_solutions.holistic
+mp_drawing = mp_solutions.drawing_utils
+mp_drawing_styles = mp_solutions.drawing_styles
+
+
+# Socket
 soc = socket.socket()
 soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 hostname = "localhost"
@@ -128,7 +154,7 @@ def load_camera_config(path):
     }
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             user_cfg = json.load(f)
         if isinstance(user_cfg, dict):
             default_cfg.update(user_cfg)
@@ -326,36 +352,137 @@ except Exception as e:
 
 
 # Face persistence
-FACES_FILE = "faces/users.json"
-os.makedirs("faces", exist_ok=True)
+USERS_FILE = "users.json"
+USERS_IMAGES_DIR = "users"
+os.makedirs(USERS_IMAGES_DIR, exist_ok=True)
 
 known_face_encodings = []
 known_face_names = []
+user_profiles = {}
+last_saved_image_time = {}
 
 
-def find_next_person_id(names):
-    max_id = 0
-    for name in names:
-        if isinstance(name, str) and name.startswith("Person "):
-            suffix = name.replace("Person ", "").strip()
-            if suffix.isdigit():
-                max_id = max(max_id, int(suffix))
-    return max_id + 1
+def sanitize_user_folder_name(name):
+    # Keep folder names cross-platform safe while preserving readable identity.
+    cleaned = re.sub(r"[<>:\"/\\|?*]", "_", str(name)).strip()
+    return cleaned if cleaned != "" else "unknown"
+
+
+def normalize_favourites(raw_values):
+    if not isinstance(raw_values, list):
+        return []
+
+    output = []
+    for value in raw_values:
+        if not isinstance(value, str):
+            continue
+        text = value.strip()
+        if text != "" and text not in output:
+            output.append(text)
+    return output
+
+
+def normalize_image_paths(raw_values):
+    if not isinstance(raw_values, list):
+        return []
+
+    output = []
+    for value in raw_values:
+        if not isinstance(value, str):
+            continue
+        path = value.strip().replace("\\", "/")
+        if path != "" and path not in output:
+            output.append(path)
+    return output
+
+
+def ensure_profile_record(name):
+    if name not in user_profiles:
+        user_profiles[name] = {
+            "name": name,
+            "favourites": [],
+            "images": [],
+        }
+    return user_profiles[name]
+
+
+def ensure_user_image_folder(name):
+    folder_name = sanitize_user_folder_name(name)
+    user_dir = os.path.join(USERS_IMAGES_DIR, folder_name)
+    os.makedirs(user_dir, exist_ok=True)
+    return user_dir
+
+
+def maybe_save_user_image(name, frame, box, interval_seconds):
+    if name == "" or name.lower() == "unknown" or box is None:
+        return False
+
+    now = time.time()
+    last = last_saved_image_time.get(name, 0.0)
+    if (now - last) < interval_seconds:
+        return False
+
+    left, top, right, bottom = box
+    h, w = frame.shape[:2]
+    left = max(0, min(left, w - 1))
+    right = max(0, min(right, w))
+    top = max(0, min(top, h - 1))
+    bottom = max(0, min(bottom, h))
+
+    if right <= left or bottom <= top:
+        return False
+
+    crop = frame[top:bottom, left:right]
+    if crop.size == 0:
+        return False
+
+    user_dir = ensure_user_image_folder(name)
+    file_name = time.strftime("%Y%m%d_%H%M%S") + ".jpg"
+    abs_path = os.path.join(user_dir, file_name)
+
+    if not cv2.imwrite(abs_path, crop):
+        return False
+
+    rel_path = os.path.relpath(abs_path, ".").replace("\\", "/")
+    profile = ensure_profile_record(name)
+    images = profile.get("images", [])
+    if rel_path not in images:
+        images.append(rel_path)
+        profile["images"] = images
+
+    last_saved_image_time[name] = now
+    return True
 
 
 def load_known_faces():
-    if not os.path.exists(FACES_FILE):
+    if not os.path.exists(USERS_FILE):
         return
 
     try:
-        with open(FACES_FILE, "r", encoding="utf-8") as f:
+        with open(USERS_FILE, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
+
+        if not isinstance(data, list):
+            data = []
 
         for item in data:
             if not isinstance(item, dict):
                 continue
 
-            name = item.get("name", "")
+            name = str(item.get("name", "")).strip()
+            if name == "":
+                continue
+
+            profile = ensure_profile_record(name)
+            profile["favourites"] = normalize_favourites(
+                item.get(
+                    "favourites", item.get("favorites", profile.get("favourites", []))
+                )
+            )
+            profile["images"] = normalize_image_paths(
+                item.get("images", item.get("image_paths", profile.get("images", [])))
+            )
+
             encoding = item.get("encoding")
 
             if encoding is None:
@@ -365,35 +492,46 @@ def load_known_faces():
                 encoding = item.get("encoding_fn")
 
             if isinstance(encoding, list) and len(encoding) == 128:
+                profile["encoding"] = encoding
                 known_face_names.append(name)
                 known_face_encodings.append(np.array(encoding))
 
-        print(f"[FACES] Loaded {len(known_face_names)} face(s) from {FACES_FILE}")
+        print(f"[FACES] Loaded {len(known_face_names)} face(s) from {USERS_FILE}")
 
     except Exception as e:
         print(f"[FACES] Load failed: {e}")
 
 
 def save_known_faces():
-    data = []
     for name, encoding in zip(known_face_names, known_face_encodings):
-        data.append({"name": name, "encoding": encoding.tolist()})
+        profile = ensure_profile_record(name)
+        profile["encoding"] = encoding.tolist()
+
+    data = []
+    for name, profile in user_profiles.items():
+        item = {
+            "name": name,
+            "favourites": normalize_favourites(profile.get("favourites", [])),
+            "images": normalize_image_paths(profile.get("images", [])),
+        }
+
+        encoding = profile.get("encoding")
+        if isinstance(encoding, list) and len(encoding) == 128:
+            item["encoding"] = encoding
+        data.append(item)
 
     try:
-        with open(FACES_FILE, "w", encoding="utf-8") as f:
+        with open(USERS_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
     except Exception as e:
         print(f"[FACES] Save failed: {e}")
 
 
 load_known_faces()
-next_person_id = find_next_person_id(known_face_names)
 
 
 # MediaPipe Holistic
-mp_holistic = mp.solutions.holistic
-mp_drawing = mp.solutions.drawing_utils
-mp_drawing_styles = mp.solutions.drawing_styles
+# Already resolved at startup.
 
 
 # Main loop
@@ -412,20 +550,13 @@ if FACE_TOLERANCE < 0.35:
 if FACE_TOLERANCE > 0.7:
     FACE_TOLERANCE = 0.7
 
-NEW_FACE_REQUIRED_HITS = int(camera_cfg.get("new_face_required_hits", 3))
-if NEW_FACE_REQUIRED_HITS < 1:
-    NEW_FACE_REQUIRED_HITS = 1
-if NEW_FACE_REQUIRED_HITS > 6:
-    NEW_FACE_REQUIRED_HITS = 6
-
-PENDING_FACE_TOLERANCE = float(camera_cfg.get("pending_face_tolerance", 0.42))
-if PENDING_FACE_TOLERANCE < 0.25:
-    PENDING_FACE_TOLERANCE = 0.25
-if PENDING_FACE_TOLERANCE > 0.6:
-    PENDING_FACE_TOLERANCE = 0.6
-
-pending_face_encoding = None
-pending_face_hits = 0
+USER_IMAGE_SAVE_INTERVAL_SEC = float(
+    camera_cfg.get("user_image_save_interval_sec", 15.0)
+)
+if USER_IMAGE_SAVE_INTERVAL_SEC < 3.0:
+    USER_IMAGE_SAVE_INTERVAL_SEC = 3.0
+if USER_IMAGE_SAVE_INTERVAL_SEC > 300.0:
+    USER_IMAGE_SAVE_INTERVAL_SEC = 300.0
 POSE_IDS = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24]
 MOVEMENT_WINDOW_FRAMES = 20
 
@@ -558,7 +689,9 @@ with mp_holistic.Holistic(
             frame = cv2.flip(frame, 1)
 
         if processing_scale < 0.999:
-            proc_frame = cv2.resize(frame, (0, 0), fx=processing_scale, fy=processing_scale)
+            proc_frame = cv2.resize(
+                frame, (0, 0), fx=processing_scale, fy=processing_scale
+            )
         else:
             proc_frame = frame
 
@@ -591,53 +724,30 @@ with mp_holistic.Holistic(
                     int(bottom * box_scale),
                 )
 
-                name = ""
+                name = "unknown"
                 if len(known_face_encodings) > 0:
                     # Compare with saved users and pick the best known match.
-                    distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+                    distances = face_recognition.face_distance(
+                        known_face_encodings, face_encoding
+                    )
                     best_index = int(np.argmin(distances))
                     if distances[best_index] < FACE_TOLERANCE:
                         name = known_face_names[best_index]
 
-                if name == "":
-                    # Avoid adding a new person from one noisy frame.
-                    if pending_face_encoding is None:
-                        pending_face_encoding = face_encoding
-                        pending_face_hits = 1
-                    else:
-                        distance_to_pending = face_recognition.face_distance(
-                            [pending_face_encoding], face_encoding
-                        )[0]
+                current_name = name
+                last_face_seen_frame = frame_count
+                msg = "face:detected:" + current_name
 
-                        if distance_to_pending < PENDING_FACE_TOLERANCE:
-                            pending_face_hits += 1
-                        else:
-                            pending_face_encoding = face_encoding
-                            pending_face_hits = 1
-
-                    if pending_face_hits >= NEW_FACE_REQUIRED_HITS:
-                        # New identity path: Person N, then increment for next user.
-                        name = "Person " + str(next_person_id)
-                        next_person_id += 1
-                        known_face_names.append(name)
-                        known_face_encodings.append(face_encoding)
-
+                if name != "unknown":
+                    image_saved = maybe_save_user_image(
+                        name,
+                        frame,
+                        current_box,
+                        USER_IMAGE_SAVE_INTERVAL_SEC,
+                    )
+                    if image_saved:
                         save_known_faces()
-                        pending_face_encoding = None
-                        pending_face_hits = 0
-                        print(f"[FACE] New user added: {name}")
-                else:
-                    pending_face_encoding = None
-                    pending_face_hits = 0
-
-                if name != "":
-                    # user profile send recognized user to C# UI.
-                    current_name = name
-                    last_face_seen_frame = frame_count
-                    msg = "face:detected:" + current_name
             else:
-                pending_face_encoding = None
-                pending_face_hits = 0
                 if (
                     last_face_seen_frame >= 0
                     and (frame_count - last_face_seen_frame) >= FACE_LOST_FRAMES
@@ -651,7 +761,9 @@ with mp_holistic.Holistic(
                 send_socket_message(msg)
                 old_msg = msg
 
-        run_holistic = cached_results is None or (frame_count % holistic_every_n_frames == 0)
+        run_holistic = cached_results is None or (
+            frame_count % holistic_every_n_frames == 0
+        )
         if run_holistic:
             cached_results = holistic.process(rgb)
 

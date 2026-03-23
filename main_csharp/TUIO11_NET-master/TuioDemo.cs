@@ -380,7 +380,6 @@ public class TuioDemo : Form, TuioListener
     private string loggedInName = "";
     private List<int> userFavourites = new List<int>();
     private string usersJsonPath = "";
-    private string favouritesJsonPath = "";
 
     // 3D
     private Dictionary<int,ObjModel> modelCache = new Dictionary<int,ObjModel>();
@@ -525,12 +524,12 @@ public class TuioDemo : Form, TuioListener
     private void LoadUsers()
     {
         string[] cands = {
-            Path.Combine("faces","users.json"),
-            Path.Combine(Application.StartupPath,"faces","users.json"),
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"faces","users.json"),
-            Path.Combine("..","..","faces","users.json"),
-            Path.Combine("..","..","..","faces","users.json"),
-            Path.Combine("..","..","..","..","faces","users.json")
+            Path.Combine("users.json"),
+            Path.Combine(Application.StartupPath,"users.json"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"users.json"),
+            Path.Combine("..","..","users.json"),
+            Path.Combine("..","..","..","users.json"),
+            Path.Combine("..","..","..","..","users.json")
         };
 
         usersJsonPath = "";
@@ -551,57 +550,6 @@ public class TuioDemo : Form, TuioListener
             if (!File.Exists(usersJsonPath)) File.WriteAllText(usersJsonPath, "[]");
         }
         catch { }
-
-        ResolveFavouritesPath();
-        LoadFavouriteStore();
-    }
-
-    private void ResolveFavouritesPath()
-    {
-        string[] cands = {
-            Path.Combine("faces", "favorites.json"),
-            Path.Combine(Application.StartupPath, "faces", "favorites.json"),
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "faces", "favorites.json"),
-            Path.Combine("..", "..", "faces", "favorites.json"),
-            Path.Combine("..", "..", "..", "faces", "favorites.json")
-        };
-
-        favouritesJsonPath = "";
-        foreach (string p in cands)
-            if (File.Exists(p))
-            {
-                favouritesJsonPath = p;
-                break;
-            }
-
-        if (string.IsNullOrEmpty(favouritesJsonPath)) favouritesJsonPath = cands[0];
-    }
-
-    private void LoadFavouriteStore()
-    {
-        if (string.IsNullOrEmpty(favouritesJsonPath) || !File.Exists(favouritesJsonPath)) return;
-
-        List<UserRecord> storedFavourites;
-        try
-        {
-            storedFavourites = TinyJson.ParseUsers(File.ReadAllText(favouritesJsonPath));
-        }
-        catch
-        {
-            return;
-        }
-
-        foreach (UserRecord user in users)
-            user.Favourites.Clear();
-
-        foreach (UserRecord storedUser in storedFavourites)
-        {
-            UserRecord targetUser = GetOrCreateUserRecord(storedUser.Name);
-            targetUser.Favourites.Clear();
-            foreach (string favouriteName in storedUser.Favourites)
-                if (!targetUser.Favourites.Exists(delegate(string value) { return value.Equals(favouriteName, StringComparison.OrdinalIgnoreCase); }))
-                    targetUser.Favourites.Add(favouriteName);
-        }
     }
 
     private void SetLoggedInUser(string name)
@@ -665,6 +613,12 @@ public class TuioDemo : Form, TuioListener
         return false;
     }
 
+    private bool IsUnknownFaceName(string name)
+    {
+        return string.IsNullOrWhiteSpace(name)
+            || name.Equals("unknown", StringComparison.OrdinalIgnoreCase);
+    }
+
     private string ParseBluetoothUserName(string btId)
     {
         if (string.IsNullOrWhiteSpace(btId)) return "";
@@ -699,7 +653,7 @@ public class TuioDemo : Form, TuioListener
         bluetoothWelcomeUntil = DateTime.Now.AddSeconds(6);
 
         // If face is already known, keep the face name as active user.
-        if (faceDetected && !string.IsNullOrWhiteSpace(lastFaceName))
+        if (faceDetected && !IsUnknownFaceName(lastFaceName))
             SetLoggedInUser(lastFaceName);
         UpdateSessionStatusLabel();
         Invalidate();
@@ -711,6 +665,19 @@ public class TuioDemo : Form, TuioListener
         lastFaceRawName = name == null ? "" : name.Trim();
 
         faceDetected = true;
+        if (string.IsNullOrWhiteSpace(lastFaceRawName) || lastFaceRawName.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+        {
+            lastFaceName = "unknown";
+            loggedInName = "";
+            userFavourites.Clear();
+            if (currentScreen == AppScreen.Favourites)
+                GoTo(AppScreen.Explore, -1, false, false);
+            UpdateRenameFaceButton();
+            UpdateFaceLabel(true, lastFaceName);
+            UpdateSessionStatusLabel();
+            return;
+        }
+
         // UI rename map: show custom name without changing the incoming raw socket label.
         if (!string.IsNullOrEmpty(lastFaceRawName) && faceNameOverrides.ContainsKey(lastFaceRawName))
             lastFaceName = faceNameOverrides[lastFaceRawName];
@@ -727,7 +694,7 @@ public class TuioDemo : Form, TuioListener
         }
 
         // With Bluetooth unlocked, face name becomes the visible session identity.
-        if (!string.IsNullOrWhiteSpace(lastFaceName))
+        if (!IsUnknownFaceName(lastFaceName))
             SetLoggedInUser(lastFaceName);
 
         UpdateFaceLabel(true, lastFaceName);
@@ -765,11 +732,16 @@ public class TuioDemo : Form, TuioListener
             text = "Session: Bluetooth unlocked (waiting face)";
             color = Color.Khaki;
         }
-        else if (!string.IsNullOrWhiteSpace(lastFaceName))
+        else if (!IsUnknownFaceName(lastFaceName))
         {
             // Any detected face after Bluetooth unlock is treated as confirmed.
             text = "Session: Confirmed (Bluetooth + Face)";
             color = Color.LightGreen;
+        }
+        else if (faceDetected)
+        {
+            text = "Session: Unknown face (not registered)";
+            color = Color.OrangeRed;
         }
         else
         {
@@ -862,7 +834,7 @@ public class TuioDemo : Form, TuioListener
         if (!RenameFaceIdentityInStore(lastFaceRawName, newName))
         {
             MessageBox.Show(this,
-                "Could not save the new name to faces/users.json.",
+                "Could not save the new name to users.json.",
                 "Rename Failed",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
@@ -898,12 +870,12 @@ public class TuioDemo : Form, TuioListener
             if (string.IsNullOrWhiteSpace(targetPath) || !File.Exists(targetPath))
             {
                 string[] cands = {
-                    Path.Combine("faces","users.json"),
-                    Path.Combine(Application.StartupPath,"faces","users.json"),
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"faces","users.json"),
-                    Path.Combine("..","..","faces","users.json"),
-                    Path.Combine("..","..","..","faces","users.json"),
-                    Path.Combine("..","..","..","..","faces","users.json")
+                    Path.Combine("users.json"),
+                    Path.Combine(Application.StartupPath,"users.json"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"users.json"),
+                    Path.Combine("..","..","users.json"),
+                    Path.Combine("..","..","..","users.json"),
+                    Path.Combine("..","..","..","..","users.json")
                 };
 
                 foreach (string p in cands)
@@ -941,10 +913,13 @@ public class TuioDemo : Form, TuioListener
 
     private bool SaveFavourites()
     {
-        // profile lists write per-user favourites to JSON.
+        // Persist favourites in root users.json alongside other user profile fields.
         try
         {
-            string json = File.Exists(favouritesJsonPath) ? File.ReadAllText(favouritesJsonPath) : "[]";
+            string targetPath = usersJsonPath;
+            if (string.IsNullOrWhiteSpace(targetPath)) targetPath = "users.json";
+
+            string json = File.Exists(targetPath) ? File.ReadAllText(targetPath) : "[]";
             JavaScriptSerializer serializer = new JavaScriptSerializer();
             object root = serializer.DeserializeObject(json);
             object[] items = root as object[];
@@ -983,9 +958,10 @@ public class TuioDemo : Form, TuioListener
             }
 
             targetRecord["favourites"] = savedFavourites;
-            string dir = Path.GetDirectoryName(favouritesJsonPath);
+            string dir = Path.GetDirectoryName(targetPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            File.WriteAllText(favouritesJsonPath, serializer.Serialize(records));
+            File.WriteAllText(targetPath, serializer.Serialize(records));
+            usersJsonPath = targetPath;
             return true;
         }
         catch
@@ -1034,7 +1010,7 @@ public class TuioDemo : Form, TuioListener
             currentUser.Favourites.RemoveAll(delegate(string favourite) { return favourite.Equals(artifactName, StringComparison.OrdinalIgnoreCase); });
             userFavourites.Remove(artifactID);
             MessageBox.Show(this,
-            "The favourite could not be saved to favorites.json.",
+            "The favourite could not be saved to users.json.",
                 "Save Failed",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
@@ -1219,7 +1195,7 @@ public class TuioDemo : Form, TuioListener
 
         string welcome = "Welcome back";
         string welcomeName = "";
-        if (!string.IsNullOrWhiteSpace(lastFaceName)) welcomeName = lastFaceName;
+        if (!IsUnknownFaceName(lastFaceName)) welcomeName = lastFaceName;
         else if (!string.IsNullOrWhiteSpace(loggedInName) && !IsGenericBluetoothSessionName(loggedInName)) welcomeName = loggedInName;
         if (!string.IsNullOrWhiteSpace(welcomeName)) welcome += ", " + welcomeName;
 
