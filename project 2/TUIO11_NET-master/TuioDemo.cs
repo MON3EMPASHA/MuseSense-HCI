@@ -1092,8 +1092,8 @@ public class TuioDemo : Form , TuioListener
         if (!tuioMarker100Visible) return;
 
         // Menu configuration
-        int centerX = screenWidth - clientSize.Width / 2;
-        int centerY = screenHeight - clientSize.Height / 2;
+        int centerX = screenWidth - this.ClientSize.Width / 2;
+        int centerY = screenHeight - this.ClientSize.Height / 2;
         int radius = 90; 
         int itemSize = 80;
         int imageSize = 60;
