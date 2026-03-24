@@ -39,6 +39,35 @@ public class TuioDemo : Form , TuioListener
         SolidBrush cardBsh = new SolidBrush(Color.FromArgb(30, 30, 60)); 
         string uname = "Visitor";
         Image upic = null;
+        
+        // setting default colors and different gender colors
+        private struct ColorTheme
+        {
+            public Color backgroundDark;
+            public Color cardBackground;
+            public Color accentLight; 
+            public Color accentBubble;
+            public Color avatarBackground;
+        }
+        
+        private ColorTheme maleTheme = new ColorTheme
+        {
+            backgroundDark = Color.FromArgb(0, 0, 64),
+            cardBackground = Color.FromArgb(30, 30, 60),
+            accentLight = Color.FromArgb(100, 200, 255),
+            accentBubble = Color.FromArgb(64, 64, 64),
+            avatarBackground = Color.FromArgb(80, 80, 120)
+        };
+        
+        private ColorTheme femaleTheme = new ColorTheme
+        {
+            backgroundDark = Color.FromArgb(64, 20, 40),
+            cardBackground = Color.FromArgb(80, 30, 60),
+            accentLight = Color.FromArgb(255, 150, 200),
+            accentBubble = Color.FromArgb(100, 40, 80),
+            avatarBackground = Color.FromArgb(120, 60, 90)
+        };
+        
         private TuioClient client;
 		private Dictionary<long,TuioObject> objectList;
 		private Dictionary<long,TuioCursor> cursorList;
@@ -57,7 +86,10 @@ public class TuioDemo : Form , TuioListener
 
 		Font font = new Font("Arial", 10.0f);
 		SolidBrush fntBrush = new SolidBrush(Color.White);
-		SolidBrush bgrBrush = new SolidBrush(Color.FromArgb(0,0,64));
+		SolidBrush bgrBrush = new SolidBrush(Color.FromArgb(0,0,64));       // changes by gender
+		SolidBrush cardBsh_dynamic = new SolidBrush(Color.FromArgb(30, 30, 60));
+		SolidBrush accentBrush = new SolidBrush(Color.FromArgb(100, 200, 255));
+		SolidBrush avatarBrush = new SolidBrush(Color.FromArgb(80, 80, 120));
 		SolidBrush curBrush = new SolidBrush(Color.FromArgb(192, 0, 192));
 		SolidBrush objBrush = new SolidBrush(Color.FromArgb(64, 0, 0));
 		SolidBrush blbBrush = new SolidBrush(Color.FromArgb(64, 64, 64));
@@ -497,6 +529,25 @@ public class TuioDemo : Form , TuioListener
         return result;
     }
 
+    // gui color is blue if gender is male pink if female
+    private void SetThemeByGender(string gender)
+    {
+        ColorTheme selectedTheme = maleTheme;
+        
+        if (!string.IsNullOrEmpty(gender) && gender.ToLower() == "female")
+        {
+            selectedTheme = femaleTheme;
+        }
+        
+        bgrBrush.Color = selectedTheme.backgroundDark;
+        cardBsh.Color = selectedTheme.cardBackground;
+        accentBrush.Color = selectedTheme.accentLight;
+        avatarBrush.Color = selectedTheme.avatarBackground;
+        blbBrush.Color = selectedTheme.accentBubble;
+        
+        Console.WriteLine($"Theme applied: {gender ?? "male"} ({(gender?.ToLower() == "female" ? "PINK" : "BLUE")})");
+    }
+
     // find the real image path from objPath field in json
     string ResolveArtifactAssetPath(string relativePath)
     {
@@ -525,7 +576,7 @@ public class TuioDemo : Form , TuioListener
         return relativePath;
     }
 
-    // Update menu selection based on TUIO marker rotation
+    // update menu selection based on TUIO marker rotation
     void UpdateMenuSelectionFromRotation(double angleRadians)
     {
         // convert the radians to degrees formula 
@@ -632,6 +683,17 @@ public class TuioDemo : Form , TuioListener
 
             login = 1;
             btStatus = "Matched";
+            
+            // change theme by gender
+            if (currentUser != null)
+            {
+                SetThemeByGender(currentUser.gender);
+            }
+            else if (!string.IsNullOrEmpty(payload.gender))
+            {
+                SetThemeByGender(payload.gender);
+            }
+            
             return true;
         }
         catch (Exception ex)
@@ -685,6 +747,12 @@ public class TuioDemo : Form , TuioListener
                     login = 1;
                     btStatus = "Matched";
                     currentUser = GetUserByName(uname);
+                    
+                    // load different theme based on context
+                    if (currentUser != null)
+                    {
+                        SetThemeByGender(currentUser.gender);
+                    }
                 }
                 else
                 {
@@ -747,20 +815,18 @@ public class TuioDemo : Form , TuioListener
             int cY = (this.ClientSize.Height - ch) / 2;
            
             g.FillRectangle(cardBsh, cX, cY, cw, ch);
-            SolidBrush avatarBrsh = new SolidBrush(Color.FromArgb(80, 80, 120));
-            g.FillEllipse(avatarBrsh, cX + 190, cY + 60, 120, 120);
+            g.FillEllipse(avatarBrush, cX + 190, cY + 60, 120, 120);
             Font hellofont = new Font("Arial", 22f, FontStyle.Bold);
             if (upic != null)
                 g.DrawImage(upic, cX + 190, cY + 60, 120, 120);
             else
-                g.FillEllipse(avatarBrsh, cX + 190, cY + 60, 120, 120);
+                g.FillEllipse(avatarBrush, cX + 190, cY + 60, 120, 120);
             g.DrawString("Hello, " + uname, hellofont, fntBrush, cX + 150, cY + 210);
             Font otherfont = new Font("Arial", 13f);
             SolidBrush silverboibush = new SolidBrush(Color.Silver);
             g.DrawString("Bluetooth Verification", otherfont, silverboibush, cX + 140, cY + 270);
             Font statusfont = new Font("Arial", 11f, FontStyle.Italic);
-            SolidBrush bluebsh = new SolidBrush(Color.FromArgb(100, 200, 255));
-            g.DrawString(btStatus, statusfont, bluebsh, cX + 120, cY + 330);
+            g.DrawString(btStatus, statusfont, accentBrush, cX + 120, cY + 330);
            
             //end of gui for login
         }
@@ -776,7 +842,7 @@ public class TuioDemo : Form , TuioListener
             if (upic != null)
                 g.DrawImage(upic, 60, 90, 100, 100);
             else
-                g.FillEllipse(new SolidBrush(Color.FromArgb(80, 80, 120)), 60, 90, 100, 100);
+                g.FillEllipse(avatarBrush, 60, 90, 100, 100);
 
             g.DrawString(selectedCountry, new Font("Arial", 28f, FontStyle.Bold), fntBrush, this.ClientSize.Width / 2 - 60, 50);
             g.DrawString("Swipe Left/Right to change country  |  Scan marker to view artifact", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), 40, this.ClientSize.Height - 40);
@@ -938,7 +1004,7 @@ public class TuioDemo : Form , TuioListener
             if (upic != null)
                 g.DrawImage(upic, 60, 90, 100, 100);
             else
-                g.FillEllipse(new SolidBrush(Color.FromArgb(80, 80, 120)), 60, 90, 100, 100);
+                g.FillEllipse(avatarBrush, 60, 90, 100, 100);
             g.DrawString("Hello, " + uname, new Font("Arial", 20f, FontStyle.Bold), fntBrush, 40, 30);
 
             // Navigation hints
