@@ -286,11 +286,11 @@ public class TuioDemo : Form , TuioListener
                 // Navigate to the selected menu item
                 if (selectedMenuItem >= 0 && selectedMenuItem < 3)
                 {
-                    currentCountry = selectedMenuItem; // 0=Egypt, 1=China, 2=Europe
+                    GoToCountryPage(selectedMenuItem); // 0=Egypt, 1=China, 2=Europe
                 }
                 else if (selectedMenuItem == 3)
                 {
-                    page = 6; // Go to Favorites page
+                    GoToFavoritesPage(); // Go to Favorites page using users.json data
                 }
                 
                 selectedMenuItem = -1;
@@ -513,6 +513,21 @@ public class TuioDemo : Form , TuioListener
         return false;
     }
 
+    // Reload users.json and refresh the logged-in user's record.
+    bool RefreshCurrentUserFromUsersFile()
+    {
+        LoadUsers();
+
+        if (string.IsNullOrWhiteSpace(uname) || uname == "Visitor")
+        {
+            currentUser = null;
+            return false;
+        }
+
+        currentUser = GetUserByName(uname);
+        return currentUser != null;
+    }
+
     // remove artifact from user's favorites
     void RemoveArtifactFromFavorites(int artifactId)
     {
@@ -675,6 +690,44 @@ public class TuioDemo : Form , TuioListener
         selectedArtifactId = artifact.id;
         artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
         page = 5;
+        Invalidate();
+    }
+
+    void GoToFavoritesPage()
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke((MethodInvoker)delegate
+            {
+                RefreshCurrentUserFromUsersFile();
+                favoritesPageIndex = 0;
+                page = 6;
+                Invalidate();
+            });
+            return;
+        }
+
+        RefreshCurrentUserFromUsersFile();
+        favoritesPageIndex = 0;
+        page = 6;
+        Invalidate();
+    }
+
+    void GoToCountryPage(int countryIndex)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke((MethodInvoker)delegate
+            {
+                currentCountry = countryIndex;
+                page = 0;  // Set to non-5/non-6 page to trigger country render
+                Invalidate();
+            });
+            return;
+        }
+
+        currentCountry = countryIndex;
+        page = 0;  // Set to non-5/non-6 page to trigger country render
         Invalidate();
     }
 
@@ -881,7 +934,7 @@ public class TuioDemo : Form , TuioListener
             //end of gui for login
         }
         // After login: show country artifacts grid
-        else if (uname != "Visitor" && page != 5)
+        else if (uname != "Visitor" && page != 5 && page != 6)
         {
             // Get current country name and its artifacts
             string selectedCountry = countries[currentCountry];
@@ -1001,8 +1054,20 @@ public class TuioDemo : Form , TuioListener
         // favorites page
         else if (page == 6)
         {
-            // Title
-            g.DrawString("My Favorites", new Font("Arial", 28f, FontStyle.Bold), fntBrush, 50, 30);
+            RefreshCurrentUserFromUsersFile();
+
+            // Header layout similar to country screen
+            g.DrawString("Hello, " + uname, new Font("Arial", 20f, FontStyle.Bold), fntBrush, 40, 30);
+            if (upic != null)
+                g.DrawImage(upic, 60, 90, 100, 100);
+            else
+                g.FillEllipse(avatarBrush, 60, 90, 100, 100);
+
+            Font titleFont = new Font("Arial", 28f, FontStyle.Bold);
+            string title = "My Favorites";
+            SizeF titleSize = g.MeasureString(title, titleFont);
+            float titleX = (this.ClientSize.Width - titleSize.Width) / 2f;
+            g.DrawString(title, titleFont, fntBrush, titleX, 50);
 
             // Check if user is logged in
             if (currentUser == null || currentUser.favorites == null || currentUser.favorites.Count == 0)
@@ -1012,50 +1077,52 @@ public class TuioDemo : Form , TuioListener
             }
             else
             {
-                // Display favorite artifacts
-                int cW = 280, cH = 350, gap = 30;
-                int startX = 50;
-                int startY = 120;
-                int itemsPerRow = (this.ClientSize.Width - 80) / (cW + gap);
-                
+                // Build list from users.json favorite IDs, then draw in centered grid.
+                List<ArtifactRecord> favoriteArtifacts = new List<ArtifactRecord>();
                 for (int i = 0; i < currentUser.favorites.Count; i++)
                 {
                     int artifactId = currentUser.favorites[i];
                     ArtifactRecord artifact = GetArtifactById(artifactId);
-                    
-                    if (artifact != null)
+                    if (artifact != null) favoriteArtifacts.Add(artifact);
+                }
+
+                int cardW = 280;
+                int cardH = 280;
+                int gap = 30;
+                int colsPerRow = 3;
+                int totalWidth = (cardW + gap) * colsPerRow;
+                int startX = (this.ClientSize.Width - totalWidth) / 2;
+                int startY = 130;
+
+                for (int i = 0; i < favoriteArtifacts.Count; i++)
+                {
+                    ArtifactRecord artifact = favoriteArtifacts[i];
+                    int col = i % colsPerRow;
+                    int row = i / colsPerRow;
+                    int x = startX + col * (cardW + gap);
+                    int y = startY + row * (cardH + gap + 50);
+
+                    // Draw card background
+                    g.FillRectangle(cardBsh, x, y, cardW, cardH);
+
+                    // Draw artifact image
+                    string imagePath = ResolveArtifactAssetPath(artifact.objPath);
+                    if (File.Exists(imagePath))
                     {
-                        int row = i / itemsPerRow;
-                        int col = i % itemsPerRow;
-                        int x = startX + col * (cW + gap);
-                        int y = startY + row * (cH + gap);
-
-                        // Draw card background
-                        g.FillRectangle(cardBsh, x, y, cW, cH);
-
-                        // Draw artifact image
-                        g.FillRectangle(new SolidBrush(Color.FromArgb(60, 60, 100)), x + 10, y + 10, cW - 20, cH - 50);
-                        string imagePath = ResolveArtifactAssetPath(artifact.objPath);
-                        if (File.Exists(imagePath))
+                        try
                         {
                             Image artifactImage = Image.FromFile(imagePath);
-                            g.DrawImage(artifactImage, x + 10, y + 10, cW - 20, cH - 50);
+                            g.DrawImage(artifactImage, x + 10, y + 10, cardW - 20, cardH - 60);
                             artifactImage.Dispose();
                         }
-
-                        // Draw artifact name
-                        g.DrawString(artifact.name, new Font("Arial", 11f, FontStyle.Bold), fntBrush,
-                                     x + 14, y + cH - 34);
+                        catch { }
                     }
+
+                    // Draw artifact name and TUIO ID like country cards
+                    g.DrawString(artifact.name, new Font("Arial", 11f, FontStyle.Bold), fntBrush, x + 10, y + cardH - 45);
+                    g.DrawString("TUIO: " + artifact.tuioId, new Font("Arial", 10f), new SolidBrush(Color.Yellow), x + 10, y + cardH - 25);
                 }
             }
-
-            // User info
-            if (upic != null)
-                g.DrawImage(upic, 60, 90, 100, 100);
-            else
-                g.FillEllipse(avatarBrush, 60, 90, 100, 100);
-            g.DrawString("Hello, " + uname, new Font("Arial", 20f, FontStyle.Bold), fntBrush, 40, 30);
 
             // Navigation hints
             g.DrawString("SwipeRight: Home  |  SwipeLeft: News", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), 50, this.ClientSize.Height - 34);
