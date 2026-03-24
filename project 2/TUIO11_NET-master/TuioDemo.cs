@@ -85,10 +85,31 @@ public class TuioDemo : Form , TuioListener
                 public List<ArtifactRecord> artifacts { get; set; }
         }
 
+        class UserRecord
+        {
+                public string name { get; set; }
+                public string age { get; set; }
+                public string gender { get; set; }
+                public string[] mac { get; set; }
+                public string Profile { get; set; }
+                public List<int> favorites { get; set; }
+        }
+
+        class UserRoot
+        {
+                public List<UserRecord> artifacts { get; set; } // Keep the same property name for JSON compatibility
+        }
+
         List<ArtifactRecord> artifacts = new List<ArtifactRecord>();
         int selectedArtifactId = -1;
         string artifactsJsonPath = "";
         Pen curPen = new Pen(new SolidBrush(Color.Blue), 1);
+        
+        // User data
+        UserRecord currentUser = null;
+        List<UserRecord> allUsers = new List<UserRecord>();
+        string usersJsonPath = "";
+        int favoritesPageIndex = 0;
 
 		public TuioDemo(int port) {
         System.Timers.Timer slideTimer = new System.Timers.Timer(3000);
@@ -125,6 +146,7 @@ public class TuioDemo : Form , TuioListener
 			socketThread.IsBackground = true;
 			socketThread.Start();//this right here is to recive stuff from our python code: hand gestures and facial recognition
             LoadArtifacts();
+            LoadUsers();
     }
 
 		private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e) {
@@ -314,6 +336,87 @@ public class TuioDemo : Form , TuioListener
         Console.WriteLine("No valid artifacts.json could be loaded.");
     }
 
+    // load users data from users.json
+    void LoadUsers()
+    {
+        string path = @"..\..\TUIO11_NET-master\bin\Debug\users.json";
+
+        if (File.Exists(path))
+        {
+            try
+            {
+                string json = File.ReadAllText(path);
+                JavaScriptSerializer serializer = new JavaScriptSerializer();
+                List<UserRecord> userList = serializer.Deserialize<List<UserRecord>>(json);
+                if (userList != null && userList.Count > 0)
+                {
+                    allUsers = userList;
+                    usersJsonPath = Path.GetFullPath(path);
+                    Console.WriteLine("Loaded users from: " + usersJsonPath + " (count=" + allUsers.Count + ")");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Failed loading users from " + Path.GetFullPath(path) + ": " + ex.Message);
+            }
+        }
+
+        Console.WriteLine("No valid users.json could be loaded.");
+    }
+
+    // get user by name
+    UserRecord GetUserByName(string userName)
+    {
+        foreach (UserRecord user in allUsers)
+        {
+            if (user.name == userName) return user;
+        }
+        return null;
+    }
+
+    // add artifact to user's favorites
+    void AddArtifactToFavorites(int artifactId)
+    {
+        if (currentUser == null) return;
+        
+        if (currentUser.favorites == null)
+            currentUser.favorites = new List<int>();
+        
+        if (!currentUser.favorites.Contains(artifactId))
+        {
+            currentUser.favorites.Add(artifactId);
+            SaveUserFavorites();
+        }
+    }
+
+    // remove artifact from user's favorites
+    void RemoveArtifactFromFavorites(int artifactId)
+    {
+        if (currentUser == null || currentUser.favorites == null) return;
+        
+        currentUser.favorites.Remove(artifactId);
+        SaveUserFavorites();
+    }
+
+    // save user favorites back to users.json
+    void SaveUserFavorites()
+    {
+        if (string.IsNullOrWhiteSpace(usersJsonPath) || currentUser == null) return;
+
+        try
+        {
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            string json = serializer.Serialize(allUsers);
+            File.WriteAllText(usersJsonPath, json);
+            Console.WriteLine("Saved user favorites for: " + currentUser.name);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Failed to save user favorites: " + ex.Message);
+        }
+    }
+
     // get artifact by marker id
     ArtifactRecord GetArtifactByTuioId(int markerId)
     {
@@ -427,6 +530,9 @@ public class TuioDemo : Form , TuioListener
 
             uname = string.IsNullOrWhiteSpace(payload.name) ? "Visitor" : payload.name.Trim();
 
+            // Set current user
+            currentUser = GetUserByName(uname);
+
             string profilePath = string.IsNullOrWhiteSpace(payload.Profile) ? null : payload.Profile.Trim();
             if (!string.IsNullOrWhiteSpace(profilePath))
             {
@@ -495,6 +601,7 @@ public class TuioDemo : Form , TuioListener
                     upic = null;
                     login = 1;
                     btStatus = "Matched";
+                    currentUser = GetUserByName(uname);
                 }
                 else
                 {
@@ -527,6 +634,12 @@ public class TuioDemo : Form , TuioListener
 
                     currentCountry--;
                     if (currentCountry < 0) currentCountry = 2;
+                }
+                // Handle Circle gesture - add artifact to favorites
+                if (msg.Trim() == "Circle" && page == 5 && selectedArtifactId >= 0)
+                {
+                    AddArtifactToFavorites(selectedArtifactId);
+                    Console.WriteLine("Artifact " + selectedArtifactId + " added to favorites");
                 }
                 Invoke((Action)(Invalidate));
             }
@@ -681,8 +794,72 @@ public class TuioDemo : Form , TuioListener
                 RectangleF descRect = new RectangleF(textX, lineY + 26, textW, 280);
                 g.DrawString(artifact.description, valFont, fntBrush, descRect);
 
+                // Draw heart icon and favorite instructions
+                g.DrawString("Make a CIRCLE to add to favorites!", new Font("Arial", 12f, FontStyle.Bold), new SolidBrush(Color.FromArgb(255, 192, 203)), textX, cardY + cardH - 60);
                 g.DrawString("SwipeRight: Home  |  SwipeLeft: News", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), textX, cardY + cardH - 34);
             }
+        }
+        // favorites page
+        else if (page == 6)
+        {
+            // Title
+            g.DrawString("My Favorites", new Font("Arial", 28f, FontStyle.Bold), fntBrush, 50, 30);
+
+            // Check if user is logged in
+            if (currentUser == null || currentUser.favorites == null || currentUser.favorites.Count == 0)
+            {
+                g.DrawString("No favorites added yet. Open an artifact and make a CIRCLE gesture to add it to favorites!", 
+                    new Font("Arial", 16f), fntBrush, 50, 150);
+            }
+            else
+            {
+                // Display favorite artifacts
+                int cW = 280, cH = 350, gap = 30;
+                int startX = 50;
+                int startY = 120;
+                int itemsPerRow = (this.ClientSize.Width - 80) / (cW + gap);
+                
+                for (int i = 0; i < currentUser.favorites.Count; i++)
+                {
+                    int artifactId = currentUser.favorites[i];
+                    ArtifactRecord artifact = GetArtifactById(artifactId);
+                    
+                    if (artifact != null)
+                    {
+                        int row = i / itemsPerRow;
+                        int col = i % itemsPerRow;
+                        int x = startX + col * (cW + gap);
+                        int y = startY + row * (cH + gap);
+
+                        // Draw card background
+                        g.FillRectangle(cardBsh, x, y, cW, cH);
+
+                        // Draw artifact image
+                        g.FillRectangle(new SolidBrush(Color.FromArgb(60, 60, 100)), x + 10, y + 10, cW - 20, cH - 50);
+                        string imagePath = ResolveArtifactAssetPath(artifact.objPath);
+                        if (File.Exists(imagePath))
+                        {
+                            Image artifactImage = Image.FromFile(imagePath);
+                            g.DrawImage(artifactImage, x + 10, y + 10, cW - 20, cH - 50);
+                            artifactImage.Dispose();
+                        }
+
+                        // Draw artifact name
+                        g.DrawString(artifact.name, new Font("Arial", 11f, FontStyle.Bold), fntBrush,
+                                     x + 14, y + cH - 34);
+                    }
+                }
+            }
+
+            // User info
+            if (upic != null)
+                g.DrawImage(upic, 60, 90, 100, 100);
+            else
+                g.FillEllipse(new SolidBrush(Color.FromArgb(80, 80, 120)), 60, 90, 100, 100);
+            g.DrawString("Hello, " + uname, new Font("Arial", 20f, FontStyle.Bold), fntBrush, 40, 30);
+
+            // Navigation hints
+            g.DrawString("SwipeRight: Home  |  SwipeLeft: News", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), 50, this.ClientSize.Height - 34);
         }
         // draw the cursor path
         if (cursorList.Count > 0) {
