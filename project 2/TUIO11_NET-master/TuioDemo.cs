@@ -865,31 +865,25 @@ public class TuioDemo : Form , TuioListener
             {
                 if (msg.Trim() == "SwipeRight")
                 {
-                    // page++;
-                    // if (page > 4) page = 0;
-                    // if (page == 4 && room == 0) page++; 
-                    // if (page == 2 && room == 1) page++;
-                    // if (page == 3 && room == 2) page++;
-                    
-                    currentCountry++;
-                    if (currentCountry > 2) currentCountry = 0;
+                    if (page == 6)
+                        page = 0;
+                    else
+                    {
+                        currentCountry++;
+                        if (currentCountry > 2) currentCountry = 0;
+                    }
                 }
                 if (msg.Trim() == "SwipeLeft")
-                {                    
-                    // page--;
-                    // if (page < 0) page = 4;
-                    // if (page == 4 && room == 0) page--; skip egypt visitor eza enta fe room egypt
-                    // if (page == 2 && room == 1) page--; skip china eza enta fe room china
-                    // if (page == 3 && room == 2) page--; skip medieval eza enta fe medieval europe
-
-                    currentCountry--;
-                    if (currentCountry < 0) currentCountry = 2;
+                {
+                    if (page != 6)
+                    {
+                        currentCountry--;
+                        if (currentCountry < 0) currentCountry = 2;
+                    }
                 }
-                // Handle Circle gesture - add artifact to favorites
                 if (msg.Trim() == "Circle" && page == 5 && selectedArtifactId >= 0)
                 {
-                    bool addedToFavorites = AddArtifactToFavorites(selectedArtifactId);
-                    if (addedToFavorites)
+                    if (AddArtifactToFavorites(selectedArtifactId))
                     {
                         artifactFavoriteHint = "Artifact added to favourites";
                         Console.WriteLine("Artifact added to favourites");
@@ -1069,11 +1063,9 @@ public class TuioDemo : Form , TuioListener
             float titleX = (this.ClientSize.Width - titleSize.Width) / 2f;
             g.DrawString(title, titleFont, fntBrush, titleX, 50);
 
-            // Check if user is logged in
             if (currentUser == null || currentUser.favorites == null || currentUser.favorites.Count == 0)
             {
-                g.DrawString("No favorites added yet. Open an artifact and make a CIRCLE gesture to add it to favorites!", 
-                    new Font("Arial", 16f), fntBrush, 50, 150);
+                g.DrawString("No favorites yet", new Font("Arial", 16f), fntBrush, 50, 150);
             }
             else
             {
