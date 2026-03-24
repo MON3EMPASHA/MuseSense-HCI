@@ -27,6 +27,8 @@ using System.Threading;
 using TUIO;
 using System.Net.Sockets;
 using System.Text;
+using System.IO;
+using System.Web.Script.Serialization;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 	public class TuioDemo : Form , TuioListener
@@ -256,6 +258,61 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
     int login = 0;
     int page = 0;
     string btStatus = "Waiting...";
+
+    class LoginPayload
+    {
+        public string type { get; set; }
+        public string name { get; set; }
+        public string age { get; set; }
+        public string gender { get; set; }
+        public string mac { get; set; }
+        public string Profile { get; set; }
+    }
+
+    private bool TryHandleLoginPayload(string rawMessage)
+    {
+        if (string.IsNullOrWhiteSpace(rawMessage) || !rawMessage.TrimStart().StartsWith("{"))
+        {
+            return false;
+        }
+
+        try
+        {
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            LoginPayload payload = serializer.Deserialize<LoginPayload>(rawMessage);
+
+            if (payload == null || !string.Equals(payload.type, "user_login", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            uname = string.IsNullOrWhiteSpace(payload.name) ? "Visitor" : payload.name.Trim();
+
+            string profilePath = string.IsNullOrWhiteSpace(payload.Profile) ? null : payload.Profile.Trim();
+            if (!string.IsNullOrWhiteSpace(profilePath))
+            {
+                string absoluteProfilePath = Path.IsPathRooted(profilePath)
+                    ? profilePath
+                    : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, profilePath);
+
+                upic = File.Exists(absoluteProfilePath) ? Image.FromFile(absoluteProfilePath) : null;
+            }
+            else
+            {
+                upic = null;
+            }
+
+            login = 1;
+            btStatus = "Matched";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Failed to parse login payload: " + ex.Message);
+            return false;
+        }
+    }
+
     public void stream()
     {
 		
@@ -285,22 +342,22 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
             }
             if(login==0)
             {
-                bool found = false;
-                foreach (var line in System.IO.File.ReadLines("users.csv"))
+                if (TryHandleLoginPayload(msg))
                 {
-                    var p = line.Split(',');
-
-                    if (p.Length >= 5 && p[3].Trim().Equals(msg.Trim(), StringComparison.OrdinalIgnoreCase))
-                    {
-                        uname = p[0].Trim();
-                        upic = Image.FromFile(p[4].Trim());
-                        login = 1;
-                        btStatus = "Matched";
-                        found = true;
-                        break;
-                    }
+                    Invoke((Action)(Invalidate));
+                    continue;
                 }
-                if (!found) // no match found in the csv file
+
+                string loginSuffix = "is logged in";
+                int loginSuffixIndex = msg.IndexOf(loginSuffix, StringComparison.OrdinalIgnoreCase);
+                if (loginSuffixIndex >= 0)
+                {
+                    uname = msg.Substring(0, loginSuffixIndex).Trim();
+                    upic = null;
+                    login = 1;
+                    btStatus = "Matched";
+                }
+                else
                 {
                     btStatus = "No match for this device in the system";
                 }
