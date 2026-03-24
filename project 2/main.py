@@ -1,11 +1,22 @@
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"SymbolDatabase\.GetPrototype\(\) is deprecated\. Please use message_factory\.GetMessageClass\(\) instead\..*",
+    category=UserWarning,
+    module=r"google\.protobuf\.symbol_database",
+)
+
 import cv2
 import mediapipe as mp
 import numpy as np
 import socket
 import pickle
 import socket
+import json
 import bluetooth
 from dollarpy import Point
+from pathlib import Path
 from movements import recognizer
 
 SERVER_HOST = "0.0.0.0"
@@ -13,6 +24,55 @@ SERVER_PORT = 5001
 TUIO_NOTE = "Remember to start your TUIO simulator/tracker on port 3333"
 PHONE_CAMERA_URL = ""
 PHONE_BT_NAME = "Phone"
+USERS_JSON_PATH = Path("TUIO11_NET-master") / "bin" / "Debug" / "users.json"
+
+
+def normalize_mac(mac: str) -> str:
+    return mac.strip().upper().replace("-", ":")
+
+
+def load_users_by_mac(json_path: Path = USERS_JSON_PATH) -> dict[str, dict]:
+    if not json_path.exists():
+        print(f"[USERS] users.json not found at {json_path}")
+        return {}
+
+    try:
+        with json_path.open("r", encoding="utf-8") as json_file:
+            users_data = json.load(json_file)
+    except Exception as e:
+        print(f"[USERS] Failed to read users.json: {e}")
+        return {}
+
+    users_by_mac: dict[str, dict] = {}
+    if isinstance(users_data, list):
+        for user in users_data:
+            if not isinstance(user, dict):
+                continue
+            name = user.get("name")
+            mac_field = user.get("mac")
+
+            if not name or not mac_field:
+                continue
+
+            if isinstance(mac_field, list):
+                mac_values = [str(mac).strip() for mac in mac_field if str(mac).strip()]
+            else:
+                mac_values = [str(mac_field).strip()]
+
+            normalized_macs = [normalize_mac(mac) for mac in mac_values if mac]
+
+            for normalized_mac in normalized_macs:
+                users_by_mac[normalized_mac] = {
+                    "type": "user_login",
+                    "name": str(name).strip(),
+                    "age": str(user.get("age", "")).strip(),
+                    "gender": str(user.get("gender", "")).strip(),
+                    "mac": normalized_mac,
+                    "Profile": str(user.get("Profile", "")).strip(),
+                }
+
+    return users_by_mac
+
 
 soc = socket.socket()
 hostname = "localhost"
@@ -54,13 +114,15 @@ class HCIServer:
 
     # Step 2 · Bluetooth Scan
 
-    def scan_bluetooth(self) -> str | None:
+    def scan_bluetooth(self) -> tuple[str | None, dict | None]:
         print("[BT] Scanning for Bluetooth devices (8 s)…")
+        users_by_mac = load_users_by_mac()
+
         try:
             devices = bluetooth.discover_devices(lookup_names=True, duration=8)
         except Exception as e:
             print(f"[BT] Error: {e}")
-            return None
+            return None, None
 
         if len(devices) > 0:
             print("[BT] Discovered devices:")
@@ -70,6 +132,13 @@ class HCIServer:
                 display_name = name if name else "Unknown"
                 print(f"  {index}. Name: {display_name} | MAC: {addr}")
 
+                matched_user = users_by_mac.get(normalize_mac(addr))
+                if matched_user:
+                    print(
+                        f"[BT] Match found for MAC {addr}: {matched_user['name']} is logged in"
+                    )
+                    return addr, matched_user
+
                 if selected_addr is None and name == PHONE_BT_NAME:
                     selected_addr = addr
 
@@ -77,15 +146,16 @@ class HCIServer:
                 selected_addr = devices[0][0]
 
             print(f"[BT] Selected MAC to send: {selected_addr}")
-            return selected_addr
+            return selected_addr, None
 
         print("[BT] No devices found")
-        return None
+        return None, None
 
 
 server = HCIServer()
 address = None
-address = server.scan_bluetooth()
+login_message = None
+address, login_message = server.scan_bluetooth()
 cap = cv2.VideoCapture(0)
 user_login = 0
 flag_bluetooth = 0
@@ -94,11 +164,16 @@ while cap.isOpened():
     if not ret or frame is None:
         continue
     msg = ""
-    if user_login == 0 and address is not None:
-        print("Sending MAC:", address)
-
-        conn.send(address.encode("utf-8"))
-        user_login = 1
+    if user_login == 0:
+        if login_message is not None:
+            message_payload = json.dumps(login_message)
+            print("Sending login payload:", message_payload)
+            conn.send(message_payload.encode("utf-8"))
+            user_login = 1
+        elif address is not None:
+            print("Sending MAC:", address)
+            conn.send(address.encode("utf-8"))
+            user_login = 1
     try:
 
         f_frame = cv2.resize(frame, (480, 320))
