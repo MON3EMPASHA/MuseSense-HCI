@@ -1,4 +1,5 @@
 import os
+import re
 import cv2
 import mediapipe as mp
 
@@ -19,8 +20,9 @@ def loop_files(directory):
             if file_name.endswith(".mp4"):
                 print(file_name)
                 foo = file_name[:-4]
+                label = re.sub(r"\d+$", "", foo).strip("_").capitalize() or foo
                 recstring+=foo+","
-                f.write (""+foo+" = Template('"+foo+"', [\n")
+                f.write (""+foo+" = Template('"+label+"', [\n")
                 # create capture object
                 cap = cv2.VideoCapture(directory+"/"+file_name)
                 framecnt=0
@@ -66,5 +68,5 @@ def loop_files(directory):
     f.close()
 
 # Example usage
-directory_path = "C:\\Users\\youss\\Downloads\\vids"
+directory_path = "./videos/circles"
 loop_files(directory_path)

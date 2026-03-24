@@ -24,7 +24,13 @@
     "name": "Abdelmonem Hatem",
     "age": "21",
     "gender": "male",
-    "mac": ["64:D0:D6:AE:32:C1"],
+    "mac": [
+      "64:D0:D6:AE:32:C1",
+      "64:D0:D6:58:C3:09",
+      "10:EC:81:8F:FD:BB",
+      "F4:B6:2D:FD:64:03",
+      "10:5B:AD:2C:59:6C"
+    ],
     "Profile": "objects/obj4.png"
   },
   {

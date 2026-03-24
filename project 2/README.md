@@ -1,7 +1,7 @@
 # Project 2 Setup (Team Guide)
 
 This folder is an independent Python project.
-Use Python 3.11 and create a local `venv` inside this folder.
+Use Python 3.11. Python 3.12 is not the supported target for this setup and can break the Bluetooth dependency install.
 
 ## 1) Prerequisites
 
@@ -10,18 +10,18 @@ Use Python 3.11 and create a local `venv` inside this folder.
 
 ## 2) Create and activate local venv
 
-Run these commands from `project 2`:
+Run these commands from the repository root:
 
 ```powershell
-py -3.11 -m venv venv
-.\venv\Scripts\Activate.ps1
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
 ## 3) Install dependencies
 
 ```powershell
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r "project 2\requirements.txt"
 ```
 
 ## 4) Register Jupyter kernel (one time)
