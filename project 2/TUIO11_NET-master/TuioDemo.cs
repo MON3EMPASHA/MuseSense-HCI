@@ -111,6 +111,11 @@ public class TuioDemo : Form , TuioListener
         string usersJsonPath = "";
         int favoritesPageIndex = 0;
 
+        // Circular menu control
+        bool tuioMarker100Visible = false;
+        int selectedMenuItem = -1; // -1=none, 0=Egypt, 1=China, 2=Europe, 3=Favorites
+        long tuioMarker100SessionId = -1;
+
 		public TuioDemo(int port) {
         System.Timers.Timer slideTimer = new System.Timers.Timer(3000);
         slideTimer.Elapsed += (s, e) => { slideIndex = (slideIndex + 1) % 5; ; Invoke((Action)Invalidate); };
@@ -201,13 +206,37 @@ public class TuioDemo : Form , TuioListener
 			lock(objectList) {
 				objectList.Add(o.SessionID,o);
 			} if (verbose) Console.WriteLine("add obj "+o.SymbolID+" ("+o.SessionID+") "+o.X+" "+o.Y+" "+o.Angle);
-            NavigateToArtifactByMarker(o.SymbolID);
+            
+            // Handle circular menu marker (TUIO ID 100)
+            if (o.SymbolID == 100)
+            {
+                tuioMarker100Visible = true;
+                tuioMarker100SessionId = o.SessionID;
+                UpdateMenuSelectionFromRotation(o.Angle);
+                Invalidate();
+            }
+            else
+            {
+                NavigateToArtifactByMarker(o.SymbolID);
+            }
 		}
 
 		public void updateTuioObject(TuioObject o) {
 
 			if (verbose) Console.WriteLine("set obj "+o.SymbolID+" "+o.SessionID+" "+o.X+" "+o.Y+" "+o.Angle+" "+o.MotionSpeed+" "+o.RotationSpeed+" "+o.MotionAccel+" "+o.RotationAccel);
-            NavigateToArtifactByMarker(o.SymbolID);
+            
+            // Handle circular menu marker (TUIO ID 100)
+            if (o.SymbolID == 100)
+            {
+                tuioMarker100Visible = true;
+                tuioMarker100SessionId = o.SessionID;
+                UpdateMenuSelectionFromRotation(o.Angle);
+                Invalidate();
+            }
+            else
+            {
+                NavigateToArtifactByMarker(o.SymbolID);
+            }
 		}
 
 		public void removeTuioObject(TuioObject o) {
@@ -215,6 +244,26 @@ public class TuioDemo : Form , TuioListener
 				objectList.Remove(o.SessionID);
 			}
 			if (verbose) Console.WriteLine("del obj "+o.SymbolID+" ("+o.SessionID+")");
+            
+            // Handle circular menu marker removal (TUIO ID 100)
+            if (o.SymbolID == 100 && o.SessionID == tuioMarker100SessionId)
+            {
+                tuioMarker100Visible = false;
+                
+                // Navigate to the selected menu item
+                if (selectedMenuItem >= 0 && selectedMenuItem < 3)
+                {
+                    currentCountry = selectedMenuItem; // 0=Egypt, 1=China, 2=Europe
+                }
+                else if (selectedMenuItem == 3)
+                {
+                    page = 6; // Go to Favorites page
+                }
+                
+                selectedMenuItem = -1;
+                tuioMarker100SessionId = -1;
+                Invalidate();
+            }
 		}
 
 		public void addTuioCursor(TuioCursor c) {
@@ -474,6 +523,40 @@ public class TuioDemo : Form , TuioListener
         }
 
         return relativePath;
+    }
+
+    // Update menu selection based on TUIO marker rotation
+    void UpdateMenuSelectionFromRotation(double angleRadians)
+    {
+        // convert the radians to degrees formula 
+        double angleDegrees = angleRadians * 180.0 / Math.PI;
+        angleDegrees = angleDegrees % 360.0;
+        if (angleDegrees < 0) angleDegrees += 360.0;
+
+        
+        // countries degresse index
+        int[] menuPositions = { 0, 90, 180, 270 }; // China, Europe, Favorites, Egypt
+        double minDifference = 360.0;
+        int closestMenuItem = -1;
+
+        for (int i = 0; i < 4; i++)
+        {
+            
+            double diff = Math.Abs(angleDegrees - menuPositions[i]);
+            if (diff > 180) diff = 360 - diff;
+
+            if (diff < minDifference)
+            {
+                minDifference = diff;
+                closestMenuItem = i;
+            }
+        }
+
+        int[] itemMap = { 1, 2, 3, 0 }; 
+        selectedMenuItem = itemMap[closestMenuItem];
+        
+        if (verbose)
+            Console.WriteLine("Menu selection updated: angle=" + angleDegrees.ToString("F1") + "° -> item=" + selectedMenuItem);
     }
 
     // when marker appears, jump directly to its artifact page
@@ -931,6 +1014,9 @@ public class TuioDemo : Form , TuioListener
 					}
 				}
 			}
+
+            // Draw the circular menu
+            DrawCircularMenu(g, this.ClientSize.Width, this.ClientSize.Height);
 		}
 
     private void InitializeComponent()
@@ -1000,6 +1086,70 @@ public class TuioDemo : Form , TuioListener
 
     }
 	 
+    // Draw circular menu with 4 items (Egypt, China, Europe, Favorites)
+    private void DrawCircularMenu(Graphics g, int screenWidth, int screenHeight)
+    {
+        if (!tuioMarker100Visible) return;
+
+        // Menu configuration
+        int centerX = screenWidth - clientSize.Width / 2;
+        int centerY = screenHeight - clientSize.Height / 2;
+        int radius = 90; 
+        int itemSize = 80;
+        int imageSize = 60;
+
+        string[] menuLabels = { "Egypt", "China", "Europe", "Favorites" };
+        string[] menuImages = { "Countries/egypt.png", "Countries/china.png", "Countries/europe.png", "heart.png" };
+        
+        double[] angles = { -90, 0, 90, 180 };
+
+        for (int i = 0; i < 4; i++)
+        {
+            double radians = angles[i] * Math.PI / 180.0;
+            int itemX = centerX + (int)(radius * Math.Cos(radians)) - itemSize / 2;
+            int itemY = centerY + (int)(radius * Math.Sin(radians)) - itemSize / 2;
+
+            bool isSelected = (i == selectedMenuItem);
+            
+            Color bgColor = isSelected 
+                ? Color.FromArgb(255, 200, 0) // Yellow highlight for selected
+                : Color.FromArgb(60, 60, 100); // Default dark blue
+            SolidBrush itemBrush = new SolidBrush(bgColor);
+            g.FillEllipse(itemBrush, itemX, itemY, itemSize, itemSize);
+
+            // Draw border for selected item
+            if (isSelected)
+            {
+                Pen highlightPen = new Pen(Color.White, 3);
+                g.DrawEllipse(highlightPen, itemX, itemY, itemSize, itemSize);
+            }
+
+            // Load and draw the image
+            string imagePath = menuImages[i];
+            string absolutePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, imagePath);
+            
+            if (File.Exists(absolutePath))
+            {
+                try
+                {
+                    Image menuImage = Image.FromFile(absolutePath);
+                    int imgX = itemX + (itemSize - imageSize) / 2;
+                    int imgY = itemY + (itemSize - imageSize) / 2;
+                    g.DrawImage(menuImage, imgX, imgY, imageSize, imageSize);
+                    menuImage.Dispose();
+                }
+                catch { }
+            }
+
+            Font labelFont = new Font("Arial", 10f, FontStyle.Bold);
+            SolidBrush labelBrush = isSelected ? new SolidBrush(Color.Yellow) : new SolidBrush(Color.White);
+            StringFormat format = new StringFormat();
+            format.Alignment = StringAlignment.Center;
+            g.DrawString(menuLabels[i], labelFont, labelBrush, 
+                         itemX + itemSize / 2, itemY + itemSize + 5, format);
+        }
+    }
+
     private void TuioDemo_Load(object sender, EventArgs e)
     {
         pnlCard.Left = (this.ClientSize.Width - pnlCard.Width) / 2;
