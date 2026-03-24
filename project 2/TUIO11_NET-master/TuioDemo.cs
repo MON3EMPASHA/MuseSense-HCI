@@ -34,12 +34,12 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 public class TuioDemo : Form , TuioListener
 	{
-    int slideIndex = 0;
-    string[] slideImages ;
-    SolidBrush cardBsh = new SolidBrush(Color.FromArgb(30, 30, 60)); 
-    string uname = "Visitor";
-    Image upic = null;
-    private TuioClient client;
+        int slideIndex = 0;
+        string[] slideImages ;
+        SolidBrush cardBsh = new SolidBrush(Color.FromArgb(30, 30, 60)); 
+        string uname = "Visitor";
+        Image upic = null;
+        private TuioClient client;
 		private Dictionary<long,TuioObject> objectList;
 		private Dictionary<long,TuioCursor> cursorList;
 		private Dictionary<long,TuioBlob> blobList;
@@ -61,33 +61,33 @@ public class TuioDemo : Form , TuioListener
 		SolidBrush curBrush = new SolidBrush(Color.FromArgb(192, 0, 192));
 		SolidBrush objBrush = new SolidBrush(Color.FromArgb(64, 0, 0));
 		SolidBrush blbBrush = new SolidBrush(Color.FromArgb(64, 64, 64));
-    private Panel pnlCard;
-    private Label lblHello;
-    private PictureBox pictureBox1;
-    private Label lblStatus;
-    class ArtifactRecord
-    {
-        public int id { get; set; }
-        public int tuioId { get; set; }
-        public string name { get; set; }
-        public string birthDate { get; set; }
-        public string era { get; set; }
-        public string origin { get; set; }
-        public string description { get; set; }
-        public string narration { get; set; }
-        public string objPath { get; set; }
-        public string audioPath { get; set; }
-        public string color { get; set; }
-    }
-    class ArtifactRoot
-    {
-        public List<ArtifactRecord> artifacts { get; set; }
-    }
+        private Panel pnlCard;
+        private Label lblHello;
+        private PictureBox pictureBox1;
+        private Label lblStatus;
+        class ArtifactRecord
+        {
+                public int id { get; set; }
+                public int tuioId { get; set; }
+                public string name { get; set; }
+                public string birthDate { get; set; }
+                public string era { get; set; }
+                public string origin { get; set; }
+                public string description { get; set; }
+                public string narration { get; set; }
+                public string objPath { get; set; }
+                public string audioPath { get; set; }
+                public string color { get; set; }
+        }
+        class ArtifactRoot
+        {
+                public List<ArtifactRecord> artifacts { get; set; }
+        }
 
-    List<ArtifactRecord> artifacts = new List<ArtifactRecord>();
-    int selectedArtifactId = -1;
-    string artifactsJsonPath = "";
-    Pen curPen = new Pen(new SolidBrush(Color.Blue), 1);
+        List<ArtifactRecord> artifacts = new List<ArtifactRecord>();
+        int selectedArtifactId = -1;
+        string artifactsJsonPath = "";
+        Pen curPen = new Pen(new SolidBrush(Color.Blue), 1);
 
 		public TuioDemo(int port) {
         System.Timers.Timer slideTimer = new System.Timers.Timer(3000);
@@ -285,19 +285,10 @@ public class TuioDemo : Form , TuioListener
     // load artifacts text/image data from artifacts.json
     void LoadArtifacts()
     {
-        string[] candidates = new string[]
-        {
-            "artifacts.json",
-            Path.Combine(Application.StartupPath, "artifacts.json"),
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "artifacts.json"),
-            Path.Combine("..", "..", "artifacts.json"),
-            Path.Combine("..", "..", "..", "artifacts.json")
-        };
+        string path = @"..\..\artifacts.json";
 
-        foreach (string path in candidates)
+        if (File.Exists(path))
         {
-            if (!File.Exists(path)) continue;
-
             try
             {
                 string json = File.ReadAllText(path);
@@ -747,65 +738,14 @@ public class TuioDemo : Form , TuioListener
  				lock(objectList) {
 					foreach (TuioObject tobj in objectList.Values) {
                     int size = height / 10;
-					int ox=0;
-					int oy=0;
-                    if (tobj.SymbolID == 0)
-                    {
-                        Image bgimg = Image.FromFile("background1.png");
-                        Image objimg = Image.FromFile("objects/obj1.png");
-                        ox = tobj.getScreenX(width);
-                        oy = tobj.getScreenY(height);
-                        g.DrawImage(bgimg, 0, 0, width, height);
-                        g.TranslateTransform(ox, oy);
-                        g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
-                        g.TranslateTransform(-ox, -oy);
-                       
+                    int ox = tobj.getScreenX(width);
+                    int oy = tobj.getScreenY(height);
 
-                        g.DrawImage(objimg, ox - size / 2, oy - size / 2, size, size);
+                    g.TranslateTransform(ox, oy);
+                    g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
+                    g.TranslateTransform(-ox, -oy);
 
-                    }
-                    if (tobj.SymbolID == 1)
-                    {
-                        Image bgimg = Image.FromFile("background2.png");
-                        Image objimg = Image.FromFile("objects/obj2.png");
-                        ox = tobj.getScreenX(width);
-                        oy = tobj.getScreenY(height);
-                        g.DrawImage(bgimg, 0, 0, width, height);
-                        g.TranslateTransform(ox, oy);
-                        g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
-                        g.TranslateTransform(-ox, -oy);
-
-
-                        g.DrawImage(objimg, ox - size / 2, oy - size / 2, size, size);
-
-                    }
-                    if (tobj.SymbolID == 2)
-                    {
-                        Image bgimg = Image.FromFile("background3.png");
-                        Image objimg = Image.FromFile("objects/obj3.png");
-                        ox = tobj.getScreenX(width);
-                        oy = tobj.getScreenY(height);
-                        g.DrawImage(bgimg, 0, 0, width, height);
-                        g.TranslateTransform(ox, oy);
-                        g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
-                        g.TranslateTransform(-ox, -oy);
-
-
-                        g.DrawImage(objimg, ox - size / 2, oy - size / 2, size, size);
-
-                    }
-					if(tobj.SymbolID != 0&&tobj.SymbolID!=1&&tobj.SymbolID!=2) //defaultt
-					{
-                         ox = tobj.getScreenX(width);
-                         oy = tobj.getScreenY(height);
-                         size = height / 10;
-
-                        g.TranslateTransform(ox, oy);
-                        g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
-                        g.TranslateTransform(-ox, -oy);
-
-                        g.FillRectangle(objBrush, new Rectangle(ox - size / 2, oy - size / 2, size, size));
-                    }
+                    g.FillRectangle(objBrush, new Rectangle(ox - size / 2, oy - size / 2, size, size));
 
 
 
