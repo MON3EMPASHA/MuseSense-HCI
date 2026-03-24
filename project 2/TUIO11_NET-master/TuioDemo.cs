@@ -29,6 +29,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.IO;
 using System.Web.Script.Serialization;
+using System.Runtime.Serialization.Json;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 	public class TuioDemo : Form , TuioListener
@@ -318,7 +319,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
         }
     }
 
-    // get artifact by marker id (tuio id)
+    // get artifact by marker id
     ArtifactRecord GetArtifactByTuioId(int markerId)
     {
         foreach (ArtifactRecord artifact in artifacts)
@@ -339,7 +340,6 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
     }
 
     // find the real image path from objPath field in json
-    // (objPath now stores image path like artifacts/xxx.png)
     string ResolveArtifactAssetPath(string relativePath)
     {
         if (string.IsNullOrWhiteSpace(relativePath)) return "";
