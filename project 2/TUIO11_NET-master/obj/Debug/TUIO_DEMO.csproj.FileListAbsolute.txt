@@ -53,3 +53,13 @@ E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEM
 E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.CoreCompileInputs.cache
 E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.exe
 E:\Programming\HCI Versions\world\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.pdb
+C:\MSA-Mohamed\HCI\Project 2\MuseSense-HCI\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.AssemblyReference.cache
+C:\MSA-Mohamed\HCI\Project 2\MuseSense-HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.exe.config
+C:\MSA-Mohamed\HCI\Project 2\MuseSense-HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.resources
+C:\MSA-Mohamed\HCI\Project 2\MuseSense-HCI\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.GenerateResource.cache
+C:\MSA-Mohamed\HCI\Project 2\MuseSense-HCI\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.CoreCompileInputs.cache
+C:\MSA-Mohamed\HCI\Project 2\MuseSense-HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.exe
+C:\MSA-Mohamed\HCI\Project 2\MuseSense-HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.pdb
+C:\MSA-Mohamed\HCI\Project 2\MuseSense-HCI\project 2\TUIO11_NET-master\bin\Debug\TuioDemo.exe.config
+C:\MSA-Mohamed\HCI\Project 2\MuseSense-HCI\project 2\TUIO11_NET-master\bin\Debug\TuioDemo.exe
+C:\MSA-Mohamed\HCI\Project 2\MuseSense-HCI\project 2\TUIO11_NET-master\bin\Debug\TuioDemo.pdb

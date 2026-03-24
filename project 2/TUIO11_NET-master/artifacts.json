@@ -1,0 +1,95 @@
+{
+  "artifacts": [
+    {
+      "id": 0,
+      "tuioId": 0,
+      "name": "Mask of Tutankhamun",
+      "birthDate": "c. 1323 BC",
+      "era": "New Kingdom",
+      "origin": "Valley of the Kings",
+      "description": "Golden funerary mask of Pharaoh Tutankhamun, crafted with gold and semi-precious inlays of lapis lazuli, quartz, and obsidian.",
+      "narration": "Welcome, and take a closer look at one of the most famous treasures of ancient Egypt: the funerary mask of Tutankhamun. This masterpiece was crafted around 1323 BC and is made of gold inlaid with lapis lazuli, quartz, obsidian, and colored glass. The mask was discovered by Howard Carter in 1925, resting over the head and shoulders of the young king's mummy inside the innermost coffin. Beyond its beauty, the mask reflects the Egyptian belief in rebirth and divine kingship. The serene face, idealized features, and protective symbols were designed to guide and protect the pharaoh in the afterlife. As you observe the craftsmanship, notice the precision of the inlay work and the symbolic pairing of the vulture and cobra on the brow, representing Upper and Lower Egypt united under one ruler.",
+      "objPath": "artifacts/Tutankhamun.png",
+      "audioPath": "audio/tutankhamun.wav",
+      "color": "#BFAA2A"
+    },
+    {
+      "id": 1,
+      "tuioId": 1,
+      "name": "Ramses II Statue",
+      "birthDate": "1279-1213 BC",
+      "era": "New Kingdom",
+      "origin": "Grand Egyptian Museum",
+      "description": "Monumental granite statue representing Ramses II, one of Egypt's most influential pharaohs, known for the Battle of Kadesh and the Abu Simbel temples.",
+      "narration": "You are now standing before the monumental image of Ramses II, often called Ramses the Great, one of the longest-ruling and most celebrated pharaohs in Egyptian history. He ruled for approximately sixty-six years, from 1279 to 1213 BC, during the New Kingdom period. Ramses II is remembered both as a military leader and as a master builder. He commissioned temples, statues, and inscriptions across Egypt and Nubia, including the famous temples of Abu Simbel. This statue captures the pharaoh's authority, stability, and divine status. Its massive scale was intentional, designed to inspire awe and communicate power to all who approached. As you examine the sculpture, imagine how such monuments functioned not only as art, but as political messages carved in stone, reinforcing the king's legitimacy and immortal presence across generations.",
+      "objPath": "artifacts/Ramses II.png",
+      "audioPath": "audio/ramses_ii.wav",
+      "color": "#A0A0A0"
+    },
+    {
+      "id": 2,
+      "tuioId": 2,
+      "name": "King Senwosret III",
+      "birthDate": "1836-1818 BC",
+      "era": "Middle Kingdom",
+      "origin": "Ancient Egypt",
+      "description": "Quartzite portrait of Senwosret III with a strikingly realistic, careworn expression, unlike the idealized portrayals typical of pharaonic art.",
+      "narration": "This portrait represents King Senwosret III, one of the most powerful rulers of Egypt's Middle Kingdom. Unlike many idealized royal images, this face appears thoughtful, intense, and even burdened, with deep-set eyes and a serious expression. Art historians often interpret this realism as a deliberate statement of responsibility and kingship rather than simple portrait likeness. Senwosret III ruled from 1836 to 1818 BC and is known for major military campaigns in Nubia and significant reforms that strengthened central authority. He reorganized provincial governance and expanded Egypt's control over strategic trade and frontier regions. When you view this sculpture, you are seeing a turning point in Egyptian royal art, where emotional depth and political messaging combine. The result is a portrait that still feels human and psychologically powerful more than three thousand years later.",
+      "objPath": "artifacts/King Senwosret III.png",
+      "audioPath": "audio/senwosret_iii.wav",
+      "color": "#CDAA7D"
+    },
+    {
+      "id": 3,
+      "tuioId": 3,
+      "name": "Bust of Nefertiti",
+      "birthDate": "c. 1370-1330 BC",
+      "era": "Amarna Period",
+      "origin": "Akhetaten (Tell el-Amarna)",
+      "description": "3D scan of the iconic painted limestone bust of Queen Nefertiti, wife of Pharaoh Akhenaten, celebrated for its exceptional artistry and symmetry.",
+      "narration": "You are looking at the world-famous bust of Queen Nefertiti, a symbol of elegance and artistic excellence from the Amarna period. Created around 1345 BC in the workshop of the sculptor Thutmose, this painted limestone portrait has become one of the most recognizable images of ancient Egypt. Nefertiti was the wife of Pharaoh Akhenaten, who introduced major religious and cultural changes during his reign. The bust's refined facial proportions, graceful neck, and vivid surviving pigments reveal extraordinary technical skill and aesthetic balance. It was likely used as a sculptor's model, demonstrating ideal royal beauty. As you observe it, notice how the work combines realism with idealization, creating a timeless royal presence. Today, this artifact is displayed in Berlin's Neues Museum and remains central to discussions about heritage, identity, and the global journey of ancient objects.",
+      "objPath": "artifacts/Bust of Nefertiti.png",
+      "audioPath": "audio/nefertiti.wav",
+      "color": "#C58B6D"
+    },
+    {
+      "id": 4,
+      "tuioId": 4,
+      "name": "Horus",
+      "birthDate": "Worshipped from c. 3100 BC",
+      "era": "Ancient Egypt (all periods)",
+      "origin": "Ancient Egypt",
+      "description": "Statuette of Horus, the falcon-headed god of the sky and kingship, one of the most significant deities in the ancient Egyptian pantheon.",
+      "narration": "This artifact represents Horus, the falcon-headed deity associated with the sky, kingship, and divine protection. In ancient Egyptian religion, Horus was among the most important gods, and his symbolism was deeply connected to royal authority. The living pharaoh was often described as the earthly manifestation of Horus, while the god's sharp vision and commanding presence represented vigilance and power. Horus also plays a central role in myth, especially in the story of his struggle with Set to restore order after the death of Osiris. That narrative expresses core Egyptian values: legitimacy, justice, and the triumph of cosmic balance over chaos. As you examine this figure, notice how religious belief, political ideology, and artistic tradition merge into a single image. It is not just a statue of a god; it is a visual statement about how ancient Egyptians understood leadership and sacred order.",
+      "objPath": "artifacts/Horus.png",
+      "audioPath": "audio/horus.wav",
+      "color": "#D4A843"
+    },
+    {
+      "id": 5,
+      "tuioId": 5,
+      "name": "Sacred Scarab Beetle",
+      "birthDate": "Used from c. 2575 BC",
+      "era": "Old Kingdom onwards",
+      "origin": "Ancient Egypt",
+      "description": "The scarab beetle was a powerful symbol of regeneration, transformation, and protection in ancient Egyptian culture, frequently used as amulets and seals.",
+      "narration": "Here you can see the sacred scarab, one of the most meaningful symbols in ancient Egyptian culture. Inspired by the dung beetle's behavior, Egyptians associated the scarab with Khepri, the solar deity linked to the rising sun and daily renewal. Because the beetle appeared to roll a sphere across the ground, it became a natural metaphor for the sun moving across the sky. Scarab amulets were widely used for protection, rebirth, and good fortune. They were worn in daily life, carved into seals, and placed in tombs as spiritual safeguards for the journey into the afterlife. Some scarabs were inscribed with names, prayers, or royal decrees, combining personal belief with political authority. As you observe this object, consider how a small natural creature inspired one of the most enduring symbols of regeneration in human history.",
+      "objPath": "artifacts/Sacred Scarab Beetle.png",
+      "audioPath": "audio/scarab.wav",
+      "color": "#4A7A5C"
+    },
+    {
+      "id": 6,
+      "tuioId": 6,
+      "name": "Great Sphinx of Abu al-Hol",
+      "birthDate": "c. 2558-2532 BC",
+      "era": "Old Kingdom",
+      "origin": "Giza Plateau",
+      "description": "The Great Sphinx of Giza is a limestone statue of a reclining sphinx — a mythical creature with a human head and lion body — believed to represent Pharaoh Khafre.",
+      "narration": "This model represents the Great Sphinx of Giza, one of the largest and oldest monumental sculptures in the world. Carved directly from limestone bedrock during the Old Kingdom, most scholars date it to the reign of Pharaoh Khafre, around 2558 to 2532 BC. The sphinx combines a human head with a lion's body, uniting intelligence and strength in a single royal symbol. Positioned near the pyramids, it likely served as a guardian monument connected to kingship, solar worship, and sacred landscape design. Across thousands of years, wind, sand, restoration, and reinterpretation have transformed both its physical surface and cultural meaning. Yet it continues to project mystery and authority. As you view it today, think of the Sphinx not only as an engineering achievement, but as a timeless statement of how ancient Egypt linked rulers, monuments, and cosmic order.",
+      "objPath": "artifacts/Great Sphinx.png",
+      "audioPath": "audio/sphinx.wav",
+      "color": "#C8A96E"
+    }
+  ]
+}

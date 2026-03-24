@@ -27,6 +27,8 @@ using System.Threading;
 using TUIO;
 using System.Net.Sockets;
 using System.Text;
+using System.IO;
+using System.Runtime.Serialization.Json;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 	public class TuioDemo : Form , TuioListener
@@ -34,7 +36,6 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
     int slideIndex = 0;
     string[] slideImages ;
     SolidBrush cardBsh = new SolidBrush(Color.FromArgb(30, 30, 60)); 
-    System.Windows.Forms.Timer tt;
     string uname = "Visitor";
     Image upic = null;
     private TuioClient client;
@@ -63,6 +64,28 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
     private Label lblHello;
     private PictureBox pictureBox1;
     private Label lblStatus;
+    class ArtifactRecord
+    {
+        public int id { get; set; }
+        public int tuioId { get; set; }
+        public string name { get; set; }
+        public string birthDate { get; set; }
+        public string era { get; set; }
+        public string origin { get; set; }
+        public string description { get; set; }
+        public string narration { get; set; }
+        public string objPath { get; set; }
+        public string audioPath { get; set; }
+        public string color { get; set; }
+    }
+    class ArtifactRoot
+    {
+        public List<ArtifactRecord> artifacts { get; set; }
+    }
+
+    List<ArtifactRecord> artifacts = new List<ArtifactRecord>();
+    int selectedArtifactId = -1;
+    string artifactsJsonPath = "";
     Pen curPen = new Pen(new SolidBrush(Color.Blue), 1);
 
 		public TuioDemo(int port) {
@@ -99,6 +122,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 			Thread socketThread = new Thread(stream);
 			socketThread.IsBackground = true;
 			socketThread.Start();//this right here is to recive stuff from our python code: hand gestures and facial recognition
+            LoadArtifacts();
     }
 
 		private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e) {
@@ -153,11 +177,13 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 			lock(objectList) {
 				objectList.Add(o.SessionID,o);
 			} if (verbose) Console.WriteLine("add obj "+o.SymbolID+" ("+o.SessionID+") "+o.X+" "+o.Y+" "+o.Angle);
+            NavigateToArtifactByMarker(o.SymbolID);
 		}
 
 		public void updateTuioObject(TuioObject o) {
 
 			if (verbose) Console.WriteLine("set obj "+o.SymbolID+" "+o.SessionID+" "+o.X+" "+o.Y+" "+o.Angle+" "+o.MotionSpeed+" "+o.RotationSpeed+" "+o.MotionAccel+" "+o.RotationAccel);
+            NavigateToArtifactByMarker(o.SymbolID);
 		}
 
 		public void removeTuioObject(TuioObject o) {
@@ -209,9 +235,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 		}
     class Client
     {
-        int byteCT;
         public NetworkStream stream;
-        byte[] sendData;
         public TcpClient client;
 
         public bool connectToSocket(string host, int portNumber)
@@ -242,7 +266,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
                 Console.WriteLine(data);
                 return data;
             }
-            catch (System.Exception e)
+            catch (System.Exception)
             {
 
             }
@@ -256,6 +280,117 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
     int login = 0;
     int page = 0;
     string btStatus = "Waiting...";
+
+    // load artifacts text/image data from artifacts.json
+    void LoadArtifacts()
+    {
+        string[] candidates = new string[]
+        {
+            "artifacts.json",
+            Path.Combine(Application.StartupPath, "artifacts.json"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "artifacts.json"),
+            Path.Combine("..", "..", "artifacts.json"),
+            Path.Combine("..", "..", "..", "artifacts.json")
+        };
+
+        foreach (string path in candidates)
+        {
+            if (!File.Exists(path)) continue;
+
+            try
+            {
+                string json = File.ReadAllText(path);
+                DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(ArtifactRoot));
+                using (MemoryStream ms = new MemoryStream(Encoding.UTF8.GetBytes(json)))
+                {
+                    ArtifactRoot root = serializer.ReadObject(ms) as ArtifactRoot;
+                    if (root != null && root.artifacts != null)
+                    {
+                        artifacts = root.artifacts;
+                        artifactsJsonPath = Path.GetFullPath(path);
+                        return;
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    // get artifact by marker id (tuio id)
+    ArtifactRecord GetArtifactByTuioId(int markerId)
+    {
+        foreach (ArtifactRecord artifact in artifacts)
+        {
+            if (artifact.tuioId == markerId) return artifact;
+        }
+        return null;
+    }
+
+    // get artifact by normal id
+    ArtifactRecord GetArtifactById(int artifactId)
+    {
+        foreach (ArtifactRecord artifact in artifacts)
+        {
+            if (artifact.id == artifactId) return artifact;
+        }
+        return null;
+    }
+
+    // find the real image path from objPath field in json
+    // (objPath now stores image path like artifacts/xxx.png)
+    string ResolveArtifactAssetPath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath)) return "";
+        if (Path.IsPathRooted(relativePath) && File.Exists(relativePath)) return relativePath;
+
+        string fromJsonFolder = "";
+        if (!string.IsNullOrWhiteSpace(artifactsJsonPath))
+        {
+            string jsonFolder = Path.GetDirectoryName(artifactsJsonPath);
+            fromJsonFolder = Path.Combine(jsonFolder, relativePath);
+        }
+
+        string[] candidates = new string[]
+        {
+            relativePath,
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, relativePath),
+            fromJsonFolder
+        };
+
+        foreach (string path in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) return path;
+        }
+
+        return relativePath;
+    }
+
+    // when marker appears, jump directly to its artifact page
+    void NavigateToArtifactByMarker(int markerId)
+    {
+        if (login == 0 || artifacts.Count == 0) return;
+
+        ArtifactRecord artifact = GetArtifactByTuioId(markerId);
+        if (artifact == null) return;
+
+        if (InvokeRequired)
+        {
+            BeginInvoke((MethodInvoker)delegate
+            {
+                selectedArtifactId = artifact.id;
+                page = 5;
+                Invalidate();
+            });
+            return;
+        }
+
+        selectedArtifactId = artifact.id;
+        page = 5;
+        Invalidate();
+    }
+
     public void stream()
     {
 		
@@ -477,6 +612,62 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
             if (upic != null) g.DrawImage(upic, 60, 90, 100, 100);
             else g.FillEllipse(new SolidBrush(Color.FromArgb(80, 80, 120)), 60, 90, 100, 100);
         }
+        // artifact details page (opened directly by marker scan)
+        else if (page == 5 && selectedArtifactId >= 0)
+        {
+            ArtifactRecord artifact = GetArtifactById(selectedArtifactId);
+            if (artifact != null)
+            {
+                int cardW = 1200;
+                int cardH = 640;
+                int cardX = (this.ClientSize.Width - cardW) / 2;
+                int cardY = (this.ClientSize.Height - cardH) / 2;
+                g.FillRectangle(cardBsh, cardX, cardY, cardW, cardH);
+
+                int imgX = cardX + 30;
+                int imgY = cardY + 70;
+                int imgW = 430;
+                int imgH = 500;
+                g.FillRectangle(new SolidBrush(Color.FromArgb(60, 60, 100)), imgX, imgY, imgW, imgH);
+
+                string imagePath = ResolveArtifactAssetPath(artifact.objPath);
+                if (File.Exists(imagePath))
+                {
+                    Image artifactImage = Image.FromFile(imagePath);
+                    g.DrawImage(artifactImage, imgX + 10, imgY + 10, imgW - 20, imgH - 20);
+                    artifactImage.Dispose();
+                }
+
+                int textX = imgX + imgW + 30;
+                int textY = imgY;
+                int textW = cardW - (textX - cardX) - 30;
+
+                g.DrawString(artifact.name, new Font("Arial", 24f, FontStyle.Bold), fntBrush, textX, textY);
+                g.DrawString("Marker ID (TUIO): " + artifact.tuioId, new Font("Arial", 12f, FontStyle.Italic), new SolidBrush(Color.LightGray), textX, textY + 44);
+
+                Font keyFont = new Font("Arial", 12f, FontStyle.Bold);
+                Font valFont = new Font("Arial", 12f);
+                int lineY = textY + 80;
+
+                g.DrawString("Birth Date:", keyFont, fntBrush, textX, lineY);
+                g.DrawString(artifact.birthDate, valFont, fntBrush, textX + 120, lineY);
+                lineY += 30;
+
+                g.DrawString("Era:", keyFont, fntBrush, textX, lineY);
+                g.DrawString(artifact.era, valFont, fntBrush, textX + 120, lineY);
+                lineY += 30;
+
+                g.DrawString("Origin:", keyFont, fntBrush, textX, lineY);
+                g.DrawString(artifact.origin, valFont, fntBrush, textX + 120, lineY);
+                lineY += 42;
+
+                g.DrawString("Description:", keyFont, fntBrush, textX, lineY);
+                RectangleF descRect = new RectangleF(textX, lineY + 26, textW, 280);
+                g.DrawString(artifact.description, valFont, fntBrush, descRect);
+
+                g.DrawString("SwipeRight: Home  |  SwipeLeft: News", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), textX, cardY + cardH - 34);
+            }
+        }
         // draw the cursor path
         if (cursorList.Count > 0) {
  			 lock(cursorList) {
@@ -496,7 +687,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 		 }
 
 			// draw the objects
-			if (objectList.Count > 0) {
+            if (objectList.Count > 0 && page != 5) {
  				lock(objectList) {
 					foreach (TuioObject tobj in objectList.Values) {
                     int size = height / 10;
