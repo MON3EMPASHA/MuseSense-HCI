@@ -50,3 +50,7 @@ Thumbs.db
 .vs/
 **/.vs/
 **/obj/
+
+# Python cache files
+__pycache__/
+*.pyc
