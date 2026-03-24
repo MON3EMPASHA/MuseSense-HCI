@@ -78,6 +78,7 @@ public class TuioDemo : Form , TuioListener
                 public string objPath { get; set; }
                 public string audioPath { get; set; }
                 public string color { get; set; }
+                public string country { get; set; }
         }
         class ArtifactRoot
         {
@@ -110,6 +111,11 @@ public class TuioDemo : Form , TuioListener
         string usersJsonPath = "";
         int favoritesPageIndex = 0;
         string artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
+
+        // Circular menu control
+        bool tuioMarker100Visible = false;
+        int selectedMenuItem = -1; // -1=none, 0=Egypt, 1=China, 2=Europe, 3=Favorites
+        long tuioMarker100SessionId = -1;
 
 		public TuioDemo(int port) {
         System.Timers.Timer slideTimer = new System.Timers.Timer(3000);
@@ -201,13 +207,37 @@ public class TuioDemo : Form , TuioListener
 			lock(objectList) {
 				objectList.Add(o.SessionID,o);
 			} if (verbose) Console.WriteLine("add obj "+o.SymbolID+" ("+o.SessionID+") "+o.X+" "+o.Y+" "+o.Angle);
-            NavigateToArtifactByMarker(o.SymbolID);
+            
+            // Handle circular menu marker (TUIO ID 100)
+            if (o.SymbolID == 100)
+            {
+                tuioMarker100Visible = true;
+                tuioMarker100SessionId = o.SessionID;
+                UpdateMenuSelectionFromRotation(o.Angle);
+                Invalidate();
+            }
+            else
+            {
+                NavigateToArtifactByMarker(o.SymbolID);
+            }
 		}
 
 		public void updateTuioObject(TuioObject o) {
 
 			if (verbose) Console.WriteLine("set obj "+o.SymbolID+" "+o.SessionID+" "+o.X+" "+o.Y+" "+o.Angle+" "+o.MotionSpeed+" "+o.RotationSpeed+" "+o.MotionAccel+" "+o.RotationAccel);
-            NavigateToArtifactByMarker(o.SymbolID);
+            
+            // Handle circular menu marker (TUIO ID 100)
+            if (o.SymbolID == 100)
+            {
+                tuioMarker100Visible = true;
+                tuioMarker100SessionId = o.SessionID;
+                UpdateMenuSelectionFromRotation(o.Angle);
+                Invalidate();
+            }
+            else
+            {
+                NavigateToArtifactByMarker(o.SymbolID);
+            }
 		}
 
 		public void removeTuioObject(TuioObject o) {
@@ -215,6 +245,26 @@ public class TuioDemo : Form , TuioListener
 				objectList.Remove(o.SessionID);
 			}
 			if (verbose) Console.WriteLine("del obj "+o.SymbolID+" ("+o.SessionID+")");
+            
+            // Handle circular menu marker removal (TUIO ID 100)
+            if (o.SymbolID == 100 && o.SessionID == tuioMarker100SessionId)
+            {
+                tuioMarker100Visible = false;
+                
+                // Navigate to the selected menu item
+                if (selectedMenuItem >= 0 && selectedMenuItem < 3)
+                {
+                    currentCountry = selectedMenuItem; // 0=Egypt, 1=China, 2=Europe
+                }
+                else if (selectedMenuItem == 3)
+                {
+                    page = 6; // Go to Favorites page
+                }
+                
+                selectedMenuItem = -1;
+                tuioMarker100SessionId = -1;
+                Invalidate();
+            }
 		}
 
 		public void addTuioCursor(TuioCursor c) {
@@ -302,7 +352,9 @@ public class TuioDemo : Form , TuioListener
     string msg = "";
 	string oldmsg = "";
     int login = 0;
-    int page = 0;
+    int page = 0;    
+    int currentCountry = 0;  // 0=Egypt, 1=China, 2=Europe
+    string[] countries = { "Egypt", "China", "Europe" };    
     string btStatus = "Waiting...";
 
     // load artifacts text/image data from artifacts.json
@@ -476,6 +528,17 @@ public class TuioDemo : Form , TuioListener
         return null;
     }
 
+    // get artifacts by country name
+    List<ArtifactRecord> GetArtifactsByCountry(string country)
+    {
+        List<ArtifactRecord> result = new List<ArtifactRecord>();
+        foreach (ArtifactRecord artifact in artifacts)
+        {
+            if (artifact.country == country) result.Add(artifact);
+        }
+        return result;
+    }
+
     // find the real image path from objPath field in json
     string ResolveArtifactAssetPath(string relativePath)
     {
@@ -502,6 +565,40 @@ public class TuioDemo : Form , TuioListener
         }
 
         return relativePath;
+    }
+
+    // Update menu selection based on TUIO marker rotation
+    void UpdateMenuSelectionFromRotation(double angleRadians)
+    {
+        // convert the radians to degrees formula 
+        double angleDegrees = angleRadians * 180.0 / Math.PI;
+        angleDegrees = angleDegrees % 360.0;
+        if (angleDegrees < 0) angleDegrees += 360.0;
+
+        
+        // countries degresse index
+        int[] menuPositions = { 0, 90, 180, 270 }; // China, Europe, Favorites, Egypt
+        double minDifference = 360.0;
+        int closestMenuItem = -1;
+
+        for (int i = 0; i < 4; i++)
+        {
+            
+            double diff = Math.Abs(angleDegrees - menuPositions[i]);
+            if (diff > 180) diff = 360 - diff;
+
+            if (diff < minDifference)
+            {
+                minDifference = diff;
+                closestMenuItem = i;
+            }
+        }
+
+        int[] itemMap = { 1, 2, 3, 0 }; 
+        selectedMenuItem = itemMap[closestMenuItem];
+        
+        if (verbose)
+            Console.WriteLine("Menu selection updated: angle=" + angleDegrees.ToString("F1") + "° -> item=" + selectedMenuItem);
     }
 
     // when marker appears, jump directly to its artifact page
@@ -647,20 +744,25 @@ public class TuioDemo : Form , TuioListener
             {
                 if (msg.Trim() == "SwipeRight")
                 {
-                    page++;
-                    if (page > 6) page = 0;  // Include page 6 (favorites)
-                    if (page == 4 && room == 0) page++; // skip egypt visitor eza enta fe room egypt
-                    if (page == 2 && room == 1) page++; // skip china eza enta fe room china
-                    if (page == 3 && room == 2) page++; // skip medieval eza enta fe medieval europe
+                    // page++;
+                    // if (page > 4) page = 0;
+                    // if (page == 4 && room == 0) page++; 
+                    // if (page == 2 && room == 1) page++;
+                    // if (page == 3 && room == 2) page++;
                     
+                    currentCountry++;
+                    if (currentCountry > 2) currentCountry = 0;
                 }
                 if (msg.Trim() == "SwipeLeft")
-                {
-                    page--;
-                    if (page < 0) page = 6;  // Include page 6 (favorites)
-                    if (page == 4 && room == 0) page--; // skip egypt visitor eza enta fe room egypt
-                    if (page == 2 && room == 1) page--; // skip china eza enta fe room china
-                    if (page == 3 && room == 2) page--; // skip medieval eza enta fe medieval europe
+                {                    
+                    // page--;
+                    // if (page < 0) page = 4;
+                    // if (page == 4 && room == 0) page--; skip egypt visitor eza enta fe room egypt
+                    // if (page == 2 && room == 1) page--; skip china eza enta fe room china
+                    // if (page == 3 && room == 2) page--; skip medieval eza enta fe medieval europe
+
+                    currentCountry--;
+                    if (currentCountry < 0) currentCountry = 2;
                 }
                 // Handle Circle gesture - add artifact to favorites
                 if (msg.Trim() == "Circle" && page == 5 && selectedArtifactId >= 0)
@@ -712,115 +814,65 @@ public class TuioDemo : Form , TuioListener
            
             //end of gui for login
         }
-        //gui for home page
-        else if(page==0)
+        // After login: show country artifacts grid
+        else if (uname != "Visitor" && page != 5)
         {
-          
-            int cW = 400, cH = 350, gap = 30;
-            int startX = (this.ClientSize.Width - (cW * 3 + gap * 2)) / 2;
-            int startY = (this.ClientSize.Height - cH) / 2;
+            // Get current country name and its artifacts
+            string selectedCountry = countries[currentCountry];
+            List<ArtifactRecord> countryArtifacts = GetArtifactsByCountry(selectedCountry);
 
-            string[] labels = { "Recommended", "Previously Seen", "Favorites" };
-            string[] img_links = { "Untitled.jpg", "Untitled1.jpg", "12.jpg" };
-
-            for (int i = 0; i < 3; i++)
-            {
-                int x = startX + i * (cW + gap);
-
-              
-                g.FillRectangle(cardBsh, x, startY, cW, cH);
-
-         
-                g.FillRectangle(new SolidBrush(Color.FromArgb(60, 60, 100)), x + 10, startY + 10, cW - 20, cH - 50);
-                Image img = Image.FromFile(img_links[i]);
-                g.DrawImage(img, x + 10, startY + 10, cW - 20, cH - 50);
-         
-                g.DrawString(labels[i], new Font("Arial", 13f, FontStyle.Bold), fntBrush,
-                             x + 14, startY + cH - 34);
-            }
-
+            // Draw header with country name and swipe hints
+            g.DrawString("Hello, " + uname, new Font("Arial", 20f, FontStyle.Bold), fntBrush, 40, 30);
             if (upic != null)
                 g.DrawImage(upic, 60, 90, 100, 100);
             else
                 g.FillEllipse(new SolidBrush(Color.FromArgb(80, 80, 120)), 60, 90, 100, 100);
-            g.DrawString("Hello, " + uname, new Font("Arial", 20f, FontStyle.Bold), fntBrush, 40, 30);
-        }
-        //end of gui for home
-        //gui for room page 
-        else if (page == 1)
-        {
-            string img1="";
-            string img2="";
-            if (room == 0)//egypt
-            {
-                 img1 = "Untitled.jpg";
-                 img2 = "Untitled1.jpg";
-            }
-            if (room==1)//china
-            {
-                img1 = "china1.jpg";
-                img2 = "china2.jpg";
-            }
-            if (room==2)//europe
-            {
-                img1 = "eu1.jpg";
-                img2 = "eu2.jpg";
-            }
-            
-                int cW = 400, cH = 350, gap = 30;
-                int totalW = cW * 3 + gap * 2;
-                int startX = (this.ClientSize.Width - totalW) / 2;
-                int startY = (this.ClientSize.Height - cH) / 2;
 
-                // Preview
-                g.FillRectangle(cardBsh, startX, startY, cW, cH);
-                g.FillRectangle(new SolidBrush(Color.FromArgb(60, 60, 100)), startX + 10, startY + 10, cW - 20, cH - 50);
-                g.DrawImage(Image.FromFile(img1), startX + 10, startY + 10, cW - 20, cH - 50);
-                g.DrawString("Preview", new Font("Arial", 13f, FontStyle.Bold), fntBrush, startX + 14, startY + cH - 34);
+            g.DrawString(selectedCountry, new Font("Arial", 28f, FontStyle.Bold), fntBrush, this.ClientSize.Width / 2 - 60, 50);
+            g.DrawString("Swipe Left/Right to change country  |  Scan marker to view artifact", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), 40, this.ClientSize.Height - 40);
 
-                //  SCAN
-                int midX = startX + cW + gap;
-                g.FillRectangle(cardBsh, midX, startY, cW, cH);
-                g.DrawString("SCAN", new Font("Arial", 48f, FontStyle.Bold), fntBrush,
-                    midX + (cW / 2) - 70, startY + (cH / 2) - 30);
-
-                //  Suggested
-                int rightX = startX + (cW + gap) * 2;
-                g.FillRectangle(cardBsh, rightX, startY, cW, cH);
-                g.FillRectangle(new SolidBrush(Color.FromArgb(60, 60, 100)), rightX + 10, startY + 10, cW - 20, cH - 50);
-                g.DrawImage(Image.FromFile(img2), rightX + 10, startY + 10, cW - 20, cH - 50);
-                g.DrawString("Suggested", new Font("Arial", 13f, FontStyle.Bold), fntBrush, rightX + 14, startY + cH - 34);
-
-                g.DrawString("Hello, " + uname, new Font("Arial", 20f, FontStyle.Bold), fntBrush, 40, 30);
-                if (upic != null) g.DrawImage(upic, 60, 90, 100, 100);
-                else g.FillEllipse(new SolidBrush(Color.FromArgb(80, 80, 120)), 60, 90, 100, 100);
-            
-            
-        }//end of gui for room
-        else if (page == 2 || page == 3||page==4)//gui for vistor of rooms but not in said room
-        {
-            int cW = 900, cH = 500;
-            int cX = (this.ClientSize.Width - cW) / 2;
-            int cY = (this.ClientSize.Height - cH) / 2;
-            if(page==2)//china
+            // Draw artifact grid (show up to 6 artifacts: 3 columns x 2 rows)
+            if (countryArtifacts.Count > 0)
             {
-                slideImages = new string[] { "china1.jpg", "china2.jpg", "china3.jpg", "china4.jpg", "china5.jpg" };
-            }
-            if (page == 3)//medival europe
-            {
-                slideImages = new string[] { "eu1.jpg", "eu2.jpg", "eu3.jpg", "eu4.jpg", "eu5.jpg" };
-            }
-            if(page == 4) //egypt if u are not in gyipt
-            {
-                slideImages = new string[] { "egy1.jpg", "egy2.jpg", "egy3.jpg", "egy4.jpg", "egy5.jpg" };
-            }
-            g.FillRectangle(cardBsh, cX, cY, cW, cH);
-            g.DrawImage(Image.FromFile(slideImages[slideIndex]), cX + 10, cY + 10, cW - 20, cH - 50);
-            g.DrawString("News", new Font("Arial", 13f, FontStyle.Bold), fntBrush, cX + 14, cY + cH - 34);
+                int cardW = 280;
+                int cardH = 280;
+                int gap = 30;
+                int colsPerRow = 3;
+                int totalWidth = (cardW + gap) * colsPerRow;
+                int startX = (this.ClientSize.Width - totalWidth) / 2;
+                int startY = 130;
 
-            g.DrawString("Hello, " + uname, new Font("Arial", 20f, FontStyle.Bold), fntBrush, 40, 30);
-            if (upic != null) g.DrawImage(upic, 60, 90, 100, 100);
-            else g.FillEllipse(new SolidBrush(Color.FromArgb(80, 80, 120)), 60, 90, 100, 100);
+                for (int i = 0; i < countryArtifacts.Count && i < 6; i++)
+                {
+                    ArtifactRecord artifact = countryArtifacts[i];
+                    int col = i % colsPerRow;
+                    int row = i / colsPerRow;
+                    int x = startX + col * (cardW + gap);
+                    int y = startY + row * (cardH + gap + 50);
+
+                    // Draw card background
+                    g.FillRectangle(cardBsh, x, y, cardW, cardH);
+
+                    // Draw artifact image
+                    string imagePath = ResolveArtifactAssetPath(artifact.objPath);
+                    if (File.Exists(imagePath))
+                    {
+                        try
+                        {
+                            Image artifactImg = Image.FromFile(imagePath);
+                            g.DrawImage(artifactImg, x + 10, y + 10, cardW - 20, cardH - 60);
+                            artifactImg.Dispose();
+                        }
+                        catch { }
+                    }
+
+                    // Draw artifact name below image
+                    g.DrawString(artifact.name, new Font("Arial", 11f, FontStyle.Bold), fntBrush, x + 10, y + cardH - 45);
+
+                    // Draw TUIO marker ID
+                    g.DrawString("TUIO: " + artifact.tuioId, new Font("Arial", 10f), new SolidBrush(Color.Yellow), x + 10, y + cardH - 25);
+                }
+            }
         }
         // artifact details page (opened directly by marker scan)
         else if (page == 5 && selectedArtifactId >= 0)
@@ -1012,6 +1064,9 @@ public class TuioDemo : Form , TuioListener
 					}
 				}
 			}
+
+            // Draw the circular menu
+            DrawCircularMenu(g, this.ClientSize.Width, this.ClientSize.Height);
 		}
 
     private void InitializeComponent()
@@ -1081,6 +1136,70 @@ public class TuioDemo : Form , TuioListener
 
     }
 	 
+    // Draw circular menu with 4 items (Egypt, China, Europe, Favorites)
+    private void DrawCircularMenu(Graphics g, int screenWidth, int screenHeight)
+    {
+        if (!tuioMarker100Visible) return;
+
+        // Menu configuration
+        int centerX = screenWidth - this.ClientSize.Width / 2;
+        int centerY = screenHeight - this.ClientSize.Height / 2;
+        int radius = 90; 
+        int itemSize = 80;
+        int imageSize = 60;
+
+        string[] menuLabels = { "Egypt", "China", "Europe", "Favorites" };
+        string[] menuImages = { "Countries/egypt.png", "Countries/china.png", "Countries/europe.png", "heart.png" };
+        
+        double[] angles = { -90, 0, 90, 180 };
+
+        for (int i = 0; i < 4; i++)
+        {
+            double radians = angles[i] * Math.PI / 180.0;
+            int itemX = centerX + (int)(radius * Math.Cos(radians)) - itemSize / 2;
+            int itemY = centerY + (int)(radius * Math.Sin(radians)) - itemSize / 2;
+
+            bool isSelected = (i == selectedMenuItem);
+            
+            Color bgColor = isSelected 
+                ? Color.FromArgb(255, 200, 0) // Yellow highlight for selected
+                : Color.FromArgb(60, 60, 100); // Default dark blue
+            SolidBrush itemBrush = new SolidBrush(bgColor);
+            g.FillEllipse(itemBrush, itemX, itemY, itemSize, itemSize);
+
+            // Draw border for selected item
+            if (isSelected)
+            {
+                Pen highlightPen = new Pen(Color.White, 3);
+                g.DrawEllipse(highlightPen, itemX, itemY, itemSize, itemSize);
+            }
+
+            // Load and draw the image
+            string imagePath = menuImages[i];
+            string absolutePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, imagePath);
+            
+            if (File.Exists(absolutePath))
+            {
+                try
+                {
+                    Image menuImage = Image.FromFile(absolutePath);
+                    int imgX = itemX + (itemSize - imageSize) / 2;
+                    int imgY = itemY + (itemSize - imageSize) / 2;
+                    g.DrawImage(menuImage, imgX, imgY, imageSize, imageSize);
+                    menuImage.Dispose();
+                }
+                catch { }
+            }
+
+            Font labelFont = new Font("Arial", 10f, FontStyle.Bold);
+            SolidBrush labelBrush = isSelected ? new SolidBrush(Color.Yellow) : new SolidBrush(Color.White);
+            StringFormat format = new StringFormat();
+            format.Alignment = StringAlignment.Center;
+            g.DrawString(menuLabels[i], labelFont, labelBrush, 
+                         itemX + itemSize / 2, itemY + itemSize + 5, format);
+        }
+    }
+
     private void TuioDemo_Load(object sender, EventArgs e)
     {
         pnlCard.Left = (this.ClientSize.Width - pnlCard.Width) / 2;
