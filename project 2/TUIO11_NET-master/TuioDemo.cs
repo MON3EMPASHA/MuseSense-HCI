@@ -812,31 +812,25 @@ public class TuioDemo : Form , TuioListener
             {
                 if (msg.Trim() == "SwipeRight")
                 {
-                    // page++;
-                    // if (page > 4) page = 0;
-                    // if (page == 4 && room == 0) page++; 
-                    // if (page == 2 && room == 1) page++;
-                    // if (page == 3 && room == 2) page++;
-                    
-                    currentCountry++;
-                    if (currentCountry > 2) currentCountry = 0;
+                    if (page == 6)
+                        page = 0;
+                    else
+                    {
+                        currentCountry++;
+                        if (currentCountry > 2) currentCountry = 0;
+                    }
                 }
                 if (msg.Trim() == "SwipeLeft")
-                {                    
-                    // page--;
-                    // if (page < 0) page = 4;
-                    // if (page == 4 && room == 0) page--; skip egypt visitor eza enta fe room egypt
-                    // if (page == 2 && room == 1) page--; skip china eza enta fe room china
-                    // if (page == 3 && room == 2) page--; skip medieval eza enta fe medieval europe
-
-                    currentCountry--;
-                    if (currentCountry < 0) currentCountry = 2;
+                {
+                    if (page != 6)
+                    {
+                        currentCountry--;
+                        if (currentCountry < 0) currentCountry = 2;
+                    }
                 }
-                // Handle Circle gesture - add artifact to favorites
                 if (msg.Trim() == "Circle" && page == 5 && selectedArtifactId >= 0)
                 {
-                    bool addedToFavorites = AddArtifactToFavorites(selectedArtifactId);
-                    if (addedToFavorites)
+                    if (AddArtifactToFavorites(selectedArtifactId))
                     {
                         artifactFavoriteHint = "Artifact added to favourites";
                         Console.WriteLine("Artifact added to favourites");
@@ -1001,64 +995,48 @@ public class TuioDemo : Form , TuioListener
         // favorites page
         else if (page == 6)
         {
-            // Title
             g.DrawString("My Favorites", new Font("Arial", 28f, FontStyle.Bold), fntBrush, 50, 30);
-
-            // Check if user is logged in
-            if (currentUser == null || currentUser.favorites == null || currentUser.favorites.Count == 0)
-            {
-                g.DrawString("No favorites added yet. Open an artifact and make a CIRCLE gesture to add it to favorites!", 
-                    new Font("Arial", 16f), fntBrush, 50, 150);
-            }
-            else
-            {
-                // Display favorite artifacts
-                int cW = 280, cH = 350, gap = 30;
-                int startX = 50;
-                int startY = 120;
-                int itemsPerRow = (this.ClientSize.Width - 80) / (cW + gap);
-                
-                for (int i = 0; i < currentUser.favorites.Count; i++)
-                {
-                    int artifactId = currentUser.favorites[i];
-                    ArtifactRecord artifact = GetArtifactById(artifactId);
-                    
-                    if (artifact != null)
-                    {
-                        int row = i / itemsPerRow;
-                        int col = i % itemsPerRow;
-                        int x = startX + col * (cW + gap);
-                        int y = startY + row * (cH + gap);
-
-                        // Draw card background
-                        g.FillRectangle(cardBsh, x, y, cW, cH);
-
-                        // Draw artifact image
-                        g.FillRectangle(new SolidBrush(Color.FromArgb(60, 60, 100)), x + 10, y + 10, cW - 20, cH - 50);
-                        string imagePath = ResolveArtifactAssetPath(artifact.objPath);
-                        if (File.Exists(imagePath))
-                        {
-                            Image artifactImage = Image.FromFile(imagePath);
-                            g.DrawImage(artifactImage, x + 10, y + 10, cW - 20, cH - 50);
-                            artifactImage.Dispose();
-                        }
-
-                        // Draw artifact name
-                        g.DrawString(artifact.name, new Font("Arial", 11f, FontStyle.Bold), fntBrush,
-                                     x + 14, y + cH - 34);
-                    }
-                }
-            }
-
-            // User info
             if (upic != null)
                 g.DrawImage(upic, 60, 90, 100, 100);
             else
                 g.FillEllipse(avatarBrush, 60, 90, 100, 100);
             g.DrawString("Hello, " + uname, new Font("Arial", 20f, FontStyle.Bold), fntBrush, 40, 30);
 
-            // Navigation hints
-            g.DrawString("SwipeRight: Home  |  SwipeLeft: News", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), 50, this.ClientSize.Height - 34);
+            if (currentUser == null || currentUser.favorites == null || currentUser.favorites.Count == 0)
+            {
+                g.DrawString("No favorites yet", new Font("Arial", 16f), fntBrush, 50, 150);
+            }
+            else
+            {
+                int w = 280, h = 280, gap = 30;
+                int cols = 3;
+                int totalWidth = (w + gap) * cols;
+                int startX = (this.ClientSize.Width - totalWidth) / 2;
+                int startY = 150;
+
+                for (int i = 0; i < currentUser.favorites.Count; i++)
+                {
+                    ArtifactRecord artifact = GetArtifactById(currentUser.favorites[i]);
+                    if (artifact != null)
+                    {
+                        int col = i % cols;
+                        int row = i / cols;
+                        int x = startX + col * (w + gap);
+                        int y = startY + row * (h + gap + 50);
+
+                        g.FillRectangle(cardBsh, x, y, w, h);
+                        string imgPath = ResolveArtifactAssetPath(artifact.objPath);
+                        if (File.Exists(imgPath))
+                        {
+                            Image img = Image.FromFile(imgPath);
+                            g.DrawImage(img, x + 10, y + 10, w - 20, h - 60);
+                            img.Dispose();
+                        }
+                        g.DrawString(artifact.name, new Font("Arial", 11f, FontStyle.Bold), fntBrush, x + 10, y + h - 45);
+                    }
+                }
+            }
+            g.DrawString("SwipeRight: Back", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), 50, this.ClientSize.Height - 34);
         }
         // draw the cursor path
         if (cursorList.Count > 0) {
