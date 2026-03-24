@@ -29,9 +29,9 @@ using System.Net.Sockets;
 using System.Text;
 using System.IO;
 using System.Web.Script.Serialization;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Runtime.Serialization.Json;
 
-	public class TuioDemo : Form , TuioListener
+public class TuioDemo : Form , TuioListener
 	{
     int slideIndex = 0;
     string[] slideImages ;
@@ -751,7 +751,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
                     if (tobj.SymbolID == 0)
                     {
                         Image bgimg = Image.FromFile("background1.png");
-                        Image objimg = Image.FromFile("assets/objects/obj1.png");
+                        Image objimg = Image.FromFile("objects/obj1.png");
                         ox = tobj.getScreenX(width);
                         oy = tobj.getScreenY(height);
                         g.DrawImage(bgimg, 0, 0, width, height);
@@ -766,7 +766,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
                     if (tobj.SymbolID == 1)
                     {
                         Image bgimg = Image.FromFile("background2.png");
-                        Image objimg = Image.FromFile("assets/objects/obj2.png");
+                        Image objimg = Image.FromFile("objects/obj2.png");
                         ox = tobj.getScreenX(width);
                         oy = tobj.getScreenY(height);
                         g.DrawImage(bgimg, 0, 0, width, height);
@@ -781,7 +781,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
                     if (tobj.SymbolID == 2)
                     {
                         Image bgimg = Image.FromFile("background3.png");
-                        Image objimg = Image.FromFile("assets/objects/obj3.png");
+                        Image objimg = Image.FromFile("objects/obj3.png");
                         ox = tobj.getScreenX(width);
                         oy = tobj.getScreenY(height);
                         g.DrawImage(bgimg, 0, 0, width, height);
