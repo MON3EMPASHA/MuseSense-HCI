@@ -109,6 +109,7 @@ public class TuioDemo : Form , TuioListener
         List<UserRecord> allUsers = new List<UserRecord>();
         string usersJsonPath = "";
         int favoritesPageIndex = 0;
+        string artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
 
 		public TuioDemo(int port) {
         System.Timers.Timer slideTimer = new System.Timers.Timer(3000);
@@ -260,6 +261,7 @@ public class TuioDemo : Form , TuioListener
     {
         public NetworkStream stream;
         public TcpClient client;
+        public StreamReader reader;
 
         public bool connectToSocket(string host, int portNumber)
         {
@@ -267,6 +269,7 @@ public class TuioDemo : Form , TuioListener
             {
                 client = new TcpClient(host, portNumber);
                 stream = client.GetStream();
+                reader = new StreamReader(stream, Encoding.UTF8);
                 Console.WriteLine("connection made ! with " + host);
                 return true;
             }
@@ -281,11 +284,9 @@ public class TuioDemo : Form , TuioListener
         {
             try
             {
-                if (stream == null) return null;
-                byte[] receiveBuffer = new byte[1024];
-                int bytesReceived = stream.Read(receiveBuffer, 0, 1024);
-                Console.WriteLine(bytesReceived);
-                string data = Encoding.UTF8.GetString(receiveBuffer, 0, bytesReceived);
+                if (reader == null) return null;
+                string data = reader.ReadLine();
+                if (string.IsNullOrWhiteSpace(data)) return null;
                 Console.WriteLine(data);
                 return data;
             }
@@ -336,9 +337,9 @@ public class TuioDemo : Form , TuioListener
     // load users data from users.json
     void LoadUsers()
     {
-        string path = @"..\..\TUIO11_NET-master\bin\Debug\users.json";
+        string path = ResolveUsersJsonPath();
 
-        if (File.Exists(path))
+        if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
         {
             try
             {
@@ -355,11 +356,31 @@ public class TuioDemo : Form , TuioListener
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Failed loading users from " + Path.GetFullPath(path) + ": " + ex.Message);
+                Console.WriteLine("Failed loading users from " + path + ": " + ex.Message);
             }
         }
 
         Console.WriteLine("No valid users.json could be loaded.");
+    }
+
+    string ResolveUsersJsonPath()
+    {
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string[] candidates = new string[]
+        {
+            Path.Combine(baseDir, "users.json"),
+            Path.Combine(baseDir, @"..\..\bin\Debug\users.json"),
+            Path.Combine(baseDir, @"..\..\users.json"),
+            Path.Combine(baseDir, @"..\..\..\bin\Debug\users.json")
+        };
+
+        foreach (string candidate in candidates)
+        {
+            string fullPath = Path.GetFullPath(candidate);
+            if (File.Exists(fullPath)) return fullPath;
+        }
+
+        return string.Empty;
     }
 
     // get user by name
@@ -372,10 +393,28 @@ public class TuioDemo : Form , TuioListener
         return null;
     }
 
-    // add artifact to user's favorites
-    void AddArtifactToFavorites(int artifactId)
+    UserRecord GetUserByMac(string macAddress)
     {
-        if (currentUser == null) return;
+        if (string.IsNullOrWhiteSpace(macAddress)) return null;
+
+        foreach (UserRecord user in allUsers)
+        {
+            if (user.mac == null) continue;
+
+            foreach (string mac in user.mac)
+            {
+                if (string.Equals(mac, macAddress, StringComparison.OrdinalIgnoreCase))
+                    return user;
+            }
+        }
+
+        return null;
+    }
+
+    // add artifact to user's favorites
+    bool AddArtifactToFavorites(int artifactId)
+    {
+        if (currentUser == null) return false;
         
         if (currentUser.favorites == null)
             currentUser.favorites = new List<int>();
@@ -384,7 +423,10 @@ public class TuioDemo : Form , TuioListener
         {
             currentUser.favorites.Add(artifactId);
             SaveUserFavorites();
+            return true;
         }
+
+        return false;
     }
 
     // remove artifact from user's favorites
@@ -475,6 +517,7 @@ public class TuioDemo : Form , TuioListener
             BeginInvoke((MethodInvoker)delegate
             {
                 selectedArtifactId = artifact.id;
+                artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
                 page = 5;
                 Invalidate();
             });
@@ -482,6 +525,7 @@ public class TuioDemo : Form , TuioListener
         }
 
         selectedArtifactId = artifact.id;
+        artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
         page = 5;
         Invalidate();
     }
@@ -518,6 +562,8 @@ public class TuioDemo : Form , TuioListener
 
             // Set current user
             currentUser = GetUserByName(uname);
+            if (currentUser == null)
+                currentUser = GetUserByMac(payload.mac);
 
             string profilePath = string.IsNullOrWhiteSpace(payload.Profile) ? null : payload.Profile.Trim();
             if (!string.IsNullOrWhiteSpace(profilePath))
@@ -619,8 +665,12 @@ public class TuioDemo : Form , TuioListener
                 // Handle Circle gesture - add artifact to favorites
                 if (msg.Trim() == "Circle" && page == 5 && selectedArtifactId >= 0)
                 {
-                    AddArtifactToFavorites(selectedArtifactId);
-                    Console.WriteLine("Artifact " + selectedArtifactId + " added to favorites");
+                    bool addedToFavorites = AddArtifactToFavorites(selectedArtifactId);
+                    if (addedToFavorites)
+                    {
+                        artifactFavoriteHint = "Artifact added to favourites";
+                        Console.WriteLine("Artifact added to favourites");
+                    }
                 }
                 Invoke((Action)(Invalidate));
             }
@@ -826,7 +876,7 @@ public class TuioDemo : Form , TuioListener
                 g.DrawString(artifact.description, valFont, fntBrush, descRect);
 
                 // Draw heart icon and favorite instructions
-                g.DrawString("Make a CIRCLE to add to favorites!", new Font("Arial", 12f, FontStyle.Bold), new SolidBrush(Color.FromArgb(255, 192, 203)), textX, cardY + cardH - 60);
+                g.DrawString(artifactFavoriteHint, new Font("Arial", 12f, FontStyle.Bold), new SolidBrush(Color.FromArgb(255, 192, 203)), textX, cardY + cardH - 60);
                 g.DrawString("SwipeRight: Home  |  SwipeLeft: News", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), textX, cardY + cardH - 34);
             }
         }

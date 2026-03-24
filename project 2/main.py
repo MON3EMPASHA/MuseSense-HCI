@@ -15,6 +15,7 @@ import pickle
 import socket
 import json
 import bluetooth
+import time
 from dollarpy import Point
 from pathlib import Path
 from movements import recognizer
@@ -72,6 +73,38 @@ def load_users_by_mac(json_path: Path = USERS_JSON_PATH) -> dict[str, dict]:
                 }
 
     return users_by_mac
+
+
+def send_socket_message(connection: socket.socket, payload: str) -> None:
+    if not payload:
+        return
+
+    connection.sendall(f"{payload}\n".encode("utf-8"))
+
+
+gesture_feedback_text = ""
+gesture_feedback_until = 0.0
+
+
+def show_gesture_feedback(message: str, duration: float = 2.0) -> None:
+    global gesture_feedback_text, gesture_feedback_until
+    gesture_feedback_text = message
+    gesture_feedback_until = time.monotonic() + duration
+
+
+def draw_gesture_feedback(frame: np.ndarray) -> None:
+    if time.monotonic() >= gesture_feedback_until or not gesture_feedback_text:
+        return
+
+    cv2.putText(
+        frame,
+        gesture_feedback_text,
+        (20, 60),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8,
+        (0, 255, 255),
+        2,
+    )
 
 
 soc = socket.socket()
@@ -168,11 +201,11 @@ while cap.isOpened():
         if login_message is not None:
             message_payload = json.dumps(login_message)
             print("Sending login payload:", message_payload)
-            conn.send(message_payload.encode("utf-8"))
+            send_socket_message(conn, message_payload)
             user_login = 1
         elif address is not None:
             print("Sending MAC:", address)
-            conn.send(address.encode("utf-8"))
+            send_socket_message(conn, address)
             user_login = 1
     try:
 
@@ -231,7 +264,7 @@ while cap.isOpened():
                 result = recognizer.recognize(Allpoints)
                 if result[0] != None:
                     print(result)
-                    msg += result[0]
+                    msg = str(result[0]).strip()
 
             Allpoints.clear()
         # x=int(results.pose.landmark[mp_pose.PoseLandmark.RIGHT_WRIST].x * image_width)
@@ -265,10 +298,15 @@ while cap.isOpened():
             mp_holistic.POSE_CONNECTIONS,
             landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style(),
         )
+        draw_gesture_feedback(annotated_image)
         cv2.imshow("Output", annotated_image)
         # logic to send msg to unity
         if msg != "" and msg != old_msg:  # only send when there's actually something
-            conn.send(msg.encode("utf-8"))
+            send_socket_message(conn, msg)
+            if msg == "Circle":
+                feedback_message = "Circle detected: favorite request sent"
+                print(f"[GESTURE] {feedback_message}")
+                show_gesture_feedback(feedback_message)
 
         old_msg = msg
 
