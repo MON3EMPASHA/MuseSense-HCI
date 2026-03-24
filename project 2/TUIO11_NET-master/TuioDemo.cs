@@ -300,22 +300,23 @@ public class TuioDemo : Form , TuioListener
             try
             {
                 string json = File.ReadAllText(path);
-                DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(ArtifactRoot));
-                using (MemoryStream ms = new MemoryStream(Encoding.UTF8.GetBytes(json)))
+                JavaScriptSerializer serializer = new JavaScriptSerializer();
+                ArtifactRoot root = serializer.Deserialize<ArtifactRoot>(json);
+                if (root != null && root.artifacts != null && root.artifacts.Count > 0)
                 {
-                    ArtifactRoot root = serializer.ReadObject(ms) as ArtifactRoot;
-                    if (root != null && root.artifacts != null)
-                    {
-                        artifacts = root.artifacts;
-                        artifactsJsonPath = Path.GetFullPath(path);
-                        return;
-                    }
+                    artifacts = root.artifacts;
+                    artifactsJsonPath = Path.GetFullPath(path);
+                    Console.WriteLine("Loaded artifacts from: " + artifactsJsonPath + " (count=" + artifacts.Count + ")");
+                    return;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine("Failed loading artifacts from " + Path.GetFullPath(path) + ": " + ex.Message);
             }
         }
+
+        Console.WriteLine("No valid artifacts.json could be loaded.");
     }
 
     // get artifact by marker id (tuio id)
@@ -370,7 +371,7 @@ public class TuioDemo : Form , TuioListener
     // when marker appears, jump directly to its artifact page
     void NavigateToArtifactByMarker(int markerId)
     {
-        if (login == 0 || artifacts.Count == 0) return;
+        if (artifacts.Count == 0) return;
 
         ArtifactRecord artifact = GetArtifactByTuioId(markerId);
         if (artifact == null) return;
@@ -533,7 +534,7 @@ public class TuioDemo : Form , TuioListener
         g.FillRectangle(bgrBrush, new Rectangle(0, 0, this.ClientSize.Width, this.ClientSize.Height));
         //gui for logn fr:
 
-        if (uname == "Visitor")
+        if (uname == "Visitor" && page != 5)
         {
             int cw = 500, ch = 500;
             int cX = (this.ClientSize.Width - cw) / 2;
