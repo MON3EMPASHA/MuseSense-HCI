@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex paper/paper"] 1776702459.04933 "paper/paper.aux" "paper/paper.bbl" "paper/paper" 1776702464.70263 0
+["bibtex paper/paper"] 1776714506.42984 "paper/paper.aux" "paper/paper.bbl" "paper/paper" 1776714514.48508 0
   "C:/Users/pc/AppData/Roaming/MiKTeX/bibtex/bst/ieeetran/IEEEtran.bst" 1440622569 57748 7c8250ecf02814ce6ddc0cdbb63df1dd ""
   "E:/Programming/HCI/paper/refrences.bib" 1776702158 8445 54d7ebf8a5dc6e361fa38052bb592685 ""
-  "paper/paper.aux" 1776702463 4443 24f8012d1d0c07bb2812c52b35629586 "pdflatex"
+  "paper/paper.aux" 1776714512 5010 b6ed033d89ce662dcf6eced76f28531b "pdflatex"
   (generated)
   "paper/paper.bbl"
   "paper/paper.blg"
   (rewritten before read)
-["pdflatex"] 1776702459.41162 "paper/paper.tex" "paper/paper.pdf" "paper" 1776702464.70343 0
+["pdflatex"] 1776714506.96871 "paper/paper.tex" "paper/paper.pdf" "paper" 1776714514.48593 0
   "C:/Program Files/MiKTeX/fonts/enc/dvips/base/8r.enc" 1458473887 4993 80dc9bab7f31fb78a000ccfed0e27cab ""
   "C:/Program Files/MiKTeX/fonts/tfm/adobe/times/ptmb7t.tfm" 1136765054 2172 fd0c924230362ff848a33632ed45dc23 ""
   "C:/Program Files/MiKTeX/fonts/tfm/adobe/times/ptmb8r.tfm" 1136765054 4524 6bce29db5bc272ba5f332261583fee9c ""
@@ -86,9 +86,9 @@
   "C:/Users/pc/AppData/Roaming/MiKTeX/tex/latex/ieeetran/IEEEtran.cls" 1440627644 281957 5b2e4fa15b0f7eabb840ebf67df4c0f7 ""
   "C:/Users/pc/AppData/Roaming/MiKTeX/tex/latex/psnfss/ot1ptm.fd" 1585253778 1007 15056f4a61917ceed3a44e4ac11fcc52 ""
   "C:/Users/pc/AppData/Roaming/MiKTeX/tex/latex/psnfss/ts1ptm.fd" 1585253778 653 96f56dc5d1ef1fe1121f1cfeec70ee0c ""
-  "paper/paper.aux" 1776702463 4443 24f8012d1d0c07bb2812c52b35629586 "pdflatex"
-  "paper/paper.bbl" 1776702459 5769 02c5d1b35f242f1eaaa787d9d18234a1 "bibtex paper/paper"
-  "paper/paper.tex" 1776702158 22621 368086a45028ad3f44837daceae37860 ""
+  "paper/paper.aux" 1776714512 5010 b6ed033d89ce662dcf6eced76f28531b "pdflatex"
+  "paper/paper.bbl" 1776714506 5769 02c5d1b35f242f1eaaa787d9d18234a1 "bibtex paper/paper"
+  "paper/paper.tex" 1776714492 25858 454311d3409c0f3ec4f9dae14db868be ""
   "paper/sate_flow.jpeg" 1776687667 220580 2d9e893cec3624528311065157efba57 ""
   "paper/system_architecture.jpeg" 1776687655 240326 b0ed98806ad5c616d2183402aa8b74b0 ""
   (generated)
