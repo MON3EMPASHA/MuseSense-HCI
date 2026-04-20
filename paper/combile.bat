@@ -37,4 +37,5 @@ if not errorlevel 1 (
 
 echo [SUCCESS] PDF build completed.
 endlocal
+start paper.pdf
 exit /b 0
