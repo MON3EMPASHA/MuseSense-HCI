@@ -56,8 +56,26 @@ if not errorlevel 1 (
     )
 )
 
+
+for %%F in (
+    "paper.aux"
+    "paper.log"
+    "paper.fls"
+    "paper.fdb_latexmk"
+    "paper.synctex.gz"
+    "paper.toc"
+    "paper.out"
+    "paper.lof"
+    "paper.lot"
+    "paper.bbl"
+    "paper.blg"
+    "paper.xdv"
+    "paper.fls"
+    "paper.log"
+) do if exist "%%~fF" del /q "%%~fF"
+
 echo [SUCCESS] PDF build completed.
 popd
 endlocal
-start paper\paper.pdf
+start paper.pdf
 exit /b 0
