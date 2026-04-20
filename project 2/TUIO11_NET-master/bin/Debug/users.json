@@ -1,0 +1,48 @@
+[
+  {
+    "name": "Ayad Zewail",
+    "age": "999",
+    "gender": "non-binary",
+    "mac": ["43:6F:AB:C8:FA:F6"],
+    "Profile": "objects/obj1.png",
+    "favorites": []
+  },
+  {
+    "name": "Youssef Abdulghany",
+    "age": "12",
+    "gender": "female",
+    "mac": ["54:C4:E5:20:E2:C8"],
+    "Profile": "objects/obj2.png",
+    "favorites": []
+  },
+  {
+    "name": "Mohamed Taha",
+    "age": "21",
+    "gender": "male",
+    "mac": ["9C:6B:72:01:A3:DA"],
+    "Profile": "objects/obj3.png",
+    "favorites": []
+  },
+  {
+    "name": "Abdelmonem Hatem",
+    "age": "21",
+    "gender": "male",
+    "mac": [
+      "64:D0:D6:AE:32:C1",
+      "64:D0:D6:58:C3:09",
+      "10:EC:81:8F:FD:BB",
+      "F4:B6:2D:FD:64:03",
+      "10:5B:AD:2C:59:6C"
+    ],
+    "Profile": "objects/obj4.png",
+    "favorites": [1, 0, 4, 5, 6]
+  },
+  {
+    "name": "Mohamed Ibrahim",
+    "age": "21",
+    "gender": "male",
+    "mac": ["5C:56:A4:71:B0:DA", "43:D5:F9:A1:62:7A"],
+    "Profile": "objects/obj5.png",
+    "favorites": [1, 2, 4]
+  }
+]
