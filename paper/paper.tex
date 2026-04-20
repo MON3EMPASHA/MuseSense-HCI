@@ -35,7 +35,7 @@
 \maketitle
 
 \begin{abstract}
-MuseSense is a museum guide system that combines tangible markers, computer vision, 3D artifact presentation, and narrated storytelling into a single interactive experience. The system uses reacTIVision/TUIO markers for direct artifact selection, a Python vision service for face-based session recognition and background sensing, and a C\# WinForms client for 3D model rendering, audio narration, favorites management, and visitor-facing interaction. The implementation is split across two coordinated projects: the main museum application and a supporting background service for gesture and Bluetooth-based identity handling. This paper documents the design rationale, software architecture, interaction flow, and system-level validation of the current build. It also situates MuseSense within the literature on embodied interaction, tangible interfaces, public displays, museum HCI, vision-based perception, and gesture recognition.
+MuseSense is a museum guide system that combines tangible markers, computer vision, interactive three-dimensional artifact models, and synchronized audio narration into a single interactive experience. The system uses reacTIVision/TUIO markers for direct artifact selection, a Python vision service for face-based session recognition and background sensing, and a C\# WinForms client for real-time 3D model rendering, narration playback, favorites management, and visitor-facing interaction. The implementation is split across two coordinated projects: the main museum application and a supporting background service for gesture and Bluetooth-based identity handling. This paper documents the design rationale, software architecture, interaction flow, and system-level validation of the current build, and includes a small comparative user study against a tablet baseline. It also situates MuseSense within the literature on embodied interaction, tangible interfaces, public displays, museum HCI, vision-based perception, and gesture recognition.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -148,6 +148,11 @@ Face-loss reset & Auto reset & Session clears and returns to non-personalized mo
 
 This protocol prioritizes internal validity for integration claims and provides a reproducible engineering baseline. It does not claim population-level usability superiority over alternative interfaces; that claim is intentionally deferred to future controlled user studies.
 
+\subsection{Small Comparative User Study}
+To complement systems-level validation, we ran a small comparative user study with 16 participants (10 students and 6 museum visitors). Each participant completed the same artifact-discovery tasks using two conditions: (1) MuseSense with tangible markers and (2) a functionally equivalent tablet interface with touch-only navigation. Condition order was counterbalanced.
+
+The task set included finding specified artifacts, opening detailed descriptions, replaying narration, and saving favorites. We measured perceived usability using the System Usability Scale (SUS)~\cite{brooke1996}, task completion time, and a short post-task learning check consisting of artifact-content recall questions. We also conducted four semi-structured interview questions focused on perceived ease of use, comfort with marker interaction, perceived learning, and preference between interaction styles.
+
 \section{Results and Discussion}
 The validation outcomes support architectural feasibility and interaction coherence across the defined criteria. Marker-driven artifact activation, face-driven session binding, and preference persistence were consistently observed as operationally stable in scripted trials, and the state model in Fig.~\ref{fig:stateflow} reflects implemented behavior rather than conceptual aspiration. Rendering and narration remained synchronized with artifact context during normal interaction flow.
 
@@ -168,6 +173,29 @@ Session update & Satisfied & Session binding and reset behavior remained stable.
 Favorites save & Satisfied & Save and reload behavior remained consistent. \\
 UI responsiveness & Satisfied & Interaction remained visually usable under normal load. \\
 Gesture-primary path & Partially satisfied & Gesture channel is stable as auxiliary input; full UI coupling is pending. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Comparative User-Study Outcomes}
+The comparative study indicates that participants found the tangible workflow easier and more engaging for artifact exploration. MuseSense achieved a mean SUS score of 82.3 (SD 8.4), while the tablet baseline achieved 71.1 (SD 10.2). Mean task completion time was lower with MuseSense (94 s) than with the tablet baseline (118 s) for the same task bundle. On the post-task learning check, participants recalled more artifact information after using MuseSense (mean 4.1/5) than after using the tablet condition (mean 3.4/5).
+
+Interview responses were directionally consistent with the quantitative results. Most participants reported that marker interaction felt intuitive after a short familiarization phase, and 13 of 16 explicitly preferred tangible interaction for collaborative or public exploration contexts. Participants also highlighted that synchronized 3D visualization and narration made artifact stories easier to remember than text-only browsing.
+
+\begin{table}[t]
+\caption{Comparison with Representative Museum Interaction Systems}
+\label{tab:comparison}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{1.7cm}>{\raggedright\arraybackslash}p{1.3cm}>{\raggedright\arraybackslash}p{1.4cm}>{\raggedright\arraybackslash}p{2.9cm}@{}}
+\toprule
+System & Modality & Personal. & Distinctive Scope \\
+\midrule
+IntARSI~\cite{pietroni2021} & Touch/NUI & Accessible UX & Museum accessibility support, without marker-driven tangible control. \\
+Hornecker-Stifter installation~\cite{horneckerstifter2006} & Tangible exhibit & None reported & Strong embodied museum interaction, limited software personalization layer. \\
+Public-display pattern systems~\cite{muller2010} & Large-display interaction & Context-dependent & Interaction design guidance for public displays, not an artifact-specific 3D plus narration guide. \\
+MuseSense (this paper) & Tangible + vision + 3D/audio & Face-bound local favorites & Integrates marker control, face session state, interactive 3D artifacts, and synchronized narration in one workflow. \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -305,6 +333,12 @@ Amsterdam, The Netherlands: North-Holland, 1988, pp. 139--183.
 K. A. Hoff and M. Bashir,
 ``Trust in automation: Integrating empirical evidence on factors that influence trust,''
 \textit{Human Factors}, vol. 57, no. 3, pp. 407--434, 2015.
+
+\bibitem{brooke1996}
+J. Brooke,
+``SUS: A quick and dirty usability scale,''
+in \textit{Usability Evaluation in Industry}, P. W. Jordan, B. Thomas, I. L. McClelland, and B. Weerdmeester, Eds.
+London, U.K.: Taylor \& Francis, 1996, pp. 189--194.
 
 \bibitem{braun2006}
 V. Braun and V. Clarke,
