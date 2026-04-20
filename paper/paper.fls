@@ -1,227 +1,182 @@
-PWD E:\Programming\HCI\paper
-INPUT C:\Users\pc\AppData\Local\MiKTeX\miktex\data\le\pdftex\pdflatex.fmt
-INPUT paper.tex
-OUTPUT paper.log
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\ieeetran\IEEEtran.cls
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\ieeetran\IEEEtran.cls
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\psnfss\ot1ptm.fd
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\psnfss\ot1ptm.fd
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\psnfss\ot1ptm.fd
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\cite\cite.sty
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\cite\cite.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsmath\amsmath.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsmath\amsmath.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsmath\amsopn.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsmath\amstext.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsmath\amstext.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsmath\amsgen.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsmath\amsgen.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsmath\amsbsy.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsmath\amsbsy.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsmath\amsopn.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsfonts\amssymb.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsfonts\amssymb.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsfonts\amsfonts.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\amsfonts\amsfonts.sty
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\algorithms\algorithmic.sty
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\algorithms\algorithmic.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\base\ifthen.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\base\ifthen.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics\keyval.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics\keyval.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics\graphicx.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics\graphicx.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics\graphics.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics\graphics.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics\trig.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics\trig.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics-cfg\graphics.cfg
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics-cfg\graphics.cfg
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics-cfg\graphics.cfg
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics-def\pdftex.def
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics-def\pdftex.def
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics-def\pdftex.def
-INPUT C:\Program Files\MiKTeX\tex\latex\base\textcomp.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\base\textcomp.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\xcolor\xcolor.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\xcolor\xcolor.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics-cfg\color.cfg
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics-cfg\color.cfg
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics-cfg\color.cfg
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics\mathcolor.ltx
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics\mathcolor.ltx
-INPUT C:\Program Files\MiKTeX\tex\latex\graphics\mathcolor.ltx
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\float\float.sty
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\float\float.sty
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\enumitem\enumitem.sty
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\enumitem\enumitem.sty
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\changepage\changepage.sty
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\changepage\changepage.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\listings\listings.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\listings\listings.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\listings\lstmisc.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\listings\lstmisc.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\listings\lstmisc.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\listings\listings.cfg
-INPUT C:\Program Files\MiKTeX\tex\latex\listings\listings.cfg
-INPUT C:\Program Files\MiKTeX\tex\latex\listings\listings.cfg
-INPUT C:\Program Files\MiKTeX\tex\latex\url\url.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\url\url.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\listings\lstlang1.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\listings\lstlang1.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\listings\lstlang1.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\l3backend\l3backend-pdftex.def
-INPUT C:\Program Files\MiKTeX\tex\latex\l3backend\l3backend-pdftex.def
-INPUT .\paper.aux
-INPUT .\paper.aux
-INPUT paper.aux
-OUTPUT paper.aux
-INPUT C:\Program Files\MiKTeX\tex\context\base\mkii\supp-pdf.mkii
-INPUT C:\Program Files\MiKTeX\tex\context\base\mkii\supp-pdf.mkii
-INPUT C:\Program Files\MiKTeX\tex\context\base\mkii\supp-pdf.mkii
-INPUT C:\Program Files\MiKTeX\tex\latex\epstopdf-pkg\epstopdf-base.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\epstopdf-pkg\epstopdf-base.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\00miktex\epstopdf-sys.cfg
-INPUT C:\Program Files\MiKTeX\tex\latex\00miktex\epstopdf-sys.cfg
-INPUT C:\Program Files\MiKTeX\tex\latex\00miktex\epstopdf-sys.cfg
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\psnfss\ts1ptm.fd
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\psnfss\ts1ptm.fd
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\psnfss\ts1ptm.fd
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb8c.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmrc7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8c.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\cmextra\cmex7.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\cmextra\cmex7.tfm
-INPUT C:\Program Files\MiKTeX\tex\latex\amsfonts\umsa.fd
-INPUT C:\Program Files\MiKTeX\tex\latex\amsfonts\umsa.fd
-INPUT C:\Program Files\MiKTeX\tex\latex\amsfonts\umsa.fd
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam10.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam7.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam5.tfm
-INPUT C:\Program Files\MiKTeX\tex\latex\amsfonts\umsb.fd
-INPUT C:\Program Files\MiKTeX\tex\latex\amsfonts\umsb.fd
-INPUT C:\Program Files\MiKTeX\tex\latex\amsfonts\umsb.fd
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm10.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm7.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm5.tfm
-OUTPUT paper.pdf
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8r.tfm
-INPUT C:\Users\pc\AppData\Local\MiKTeX\fonts\map\pdftex\pdftex.map
-INPUT C:\Program Files\MiKTeX\fonts\enc\dvips\base\8r.enc
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmbi7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmb7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmb8c.vf
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmrc7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmri7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr8c.vf
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmb7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb8r.tfm
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\psnfss\ot1pcr.fd
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\psnfss\ot1pcr.fd
-INPUT C:\Users\pc\AppData\Roaming\MiKTeX\tex\latex\psnfss\ot1pcr.fd
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\courier\pcrr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\courier\pcrr7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\courier\pcrr8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\courier\pcrr7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\courier\pcrb7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\courier\pcrro7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\courier\pcrr7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\courier\pcrr8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\courier\pcrb7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\courier\pcrb8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\courier\pcrro7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\courier\pcrro8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8c.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmrc7t.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmr8.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmr6.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmmi8.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmmi6.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmsy8.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmsy6.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\cmextra\cmex8.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\cmextra\cmex7.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam10.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam7.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm10.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm7.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr8c.vf
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmri7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmrc7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8r.tfm
-INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmb7t.vf
-INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb8r.tfm
-INPUT paper.aux
-INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmmi10.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmmi10.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmr10.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmr10.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmsy10.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmsy10.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmsy7.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmsy7.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\courier\ucrb8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\courier\ucrb8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\courier\ucrr8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\courier\ucrr8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\courier\ucrro8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\courier\ucrro8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\times\utmb8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\times\utmb8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\times\utmbi8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\times\utmbi8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\times\utmr8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\times\utmr8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\times\utmri8a.pfb
-INPUT C:\Program Files\MiKTeX\fonts\type1\urw\times\utmri8a.pfb
+PWD D:\MSA\HCI\MuseSense-HCI
+INPUT C:\Users\PC\AppData\Local\MiKTeX\miktex\data\le\pdftex\pdflatex.fmt
+INPUT paper\paper.tex
+OUTPUT D:\MSA\HCI\MuseSense-HCI\paper\paper.log
+INPUT D:\Program Files\MiKTeX\tex\latex\ieeetran\IEEEtran.cls
+INPUT D:\Program Files\MiKTeX\tex\latex\ieeetran\IEEEtran.cls
+INPUT D:\Program Files\MiKTeX\tex\latex\psnfss\ot1ptm.fd
+INPUT D:\Program Files\MiKTeX\tex\latex\psnfss\ot1ptm.fd
+INPUT D:\Program Files\MiKTeX\tex\latex\psnfss\ot1ptm.fd
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri7t.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi7t.tfm
+INPUT D:\Program Files\MiKTeX\tex\latex\cite\cite.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\cite\cite.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsmath\amsmath.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsmath\amsmath.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsmath\amsopn.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsmath\amstext.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsmath\amstext.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsmath\amsgen.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsmath\amsgen.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsmath\amsbsy.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsmath\amsbsy.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsmath\amsopn.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsfonts\amssymb.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsfonts\amssymb.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsfonts\amsfonts.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\amsfonts\amsfonts.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\algorithms\algorithmic.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\algorithms\algorithmic.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\base\ifthen.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\base\ifthen.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics\keyval.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics\keyval.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics\graphicx.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics\graphicx.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics\graphics.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics\graphics.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics\trig.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics\trig.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics-cfg\graphics.cfg
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics-cfg\graphics.cfg
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics-cfg\graphics.cfg
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics-def\pdftex.def
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics-def\pdftex.def
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics-def\pdftex.def
+INPUT D:\Program Files\MiKTeX\tex\latex\base\textcomp.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\base\textcomp.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\xcolor\xcolor.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\xcolor\xcolor.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics-cfg\color.cfg
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics-cfg\color.cfg
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics-cfg\color.cfg
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics\mathcolor.ltx
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics\mathcolor.ltx
+INPUT D:\Program Files\MiKTeX\tex\latex\graphics\mathcolor.ltx
+INPUT D:\Program Files\MiKTeX\tex\latex\float\float.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\float\float.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\enumitem\enumitem.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\enumitem\enumitem.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\changepage\changepage.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\changepage\changepage.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\listings.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\listings.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\lstpatch.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\lstpatch.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\lstpatch.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\lstmisc.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\lstmisc.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\lstmisc.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\listings.cfg
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\listings.cfg
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\listings.cfg
+INPUT D:\Program Files\MiKTeX\tex\latex\url\url.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\url\url.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\booktabs\booktabs.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\booktabs\booktabs.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\lstlang1.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\lstlang1.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\listings\lstlang1.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\l3backend\l3backend-pdftex.def
+INPUT D:\Program Files\MiKTeX\tex\latex\l3backend\l3backend-pdftex.def
+INPUT D:\MSA\HCI\MuseSense-HCI\paper\paper.aux
+INPUT D:\MSA\HCI\MuseSense-HCI\paper\paper.aux
+INPUT D:\MSA\HCI\MuseSense-HCI\paper\paper.aux
+OUTPUT D:\MSA\HCI\MuseSense-HCI\paper\paper.aux
+INPUT D:\Program Files\MiKTeX\tex\context\base\mkii\supp-pdf.mkii
+INPUT D:\Program Files\MiKTeX\tex\context\base\mkii\supp-pdf.mkii
+INPUT D:\Program Files\MiKTeX\tex\context\base\mkii\supp-pdf.mkii
+INPUT D:\Program Files\MiKTeX\tex\latex\epstopdf-pkg\epstopdf-base.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\epstopdf-pkg\epstopdf-base.sty
+INPUT D:\Program Files\MiKTeX\tex\latex\00miktex\epstopdf-sys.cfg
+INPUT D:\Program Files\MiKTeX\tex\latex\00miktex\epstopdf-sys.cfg
+INPUT D:\Program Files\MiKTeX\tex\latex\00miktex\epstopdf-sys.cfg
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmrc7t.tfm
+OUTPUT D:\MSA\HCI\MuseSense-HCI\paper\paper.pdf
+INPUT D:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr7t.vf
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8r.tfm
+INPUT C:\Users\PC\AppData\Local\MiKTeX\fonts\map\pdftex\pdftex.map
+INPUT D:\Program Files\MiKTeX\fonts\enc\dvips\base\8r.enc
+INPUT D:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr7t.vf
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8r.tfm
+INPUT D:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmbi7t.vf
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmbi8r.tfm
+INPUT D:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmb7t.vf
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmb8r.tfm
+INPUT D:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmrc7t.vf
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8r.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8r.tfm
+INPUT D:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr7t.vf
+INPUT D:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmri7t.vf
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri8r.tfm
+INPUT D:\Program Files\MiKTeX\tex\latex\psnfss\ts1ptm.fd
+INPUT D:\Program Files\MiKTeX\tex\latex\psnfss\ts1ptm.fd
+INPUT D:\Program Files\MiKTeX\tex\latex\psnfss\ts1ptm.fd
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8c.tfm
+INPUT .\paper\system_architecture.jpeg
+INPUT .\paper\system_architecture.jpeg
+INPUT .\paper\system_architecture.jpeg
+INPUT .\paper\system_architecture.jpeg
+INPUT .\paper\system_architecture.jpeg
+INPUT .\paper\system_architecture.jpeg
+INPUT .\paper\system_architecture.jpeg
+INPUT .\paper\sate_flow.jpeg
+INPUT .\paper\sate_flow.jpeg
+INPUT .\paper\sate_flow.jpeg
+INPUT .\paper\sate_flow.jpeg
+INPUT .\paper\sate_flow.jpeg
+INPUT .\paper\sate_flow.jpeg
+INPUT .\paper\sate_flow.jpeg
+INPUT D:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr8c.vf
+INPUT D:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr7t.vf
+INPUT D:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmri7t.vf
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmri8r.tfm
+INPUT D:\Program Files\MiKTeX\fonts\tfm\adobe\times\ptmr8c.tfm
+INPUT D:\Program Files\MiKTeX\fonts\vf\adobe\times\ptmr8c.vf
+INPUT D:\MSA\HCI\MuseSense-HCI\paper\paper.aux
+INPUT D:\Program Files\MiKTeX\fonts\type1\urw\times\utmb8a.pfb
+INPUT D:\Program Files\MiKTeX\fonts\type1\urw\times\utmb8a.pfb
+INPUT D:\Program Files\MiKTeX\fonts\type1\urw\times\utmbi8a.pfb
+INPUT D:\Program Files\MiKTeX\fonts\type1\urw\times\utmbi8a.pfb
+INPUT D:\Program Files\MiKTeX\fonts\type1\urw\times\utmr8a.pfb
+INPUT D:\Program Files\MiKTeX\fonts\type1\urw\times\utmr8a.pfb
+INPUT D:\Program Files\MiKTeX\fonts\type1\urw\times\utmri8a.pfb
+INPUT D:\Program Files\MiKTeX\fonts\type1\urw\times\utmri8a.pfb

@@ -11,6 +11,7 @@
 \usepackage{changepage}
 \usepackage{listings}
 \usepackage{url}
+\usepackage{booktabs}
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \lstset{
@@ -26,495 +27,178 @@
 
 \begin{document}
 
-\title{Gesture-Based Interaction in a Smart Museum Installation:\\
-A Study of User Frustration, Adaptation, and Social Context Effects}
+\title{MuseSense: A Multimodal Tangible Museum Guide for 3D Artifacts, Narration, and Vision-Based Personalization}
 
-\author{\IEEEauthorblockN{[Anonymous for Review]}}
+\author{\IEEEauthorblockN{MuseSense HCI Project Team}}
 
 \maketitle
 
-% ─────────────────────────────────────────────────────────────────────────────
 \begin{abstract}
-This paper presents a user study examining how visitors interact with a
-gesture-driven smart museum system. Rather than evaluating the system as a
-technical artifact, we investigate five human-centered questions: how
-readily visitors complete mid-air gestures, how they respond emotionally
-and behaviorally to misrecognition events, how they adapt gesture strategies
-after a failure, whether the presence of social companions affects confidence
-and interaction style, and whether tuning the MediaPipe Holistic detection
-confidence threshold (0.5 vs.\ 0.65) yields measurable gains in task
-performance and subjective experience. The system under study combines
-MediaPipe Holistic pose estimation with the \$P dollar point-cloud
-recognizer~\cite{vatavu2012} to classify four full-body gestures---swipe
-left, swipe right, zoom in, and zoom out---plus a circular motion to
-bookmark exhibits as favorites. Passive user identification is performed
-via Bluetooth Low Energy (BLE) proximity scanning, and physical tangible
-markers are tracked via the TUIO protocol~\cite{kaltenbrunner2007}. A
-within-subjects design compares the two detection-confidence conditions;
-social context (solo vs.\ accompanied) is a between-subjects factor.
-Methodology, stimuli, and measures are presented in full. Results,
-discussion, and conclusions will be completed following participant testing.
+MuseSense is a prototype museum guide that combines tangible markers, computer vision, 3D artifact presentation, and narrated storytelling into a single interactive experience. The system uses reacTIVision/TUIO markers for direct artifact selection, a Python vision service for face-based session recognition and background sensing, and a C\# WinForms client for 3D model rendering, audio narration, favorites management, and visitor-facing interaction. The implementation is split across two coordinated projects: the main museum application and a supporting background service for gesture and Bluetooth-based identity handling. This paper documents the design rationale, software architecture, interaction flow, and prototype validation of the current build. It also situates MuseSense within the literature on embodied interaction, tangible interfaces, public displays, museum HCI, vision-based perception, and gesture recognition.
 \end{abstract}
 
 \begin{IEEEkeywords}
-gesture interaction, museum HCI, body-pose recognition, \$P recognizer,
-MediaPipe, frustration, social context, TUIO, usability
+museum HCI, tangible interaction, TUIO, reacTIVision, MediaPipe, face recognition, 3D rendering, narration, embodied interaction
 \end{IEEEkeywords}
 
-% ─────────────────────────────────────────────────────────────────────────────
 \section{Introduction}
+Museums increasingly rely on digital systems to enrich artifact exploration, but many installations still force visitors to choose between expressive physical interaction and structured screen-based navigation. MuseSense addresses this gap by turning museum browsing into a multimodal experience: visitors place tangible markers on an interactive surface to open artifacts, the system identifies users through vision-based login, and the desktop client presents 3D models, metadata, and narration audio in a responsive guided interface.
 
-Museums have long struggled to reconcile the desire for immersive visitor
-experiences with the physical and aesthetic constraints of gallery spaces.
-Traditional input peripherals---keyboards, mice, touchscreens---are often
-incompatible with an exhibition context that prizes both the integrity of
-artifacts and the continuity of spatial narrative~\cite{hornecker2006}.
-Gesture-based and body-driven interfaces have therefore attracted sustained
-research interest as a means of enabling natural, untethered navigation
-in public spaces~\cite{muller2010}.
+The current project is not a generic demo shell. It is a working prototype with a full implementation stack: Python for camera capture, face recognition, and socket communication; C\# for desktop rendering, TUIO marker handling, and audio playback; and a separate gesture-oriented service that preserves the original gesture-research direction of the project. The paper has two goals. First, it documents the actual system that was built. Second, it explains how the implementation fits established HCI research on tangible interaction, embodied interfaces, public displays, and museum narration.
 
-Deploying gesture-recognition systems in real-world cultural heritage
-environments, however, introduces human-computer interaction challenges
-that laboratory-based usability studies rarely capture. Visitors arrive
-with no prior training, bring companions whose social presence may
-influence individual behavior, and encounter recognition failures they
-are entirely unprepared to handle. These conditions motivate a style of
-research focused not on whether the technology functions but on how people
-actually behave when using it~\cite{reeves2005}.
+This paper makes four contributions. First, it presents an integrated museum prototype that combines marker-based tangible interaction, face-based personalization, three-dimensional artifact presentation, and narration playback in a unified visitor workflow. Second, it documents a distributed software architecture that separates perception and rendering concerns while preserving interaction continuity through explicit state synchronization. Third, it formalizes a state-driven interaction model that governs artifact selection, session binding, and favorites persistence in a shared public environment. Fourth, it provides a literature-grounded argument for why this embodied interaction strategy is appropriate for cultural heritage settings where social visibility, interpretive context, and ease of entry are central design constraints.
 
-This paper reports on a user study conducted with \textit{GestureMuseum},
-a smart museum installation supporting body-gesture navigation across three
-themed exhibition rooms: Ancient Egypt, Imperial China, and Medieval Europe.
-The system uses a computer-vision pipeline based on MediaPipe
-Holistic~\cite{lugaresi2019} to continuously track wrist landmarks and
-classifies accumulated trajectory windows using the \$P dollar
-recognizer~\cite{vatavu2012}. User login is performed passively via BLE
-proximity scanning, and physical TUIO markers on exhibit surfaces trigger
-object-specific augmented overlays via reacTIVision~\cite{kaltenbrunner2007}.
+\section{Literature Review}
+\subsection{Embodied and Tangible Interaction}
+MuseSense builds on the classic argument that interaction should be understood through the body, physical space, and the meaning of artifacts rather than only through command syntax. Ishii and Ullmer's Tangible Bits vision framed physical objects as interfaces to digital information, showing how graspable artifacts can link the physical and virtual worlds in a more legible way than conventional windows-and-icons interfaces~\cite{ishii1997}. Dourish extended this direction by arguing that embodied interaction is not merely a richer input method, but a shift in how meaning is produced through situated action, physical engagement, and social context~\cite{dourish2001}.
 
-The goal of this study is to investigate five interrelated research
-questions about the visitor experience:
-\begin{itemize}[noitemsep,topsep=2pt]
-    \item \textbf{RQ1}: How easily can museum visitors complete mid-air
-          gestures to control the system?
-    \item \textbf{RQ2}: How do visitors express and report frustration or
-          confusion when the system misrecognizes their gestures?
-    \item \textbf{RQ3}: How do users adapt their gesture strategies after
-          a recognition failure?
-    \item \textbf{RQ4}: How does the presence of social companions affect
-          interaction confidence and style?
-    \item \textbf{RQ5}: Does raising the MediaPipe detection confidence
-          threshold from 0.5 to 0.65 produce measurably smoother and more
-          satisfying interaction?
-\end{itemize}
+Hornecker and Buur operationalized these ideas for tangible interaction by showing that TUI design must account for both physical manipulation and social coordination in shared spaces~\cite{horneckerbuur2006}. MuseSense follows this logic closely: the table marker is not only a selector, but also a social cue that invites visitors to manipulate a real object in front of others. That visible, embodied act is part of the experience rather than a side effect.
 
-The remainder of this paper is structured as follows: Section~\ref{sec:rw}
-reviews related work; Section~\ref{sec:system} describes the system;
-Section~\ref{sec:method} presents the study methodology; Sections~\ref{sec:results}
-through~\ref{sec:conclusion} will be completed after data collection.
+\subsection{Public Displays and Museums}
+Museums are public settings, so the system must work not only as a technical interface but also as a socially understandable one. Brignull and Rogers showed that public displays attract attention when the interaction is visible and easy to interpret, while Muller et al. argued that public interfaces should be designed around entry, engagement, and return-to-passive states rather than assuming a single uninterrupted user~\cite{brignull2003,muller2010}. Reeves et al. further emphasized the spectator experience, noting that people who are not directly interacting still shape the meaning and social comfort of the interaction~\cite{reeves2005}.
 
-% ─────────────────────────────────────────────────────────────────────────────
-\section{Related Work}
-\label{sec:rw}
+Museums specifically have a long tradition of tangible and embodied interaction research. Hornecker and Stifter observed that interactive museum installations benefit from embodied facilitation, where the physical configuration of the exhibit helps visitors discover what to do without reading long instructions~\cite{horneckerstifter2006}. More recently, museum-HCI work has emphasized accessibility, narrative presentation, and multisensory interpretation as part of a richer visitor experience~\cite{pietroni2021}. MuseSense aligns with that direction by pairing artifact browsing with narration audio and personal favorites.
 
-\subsection{Gesture Interaction in Public and Cultural Spaces}
+\subsection{Computer Vision and Gesture Recognition}
+MuseSense uses vision not as a novelty, but as an infrastructure layer. MediaPipe provides a lightweight pipeline model for perception tasks that need to run in real time on commodity hardware~\cite{lugaresi2019}. BlazePose extends that idea with on-device real-time body pose tracking, making pose-based interaction feasible in interactive demos and mobile settings~\cite{bazarevsky2020}. In parallel, face recognition in MuseSense relies on a standard embedding-based approach. FaceNet demonstrated that face images can be mapped to a compact Euclidean embedding where distance corresponds to identity similarity, which fits the local identity model used in this project~\cite{schroff2015}. The Python backend also uses a face detector, which is consistent with the cascaded face-detection family introduced by Zhang et al.~\cite{zhang2016}.
 
-The display blindness and audience funnel phenomena documented by
-M\"{u}ller et al.~\cite{muller2010} established a foundational model of
-how passers-by progress from ignoring a public display to actively
-engaging with it. Their work demonstrated that interaction design must
-account for multiple coexisting roles---bystander, curious observer,
-direct user---and that transitioning between these roles is heavily
-influenced by the physical conspicuousness of the required input actions.
-For gesture-based systems, this has direct implications: large arm
-movements lower the threshold for entry-level curiosity but may increase
-self-consciousness for committed users.
+The gesture side of the project is informed by recognizers that avoid heavy training requirements. Wobbrock et al. showed that a simple template recognizer can be effective for prototype interfaces~\cite{wobbrock2007}, Anthony and Wobbrock extended this direction to multistroke gestures~\cite{anthony2010}, and Vatavu et al. proposed the \$P recognizer for point-cloud gesture comparison~\cite{vatavu2012}. MuseSense uses that family of ideas in the background gesture service that supports motion-driven interaction experiments.
 
-Brignull and Rogers~\cite{brignull2003} introduced the concept of the
-\textit{honeypot effect} in public display research, observing that
-watching others interact with a display substantially increased
-bystanders' willingness to approach and engage. They found this effect
-strongest when the interaction appeared visually legible and socially
-unthreatening. Museum installations are a canonical context for this
-dynamic: groups visiting together routinely observe and comment on each
-other's interaction attempts, creating a layered social interaction that
-extends well beyond the individual user.
+Social acceptability matters as much as recognition accuracy. Rico and Brewster showed that gestures can feel more or less appropriate depending on context and visibility~\cite{rico2010}, and Hoff and Bashir argued that repeated failures degrade trust in automation even when the system later recovers~\cite{hoff2015}. Those findings are directly relevant to a museum guide, because visitors will abandon the interface quickly if the system feels unstable or unpredictable.
 
-Hornecker and Stifter~\cite{hornecker2006} examined interactive
-installations in science museums and identified \textit{embodied
-facilitation}---the way a physical interface affords or inhibits
-engagement through its spatial configuration---as a primary determinant
-of visitor success. Their findings suggest that full-body gesture
-interfaces with unclear affordances may produce high rates of exploratory
-but unproductive behavior, particularly among older adults or visitors
-with limited prior exposure to computer-based interaction.
+\subsection{Narration and Evaluation}
+Narration is not an accessory in MuseSense; it is part of the interpretive layer that turns an artifact into a story. In museum HCI, audio and narrative are often used to add context without crowding the visual interface, and evaluation is usually framed around workload, clarity, and visitor engagement rather than raw task speed~\cite{pietroni2021}. Because MuseSense is still a prototype, the present paper focuses on architecture and scenario-based validation, while keeping formal user-study methods such as NASA-TLX and thematic analysis available for future evaluation designs~\cite{hart1988,braun2006}.
 
-\subsection{The Dollar Recognizer Family}
+\section{Methods}
+\subsection{HCI Overview Diagram and Architecture}
+MuseSense is implemented as a distributed local system rather than a monolithic desktop application. The end-to-end human-computer interaction flow is summarized in the full-width overview diagram in Fig.~\ref{fig:overview}. The diagram is intentionally organized around interaction semantics rather than code structure, so that perception, interpretation, interface response, and content delivery can be read as one continuous visitor journey.
 
-Wobbrock et al.~\cite{wobbrock2007} introduced the \$1 unistroke
-recognizer as a fast, training-free alternative to machine-learning
-gesture classifiers. The key insight was that a small set of
-developer-recorded reference templates, combined with a rotation-invariant
-distance metric over resampled point paths, could match the accuracy of
-far more complex systems for the limited gesture vocabularies typical
-of prototype interfaces. Subsequent work extended this approach:
-Anthony and Wobbrock~\cite{anthony2010} introduced \$N for
-multi-stroke gestures, while Vatavu, Anthony, and Wobbrock~\cite{vatavu2012}
-proposed \$P, which represents gestures as unordered point clouds rather
-than ordered paths. The point-cloud representation is particularly
-well-suited to full-body gesture trajectories, where arm biomechanics
-mean that the precise temporal ordering of trajectory points varies
-substantially across users and repetitions.
-
-A known limitation of template-based recognizers relevant to this study
-is their sensitivity to the representativeness of the reference template
-set. Systems whose templates are recorded by a single developer
-systematically underperform for users with different body proportions,
-movement speeds, or motor styles~\cite{wobbrock2007}. In GestureMuseum,
-all templates were recorded by one developer from MP4 videos using a
-custom extraction script; this design choice creates a measurable risk
-of systematic recognition bias against users whose natural gesture
-patterns diverge from the template author's, which the present study
-aims to characterize.
-
-\subsection{Body Pose Estimation with MediaPipe}
-
-Lugaresi et al.~\cite{lugaresi2019} introduced MediaPipe as a
-framework for building streaming perception pipelines from modular
-graph components. Its on-device efficiency---achieved through
-carefully optimized model architectures and hardware-accelerated
-inference---has made it one of the most widely adopted computer-vision
-toolkits for gesture and pose research. The Holistic solution used in
-GestureMuseum combines the BlazePose body landmark model~\cite{bazarevsky2020}
-with separate hand and face estimators, producing a unified landmark
-graph from a single monocular RGB frame.
-
-The \texttt{min\_detection\_confidence} parameter in MediaPipe Holistic
-controls how certain the model must be before emitting a landmark
-estimate for a given frame. Lower values increase recall (more frames
-yield a landmark estimate) at the cost of precision (some estimates are
-noisy or spurious). The original GestureMuseum implementation used the
-default value of 0.5; the version under study raises it to 0.65, a
-choice informed by empirical observation during system development.
-The effect of this change on user experience---as opposed to raw
-recognition accuracy---has not been previously evaluated in a
-controlled study and constitutes the manipulation in RQ5.
-
-\subsection{Frustration and Error Recovery in Gesture Systems}
-
-User frustration in gesture-based systems arises primarily from three
-sources: unexpected non-responses (the system ignores a clearly
-intentional gesture), false positives (an unintended action is
-triggered by ambient movement), and discoverability failures (the user
-does not know which gestures are supported)~\cite{rico2010}. Each
-source produces a distinct behavioral response. Non-responses tend to
-elicit repetition and gesture amplification; false positives tend to
-elicit hesitation and reduced movement amplitude; discoverability
-failures produce exploratory thrashing~\cite{hoff2015}.
-
-Hoff and Bashir~\cite{hoff2015} demonstrated that repeated automation
-failures significantly degrade trust even when subsequent interactions
-succeed, an effect they termed \textit{trust calibration degradation}.
-This is particularly consequential in museum contexts where visitors
-have a single, time-limited exposure to the system: a sequence of early
-misrecognition events may lead visitors to abandon gesture interaction
-entirely before the system has had the opportunity to demonstrate
-reliable performance.
-
-Rico and Brewster~\cite{rico2010} examined the social acceptability of
-mobile gestural input and identified three distinct failure-recovery
-strategies: \textit{repetition} (the same gesture is repeated,
-sometimes with greater force), \textit{strategy substitution} (an
-alternative gesture is attempted), and \textit{help-seeking} (the
-user vocalizes confusion or turns to a bystander for assistance).
-Whether museum visitors employ the same strategies in a fixed
-installation context, and whether companion presence influences
-strategy selection, is a central question for RQ3 and RQ4.
-
-\subsection{Social Context and Embodied Interaction}
-
-Reeves et al.~\cite{reeves2005} introduced a framework distinguishing
-between the \textit{performer}---the primary interactor---and the
-\textit{spectator}---those observing the interaction---and argued that
-interaction designers must consider the spectator experience as a
-first-class concern. They identified a spectrum from \textit{subtle}
-interactions (minimal body movement, socially invisible) to
-\textit{spectacular} ones (large body movement, publicly visible) and
-noted that the choice of interaction style fundamentally alters the
-social dynamics of co-located use.
-
-The GestureMuseum gestures sit firmly at the spectacular end of this
-spectrum: swipe gestures require broad horizontal arm sweeps, and the
-circle gesture requires a full rotational arm motion. Visitors
-performing these actions in the presence of companions are effectively
-staging a public performance. Brignull and Rogers~\cite{brignull2003}
-found that this kind of visible performance can attract additional
-bystanders, amplifying the social pressure on the primary interactor.
-Whether this amplified visibility inhibits gesture performance---
-particularly among visitors who are less comfortable with public
-physical expression---is what RQ4 addresses.
-
-\subsection{Tangible Interaction in Museums}
-
-Kaltenbrunner and Bencina~\cite{kaltenbrunner2007} introduced
-reacTIVision as an open-source computer-vision framework for
-table-based tangible user interfaces, using fiducial marker tracking
-to translate physical object manipulation into digital events via the
-TUIO protocol. Museum applications of tangible interaction have been
-shown to significantly increase dwell time and collaborative engagement
-compared to screen-only interfaces~\cite{hornecker2006}, because the
-physical manipulability of objects scaffolds collaborative discussion
-and reduces the cognitive load of learning a purely virtual interface.
-
-In GestureMuseum, TUIO markers placed on exhibit objects trigger
-object-specific content overlays when detected by the reacTIVision
-tracker, providing a complementary interaction modality alongside
-the gesture navigation layer. The coexistence of two distinct
-interaction modalities---mid-air body gestures and physical tangible
-manipulation---creates a multimodal interaction environment whose
-usability characteristics are largely unstudied in the museum context.
-
-% ─────────────────────────────────────────────────────────────────────────────
-\section{System Description}
-\label{sec:system}
-
-GestureMuseum is a real-time smart museum interaction system deployed
-across a multi-room exhibition environment. Its architecture comprises
-three coupled components: a Python-based computer-vision and gesture
-recognition pipeline, a C\# WinForms display application, and a
-TUIO-compatible tangible object tracker. Figure~\ref{fig:arch} provides
-a schematic overview.
-
-\begin{figure}[h]
+\begin{figure*}[t]
 \centering
-% Placeholder — replace with actual architecture diagram
-\fbox{\rule{0pt}{3cm}\rule{\linewidth}{0pt}}
-\caption{GestureMuseum system architecture overview.}
-\label{fig:arch}
+\includegraphics[width=\textwidth]{paper/system_architecture.jpeg}
+\caption{MuseSense HCI overview diagram. The overview presents the complete interaction loop across sensing, state interpretation, tangible input handling, visual rendering, narration delivery, and preference persistence.}
+\label{fig:overview}
+\end{figure*}
+
+At the perception boundary, camera and marker streams capture the visitor's embodied actions: face presence and identity cues support session binding, while marker identity and pose support direct artifact selection and manipulation. These signals are transformed into compact interaction-state events that are shared with the presentation client. This event-oriented exchange separates sensing latency from interface responsiveness, which is critical in public settings where short response delays can quickly degrade user confidence.
+
+At the presentation boundary, the desktop client resolves each state event into user-facing outcomes: artifact context loading, model rendering, explanatory metadata, narration playback, and favorites updates. In HCI terms, the architecture enforces a tight perception-action loop: visitor action modifies system state, state drives interface feedback, and feedback informs subsequent visitor action. The auxiliary gesture pathway is positioned as an extensible modality within the same loop, enabling future multimodal expansion without destabilizing the primary tangible workflow.
+
+At an implementation level, the perception service is responsible for camera processing, identity inference, and inter-process messaging, while the desktop client is responsible for interaction orchestration and visual presentation. Artifact descriptors, user-preference records, and narration assets are managed through a local content layer to ensure robust operation in environments with limited or intermittent network access.
+
+\subsection{Interaction State Flow}
+The user experience follows a simple state machine. Visitors begin in a passive browsing state, move into a recognized user session when the camera identifies a known face, and then transition into an artifact-focused state when a TUIO marker is placed on the table. The state logic is visualized in Fig.~\ref{fig:stateflow}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{paper/sate_flow.jpeg}
+\caption{MuseSense state flow. The prototype moves between idle browsing, face-based session binding, artifact selection, narration playback, and favorites management.}
+\label{fig:stateflow}
 \end{figure}
 
-\subsection{Computer Vision Pipeline}
+This flow intentionally keeps the interface simple. A marker opens an artifact. A recognized user unlocks personalized actions. A favorites list is attached to the active user. When the face disappears, the session is cleared so the kiosk does not remain bound to the previous visitor.
 
-The Python pipeline (implemented as a Jupyter Notebook) uses OpenCV to
-capture frames from a webcam at $480 \times 320$ pixels. Each frame is
-processed by \texttt{mp.solutions.holistic.Holistic} with
-\texttt{model\_complexity=1} and a configurable
-\texttt{min\_detection\_confidence} (0.5 in the baseline condition;
-0.65 in the improved condition). From each successfully processed frame,
-the screen-space coordinates of the right wrist (landmark 15) and
-left wrist (landmark 16) are extracted and appended to a rolling
-point buffer:
+\subsection{Python Vision and Identity Layer}
+The perception service combines OpenCV capture, MediaPipe Holistic, face recognition, and socket output. It reads camera frames from either a local webcam or a network stream, applies configurable preprocessing (including resolution adaptation and orientation correction), and performs identity checks on a throttled schedule to control computational cost. When a known face is recognized, the service sends a compact state message to the desktop client; when the face is lost, it emits a reset signal.
 
-\begin{lstlisting}[caption={Wrist landmark extraction and buffering.}]
-x = int(results.pose_landmarks.landmark[
-    mp_pose.PoseLandmark.RIGHT_WRIST].x * image_width)
-y = int(results.pose_landmarks.landmark[
-    mp_pose.PoseLandmark.RIGHT_WRIST].y * image_height)
-Allpoints.append(Point(x, y, 1))
-# repeated for LEFT_WRIST
-\end{lstlisting}
+In addition to this primary pipeline, the system includes an auxiliary gesture-processing path based on pose landmarks and template matching. In the current prototype, this module is treated as an experimental extension rather than the principal control channel. This architectural choice preserves interaction stability for public deployment while retaining a clear integration path for future multimodal expansion.
 
-Every 30 frames (approximately one second at 30~fps), the accumulated
-point buffer is passed to the \$P recognizer, which compares it against
-four reference templates (SwipeLeft, SwipeRight, ZoomIn, ZoomOut).
-A fifth gesture (Circle, for marking exhibits as favorites) is supported
-via a template recorded with the same pipeline. On a successful
-recognition, the gesture label is transmitted over a TCP socket to the
-display application and the buffer is cleared.
+\subsection{C\# Museum Client}
+The C\# application is implemented as a WinForms desktop client. It listens to TUIO object events, translates marker identifiers into artifact indices, and renders the selected artifact using a software rasterization pipeline with object loading, texture handling, z-buffering, and frame caching. The artifact detail view also supports narration playback and favorites management.
 
-\subsection{User Identification via BLE}
+This client is not a GPU demo. It is a CPU-driven renderer, which matters for the paper because it explains the project's constraints and design choices. The renderer precomputes or caches rotated views and simplifies repeated drawing work where possible. That implementation strategy is appropriate for a local museum installation where predictable behavior matters more than maximum visual fidelity.
 
-At session startup, the pipeline performs a 5-second Bluetooth Low
-Energy scan using the \texttt{bleak} library. The MAC address of the
-first detected device is transmitted to the C\# application, which
-matches it against a registered visitor profile in a CSV file. Matched
-profiles load the visitor's name and photograph, enabling a personalized
-greeting and a recommendation feed calibrated to the visitor's room
-location.
+\subsection{Artifact, Narration, and Favorites Pipeline}
+Artifacts are defined in JSON and bound to TUIO IDs. Each record stores metadata such as name, era, origin, description, model path, audio path, and display color. When a marker is placed, the matching artifact record is loaded, and the 3D model and narration are displayed together. The narration clips are stored as audio files and are played back from the desktop client when the artifact view opens or when the visitor requests it.
 
-\subsection{Display Application}
+Favorites are persisted locally per user. This design keeps the system self-contained and avoids a network dependency during a demo. It also matches the museum setting, where the active user should be able to save and revisit artifacts with minimal friction.
 
-The C\# WinForms display application renders museum content using GDI+
-graphics on a full-screen window. A \texttt{page} variable ($0$--$4$)
-tracks the current view:
+\subsection{TUIO Marker Input}
+MuseSense uses the TUIO protocol and reacTIVision to track fiducial markers on the table. The vision tracker emits symbol IDs and pose information over UDP, and the desktop application uses those IDs to load the corresponding artifact. Marker orientation is preserved so the physical manipulation of the object contributes to the digital view. This is the most visible example of embodied interaction in the system: the visitor moves a physical marker and sees the museum content respond.
 
-\begin{itemize}[noitemsep,topsep=2pt]
-    \item \textbf{Page 0}: Home page with personalized exhibit
-          recommendations.
-    \item \textbf{Page 1}: Room-specific exhibit browser (Egypt, China,
-          or Medieval Europe, depending on the visitor's physical location).
-    \item \textbf{Pages 2--4}: Visitor information slideshows for rooms
-          the visitor is not currently occupying (slides cycle every
-          3~seconds).
-\end{itemize}
+\section{Experiments}
+Because the project is currently at a prototype stage, the evaluation strategy was designed as structured scenario-based validation rather than a full human-subjects study. The objective was to determine whether the integrated system could sustain the core museum interaction loop under realistic operating conditions, including session entry, artifact loading, media navigation, preference persistence, and return-to-idle behavior in a shared kiosk context.
 
-SwipeRight and SwipeLeft commands increment or decrement the page index,
-with room-specific skipping logic so that a visitor physically inside a
-given room does not receive the slideshow for that same room. The
-application simultaneously runs a TuioClient on port 3333; when a
-physical marker is detected, its SymbolID selects a background image and
-an overlay object rendered at the marker's tracked orientation.
+The protocol used repeated end-to-end trials on a local deployment where camera input, marker tracking, perception services, and the desktop client were executed concurrently. Each trial assessed semantic correctness of state transitions, consistency of cross-process synchronization, and continuity of visitor-facing media presentation. Operationally, successful execution required that marker placement trigger the intended artifact context, marker pose updates remain visually coherent, recognized users be bound to the active session, session state clear when identity was no longer observable, narration behavior remain aligned with artifact context, and preference records remain recoverable across interaction cycles. The auxiliary gesture module was evaluated separately for event emission stability and message interpretability.
 
-\subsection{Template Creation}
+This protocol prioritizes internal validity for system integration claims. It does not establish population-level usability effects, but it does provide a defensible engineering baseline for subsequent controlled user studies.
 
-Gesture templates were constructed using a separate script
-(\texttt{template\_maker.py}) that processes MP4 video recordings. For
-each frame, wrist landmarks are extracted via MediaPipe and written as
-\texttt{dollarpy} Point objects to a Python source file. Because all
-templates were recorded by a single developer, there is a known risk of
-systematic recognition bias against users whose gesture style, body
-proportions, or movement speed differ from those of the recording author.
+\section{Results and Discussion}
+The prototype demonstrates the core interaction loop that the system was designed to support. Marker events consistently map to artifact context, the desktop client preserves selected-object state across user actions, and the rendering pipeline presents three-dimensional models alongside textual metadata and narration in a synchronized manner. The state model in Fig.~\ref{fig:stateflow} therefore reflects implemented behavior rather than conceptual aspiration.
 
-% ─────────────────────────────────────────────────────────────────────────────
-\section{Methodology}
-\label{sec:method}
+The face-recognition layer provides user binding and session reset behavior that is appropriate for a shared kiosk. In practice, this means the system can personalize the favorites list and avoid keeping one visitor's state active after they leave. That is important in a museum because the interface must remain understandable when different people approach it in sequence.
 
-\subsection{Study Design}
+The auxiliary gesture subsystem is also important to interpret correctly. It captures the multimodal ambition of the broader design and provides a reusable recognition path, but it is not yet the primary control modality for the museum interface. This should be understood as a scope boundary rather than a system defect: the finalized interaction path emphasizes robustness for public-facing operation, while the gesture path remains an extensible research component.
 
-The study uses a mixed-methods design combining quantitative performance
-measures with qualitative behavioral observation and semi-structured
-interviewing. Two within-subjects factors are manipulated: (1)
-\textit{algorithm condition} (baseline: confidence 0.5 vs.\ improved:
-confidence 0.65) and (2) \textit{gesture type} (SwipeLeft, SwipeRight,
-ZoomIn, ZoomOut, Circle). A between-subjects factor captures
-\textit{social context}: whether the participant interacts alone or in
-the presence of accompanying companions.
+Three limitations delimit the current evidence. First, the rendering pipeline is CPU-bound, which may constrain scalability as scene complexity increases. Second, gesture-to-interface coupling remains partial, leaving part of the multimodal interaction hypothesis untested at the interface level. Third, identity personalization currently depends on local records and does not yet implement a complete consent-and-governance workflow. These constraints are non-trivial for deployment, but they do not invalidate the prototype's central contribution: it demonstrates a coherent embodied interaction architecture that couples tangible input, adaptive session logic, and narrative media delivery in a single operational system.
 
-Within-subjects assignment for the algorithm comparison controls for
-individual differences in gesture style; each participant serves as
-their own control. Condition order is counterbalanced using a Latin
-square to mitigate learning and fatigue effects. Social context cannot
-be within-subjects because participants cannot be randomly assigned to
-bring or not bring companions; participants arriving with companions
-are assigned to the social condition and those arriving alone to the
-solo condition.
+From an academic perspective, the immediate implication is methodological. The present study supports a claim of architectural feasibility and interaction coherence, not a claim of comparative user superiority over touchscreen or audio-guide baselines. A publish-ready next phase should therefore employ a mixed-method design with controlled tasks, workload and trust instruments, and qualitative coding of social interaction behavior in co-located museum use. Within that trajectory, the current prototype serves as a stable experimental platform rather than an endpoint.
 
-\subsection{Participants}
-
-Participants will be recruited through convenience sampling: each team
-member will invite friends and family to the museum installation.
-A target of 12--16 participants is sought, consistent with prior
-gesture usability studies using within-subjects designs and sufficient
-to detect medium-sized effects on subjective workload
-($d \approx 0.5$, power $= 0.80$, $\alpha = .05$). Participants will
-be screened to exclude individuals with upper-limb mobility impairments.
-No prior experience with gesture-based systems is required; naive users
-represent the target museum visitor population.
-
-Demographic information (age range, technology familiarity on a
-5-point scale, museum visit frequency) will be collected via a
-pre-study questionnaire. Informed consent will be obtained before
-participation.
-
-\subsection{Tasks and Procedure}
-
-Each participant completes a structured sequence of six phases:
-(1)~a 2-minute introduction and gesture demonstration;
-(2)~a 3-minute free exploration period;
-(3)~a 10-minute structured task block of 15 directed tasks (e.g.,
-\textit{``Navigate to the China exhibition,''} \textit{``Add this
-exhibit to your favorites''});
-(4)~a silent condition switch (threshold changed in the Python
-pipeline without informing the participant);
-(5)~a second 10-minute structured task block with the same 15 tasks
-in a new random order;
-(6)~a 10-minute post-task questionnaire and semi-structured interview.
-Total session duration is approximately 40~minutes.
-
-Participants are encouraged to think aloud throughout the task blocks.
-Sessions are video-recorded; the facilitator simultaneously takes
-structured observational notes.
-
-\subsection{Measures}
-
-\subsubsection{Quantitative}
-\begin{itemize}[noitemsep,topsep=2pt]
-    \item \textbf{Task completion rate}: Whether each task is completed
-          within 30~seconds; failures are coded if the participant
-          abandons the task or exceeds the time limit.
-    \item \textbf{Time-on-task (ToT)}: Elapsed seconds from task
-          presentation to successful gesture recognition, measured from
-          video timestamps.
-    \item \textbf{Gesture attempt count}: Number of gesture attempts
-          required per task ($1 = $ first-attempt success; $2+ = $
-          retry required).
-    \item \textbf{Recognition error rate}: Number of misrecognition
-          events (false positives + false negatives) per task block,
-          extracted from the Python pipeline console log.
-    \item \textbf{NASA-TLX~\cite{hart1988}}: Six subscales (mental
-          demand, physical demand, temporal demand, performance, effort,
-          frustration) rated on 20-point scales, yielding a composite
-          workload score per condition.
-    \item \textbf{Confidence rating}: A single 7-point Likert item
-          (\textit{``I felt confident that my gestures were understood
-          by the system''}) collected after each task block.
-\end{itemize}
-
-\subsubsection{Qualitative}
-\begin{itemize}[noitemsep,topsep=2pt]
-    \item \textbf{Gesture adaptation behavior}: Coded from video
-          using a scheme adapted from Rico and Brewster~\cite{rico2010}:
-          \textsc{repeat}, \textsc{amplify}, \textsc{switch}, and
-          \textsc{seek-help}.
-    \item \textbf{Verbal frustration indicators}: Utterances
-          categorized as neutral, mild (\textit{``that didn't
-          work''}), or strong (raised voice, negative evaluation).
-    \item \textbf{Social behavior}: Instances of looking at
-          companions, receiving verbal coaching, laughing or smiling,
-          and explicitly inviting companions to observe.
-    \item \textbf{Interview responses}: Analyzed via reflexive
-          thematic analysis~\cite{braun2006} to identify themes
-          related to ease of use, pleasure, embarrassment, and
-          comparison with familiar interaction modalities.
-\end{itemize}
-
-\subsection{Data Analysis Plan}
-
-Quantitative data will be analyzed using paired-samples $t$-tests (or
-Wilcoxon signed-rank tests if normality is violated) to compare the two
-algorithm conditions on all performance and experience measures. Effect
-sizes will be reported as Cohen's $d$. For the between-subjects social
-context comparison, independent-samples $t$-tests will be used.
-
-Qualitative video data will be coded independently by two researchers;
-intercoder reliability will be assessed using Cohen's $\kappa$.
-Discrepancies will be resolved through discussion. Interview transcripts
-will be analyzed inductively, with codes linked to each of the five
-research questions.
-
-% ─────────────────────────────────────────────────────────────────────────────
-\section{Results}
-\label{sec:results}
-
-\textit{[To be completed following participant testing. Will include
-participant demographics, task completion rates, time-on-task, NASA-TLX
-scores, gesture adaptation behavior frequencies, social context
-comparisons, and thematic analysis findings.]}
-
-% ─────────────────────────────────────────────────────────────────────────────
-\section{Discussion}
-\label{sec:discussion}
-
-\textit{[To be completed following data analysis. Will address each
-research question in turn, relate findings to the literature reviewed in
-Section~\ref{sec:rw}, and discuss limitations including sample
-characteristics, single-venue deployment, and the convenience sampling
-approach.]}
-
-% ─────────────────────────────────────────────────────────────────────────────
 \section{Conclusion}
-\label{sec:conclusion}
+MuseSense is a multimodal museum guide that combines tangible interaction, vision-based identity, three-dimensional artifact rendering, and narration into a coherent prototype. This paper has documented the implemented architecture, clarified the role of perception and presentation components, formalized the TUIO-driven interaction state model, and situated the approach in prior work on embodied interaction, public displays, museum HCI, and real-time perception pipelines.
 
-\textit{[To be completed following data collection and analysis.]}
+The next development steps are straightforward: wire the gesture service into the primary museum actions, add a consent and privacy flow for face-based personalization, and run a formal user study to measure usability, social acceptability, and learning effects. Even in its current state, however, MuseSense already demonstrates that a museum guide can be both physically legible and digitally rich without forcing visitors into a conventional screen-first workflow.
 
-% ─────────────────────────────────────────────────────────────────────────────
-\section*{Acknowledgment}
+\begin{thebibliography}{99}
 
-The authors would like to thank all participants who volunteered their
-time to test the system.
+\bibitem{ishii1997}
+H. Ishii and B. Ullmer,
+``Tangible bits: Towards seamless interfaces between people, bits and atoms,''
+in \textit{Proc. SIGCHI Conf. Human Factors in Computing Systems (CHI)},
+Atlanta, GA, USA, 1997, pp. 234--241.
 
-% ─────────────────────────────────────────────────────────────────────────────
-\begin{thebibliography}{00}
+\bibitem{dourish2001}
+P. Dourish,
+\textit{Where the Action Is: The Foundations of Embodied Interaction}.
+Cambridge, MA, USA: MIT Press, 2001.
+
+\bibitem{horneckerbuur2006}
+E. Hornecker and J. Buur,
+``Getting a grip on tangible interaction: A framework on physical space and social interaction,''
+in \textit{Proc. SIGCHI Conf. Human Factors in Computing Systems (CHI)},
+Montr\'{e}al, Canada, 2006, pp. 437--446.
+
+\bibitem{brignull2003}
+H. Brignull and Y. Rogers,
+``Enticing people to interact with large public displays in public spaces,''
+in \textit{Proc. 9th IFIP TC13 Int. Conf. Human-Computer Interaction (INTERACT)},
+Zurich, Switzerland, 2003, pp. 17--24.
+
+\bibitem{muller2010}
+J. M\"{u}ller, F. Alt, D. Michelis, and A. Schmidt,
+``Requirements and design space for interactive public displays,''
+in \textit{Proc. 18th ACM Int. Conf. Multimedia},
+Firenze, Italy, 2010, pp. 1285--1294.
+
+\bibitem{horneckerstifter2006}
+E. Hornecker and M. Stifter,
+``Learning from interactive museum installations about interaction design for public settings,''
+in \textit{Proc. 18th Australia Conf. Computer-Human Interaction (OZCHI)},
+Sydney, Australia, 2006, pp. 135--142.
+
+\bibitem{reeves2005}
+S. Reeves, S. Benford, C. O'Malley, and M. Fraser,
+``Designing the spectator experience,''
+in \textit{Proc. SIGCHI Conf. Human Factors in Computing Systems (CHI)},
+Portland, OR, USA, 2005, pp. 741--750.
+
+\bibitem{rico2010}
+J. Rico and S. Brewster,
+``Usable gestures for mobile interfaces: Evaluating social acceptability,''
+in \textit{Proc. SIGCHI Conf. Human Factors in Computing Systems (CHI)},
+Atlanta, GA, USA, 2010, pp. 887--896.
+
+\bibitem{wobbrock2007}
+J. O. Wobbrock, A. D. Wilson, and Y. Li,
+``Gestures without libraries, toolkits or training: A \$1 recognizer for user interface prototypes,''
+in \textit{Proc. 20th ACM Symp. User Interface Software and Technology (UIST)},
+Newport, RI, USA, 2007, pp. 159--168.
+
+\bibitem{anthony2010}
+L. Anthony and J. O. Wobbrock,
+``A lightweight multistroke recognizer for user interface prototypes,''
+in \textit{Proc. Graphics Interface},
+Ottawa, Canada, 2010, pp. 245--252.
 
 \bibitem{vatavu2012}
 R.-D. Vatavu, L. Anthony, and J. O. Wobbrock,
@@ -524,141 +208,65 @@ Santa Monica, CA, USA, 2012, pp. 273--280.
 
 \bibitem{kaltenbrunner2007}
 M. Kaltenbrunner and R. Bencina,
-``reacTIVision: A computer-vision framework for table-based tangible
-interaction,''
+``reacTIVision: A computer-vision framework for table-based tangible interaction,''
 in \textit{Proc. 1st Int. Conf. Tangible and Embedded Interaction (TEI)},
 Baton Rouge, LA, USA, 2007, pp. 69--74.
 
-\bibitem{muller2010}
-J. M\"{u}ller, F. Alt, D. Michelis, and A. Schmidt,
-``Requirements and design space for interactive public displays,''
-in \textit{Proc. 18th ACM Int. Conf. Multimedia},
-Firenze, Italy, 2010, pp. 1285--1294.
+\bibitem{tuio2005}
+M. Kaltenbrunner, T. Bovermann, R. Bencina, and E. Costanza,
+``TUIO - A protocol for table-top tangible user interfaces,''
+in \textit{Proc. 5th Int. Workshop on Gesture in Human-Computer Interaction and Simulation},
+Vannes, France, 2005.
+
+\bibitem{bencina2005}
+R. Bencina, M. Kaltenbrunner, and S. Jord\'{a},
+``Improved topological fiducial tracking in the reacTIVision system,''
+in \textit{Proc. IEEE Int. Workshop on Projector-Camera Systems (Procams)},
+San Diego, CA, USA, 2005.
 
 \bibitem{lugaresi2019}
-C. Lugaresi, J. Tang, H. Nash, C. McClanahan, E. Uboweja, M. Hays,
-F. Zhang, C.-L. Chang, M. G. Yong, J. Lee, W.-T. Chang, W. Hua,
-M. Georg, and M. Grundmann,
+C. Lugaresi, J. Tang, H. Nash, C. McClanahan, E. Uboweja, M. Hays, F. Zhang,
+C.-L. Chang, M. G. Yong, J. Lee, W.-T. Chang, W. Hua, M. Georg, and M. Grundmann,
 ``MediaPipe: A framework for building perception pipelines,''
 \textit{arXiv preprint arXiv:1906.08172}, 2019.
 
 \bibitem{bazarevsky2020}
-V. Bazarevsky, I. Grishchenko, K. Raveendran, T. Zhu, F. Zhang, and
-M. Grundmann,
+V. Bazarevsky, I. Grishchenko, K. Raveendran, T. Zhu, F. Zhang, and M. Grundmann,
 ``BlazePose: On-device real-time body pose tracking,''
 \textit{arXiv preprint arXiv:2006.10204}, 2020.
 
-\bibitem{wobbrock2007}
-J. O. Wobbrock, A. D. Wilson, and Y. Li,
-``Gestures without libraries, toolkits or training: A \$1 recognizer for
-user interface prototypes,''
-in \textit{Proc. 20th ACM Symp. User Interface Software and Technology
-(UIST)},
-Newport, RI, USA, 2007, pp. 159--168.
+\bibitem{schroff2015}
+F. Schroff, D. Kalenichenko, and J. Philbin,
+``FaceNet: A unified embedding for face recognition and clustering,''
+in \textit{Proc. IEEE Conf. Computer Vision and Pattern Recognition (CVPR)},
+Boston, MA, USA, 2015, pp. 815--823.
 
-\bibitem{anthony2010}
-L. Anthony and J. O. Wobbrock,
-``A lightweight multistroke recognizer for user interface prototypes,''
-in \textit{Proc. Graphics Interface},
-Ottawa, Canada, 2010, pp. 245--252.
+\bibitem{zhang2016}
+K. Zhang, Z. Zhang, Z. Li, and Y. Qiao,
+``Joint face detection and alignment using multi-task cascaded convolutional networks,''
+\textit{arXiv preprint arXiv:1604.02878}, 2016.
 
-\bibitem{reeves2005}
-S. Reeves, S. Benford, C. O'Malley, and M. Fraser,
-``Designing the spectator experience,''
-in \textit{Proc. SIGCHI Conf. Human Factors in Computing Systems (CHI)},
-Portland, OR, USA, 2005, pp. 741--750.
-
-\bibitem{brignull2003}
-H. Brignull and Y. Rogers,
-``Enticing people to interact with large public displays in public spaces,''
-in \textit{Proc. 9th IFIP TC13 Int. Conf. Human-Computer Interaction
-(INTERACT)},
-Zurich, Switzerland, 2003, pp. 17--24.
-
-\bibitem{hornecker2006}
-E. Hornecker and M. Stifter,
-``Learning from interactive museum installations about interaction design
-for public settings,''
-in \textit{Proc. 18th Australia Conf. Computer-Human Interaction (OZCHI)},
-Sydney, Australia, 2006, pp. 135--142.
-
-\bibitem{rico2010}
-J. Rico and S. Brewster,
-``Usable gestures for mobile interfaces: Evaluating social acceptability,''
-in \textit{Proc. SIGCHI Conf. Human Factors in Computing Systems (CHI)},
-Atlanta, GA, USA, 2010, pp. 887--896.
-
-\bibitem{hoff2015}
-K. A. Hoff and M. Bashir,
-``Trust in automation: Integrating empirical evidence on factors that
-influence trust,''
-\textit{Human Factors}, vol. 57, no. 3, pp. 407--434, 2015.
+\bibitem{pietroni2021}
+E. Pietroni, A. Pagano, L. Biocca, and G. Frassineti,
+``Accessibility, natural user interfaces and interactions in museums: The IntARSI project,''
+\textit{Heritage}, vol. 4, no. 2, 2021.
 
 \bibitem{hart1988}
 S. G. Hart and L. E. Staveland,
-``Development of NASA-TLX (task load index): Results of empirical and
-theoretical research,''
+``Development of NASA-TLX (task load index): Results of empirical and theoretical research,''
 in \textit{Human Mental Workload}, P. A. Hancock and N. Meshkati, Eds.
-Amsterdam: North-Holland, 1988, pp. 139--183.
+Amsterdam, The Netherlands: North-Holland, 1988, pp. 139--183.
+
+\bibitem{hoff2015}
+K. A. Hoff and M. Bashir,
+``Trust in automation: Integrating empirical evidence on factors that influence trust,''
+\textit{Human Factors}, vol. 57, no. 3, pp. 407--434, 2015.
 
 \bibitem{braun2006}
 V. Braun and V. Clarke,
 ``Using thematic analysis in psychology,''
-\textit{Qualitative Research in Psychology}, vol. 3, no. 2, pp. 77--101,
-2006.
+\textit{Qualitative Research in Psychology}, vol. 3, no. 2, pp. 77--101, 2006.
 
 \end{thebibliography}
-
-\appendix
-
-\section{Observation Sheet}
-\label{app:obs}
-
-\begin{table}[h]
-\caption{Structured Observation Sheet (one row per task)}
-\centering
-\footnotesize
-\begin{tabular}{|p{0.8cm}|p{0.9cm}|p{1.0cm}|p{1.0cm}|p{2.8cm}|}
-\hline
-\textbf{Task} & \textbf{Attempts} & \textbf{Success} & \textbf{Time (s)} & \textbf{Behavioral Notes} \\
-\hline
-T1 & & & & \\[4pt] \hline
-T2 & & & & \\[4pt] \hline
-T3 & & & & \\[4pt] \hline
-T4 & & & & \\[4pt] \hline
-T5 & & & & \\[4pt] \hline
-T6 & & & & \\[4pt] \hline
-T7 & & & & \\[4pt] \hline
-T8 & & & & \\[4pt] \hline
-T9 & & & & \\[4pt] \hline
-T10 & & & & \\[4pt] \hline
-T11 & & & & \\[4pt] \hline
-T12 & & & & \\[4pt] \hline
-T13 & & & & \\[4pt] \hline
-T14 & & & & \\[4pt] \hline
-T15 & & & & \\[4pt] \hline
-\end{tabular}
-\end{table}
-
-\section{Semi-Structured Interview Protocol}
-\label{app:interview}
-
-\begin{enumerate}[noitemsep,topsep=4pt]
-    \item Which gesture felt most natural to perform? Which felt most
-          awkward?
-    \item Describe what you were thinking or feeling when the system
-          did not respond to your gesture. What did you do next?
-    \item Did you change the way you performed gestures over the
-          session? If so, how and why?
-    \item Were you aware of other people in the room while you were
-          interacting? How did their presence affect your use of the
-          system?
-    \item How would you compare this interaction style to a touchscreen
-          or voice-command system in a museum context?
-    \item Is there a gesture you tried that you expected to work but
-          did not?
-    \item Overall, how would you describe the experience of interacting
-          with the museum in this way?
-\end{enumerate}
 
 \end{document}
