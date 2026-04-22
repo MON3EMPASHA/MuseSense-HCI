@@ -67,7 +67,7 @@ for %%F in (
     "paper.out"
     "paper.lof"
     "paper.lot"
-    "paper.bbl"
+    @REM "paper.bbl"
     "paper.blg"
     "paper.xdv"
     "paper.fls"
