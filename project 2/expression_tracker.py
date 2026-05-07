@@ -70,14 +70,22 @@ class ExpressionTracker:
         mouth_open_ratio = mouth_open / face_height
         mouth_curve_ratio = mouth_curve / face_height
 
-        if mouth_open_ratio >= 0.075:
-            emotion = "surprised"
-        elif mouth_width_ratio >= 0.35 and mouth_curve_ratio >= 0.015:
+        if mouth_width_ratio >= 0.35 and mouth_curve_ratio >= 0.012:
             emotion = "happy"
-        elif mouth_width_ratio < 0.345 and mouth_open_ratio <= 0.06:
-            emotion = "neutral"
+        elif (
+            mouth_open_ratio >= 0.08
+            and mouth_curve_ratio <= 0.005
+            and mouth_width_ratio <= 0.37
+        ):
+            emotion = "surprised"
+        elif (
+            mouth_open_ratio <= 0.06
+            and mouth_curve_ratio <= -0.02
+            and mouth_width_ratio <= 0.39
+        ):
+            emotion = "sad"
         else:
-            emotion = "focused"
+            emotion = "neutral"
 
         left_eye_outer = point(33)
         left_eye_inner = point(133)
@@ -105,10 +113,10 @@ class ExpressionTracker:
             valence = 0.9
         elif emotion == "surprised":
             valence = 0.7
-        elif emotion == "focused":
-            valence = 0.5
-        else:
+        elif emotion == "sad":
             valence = 0.2
+        else:
+            valence = 0.4
 
         raw_analysis = {
             "emotion": emotion,

@@ -207,6 +207,8 @@ elif address is not None:
     context_store.ensure_user(active_user_name)
 
 cap = cv2.VideoCapture(0)
+cv2.namedWindow("Output", cv2.WINDOW_NORMAL)
+cv2.resizeWindow("Output", 960, 640)
 user_login = 0
 flag_bluetooth = 0
 while cap.isOpened():
@@ -418,11 +420,11 @@ while cap.isOpened():
             mp_holistic.POSE_CONNECTIONS,
             landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style(),
         )
-        draw_gesture_feedback(annotated_image)
-        expression_tracker.draw_overlay(annotated_image, latest_expression)
         display_image = cv2.resize(
-            annotated_image, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR
+            annotated_image, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_LINEAR
         )
+        draw_gesture_feedback(display_image)
+        expression_tracker.draw_overlay(display_image, latest_expression)
         cv2.imshow("Output", display_image)
         # logic to send msg to unity
         if msg != "" and msg != old_msg:  # only send when there's actually something
