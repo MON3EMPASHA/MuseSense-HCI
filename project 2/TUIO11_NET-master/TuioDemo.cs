@@ -170,6 +170,8 @@ public class TuioDemo : Form , TuioListener
         bool audioMuted = false;
         
         PictureBox artifact3DPictureBox;
+        
+        System.Timers.Timer menuSelectTimer;
 
 		public TuioDemo(int port) {
         System.Timers.Timer slideTimer = new System.Timers.Timer(3000);
@@ -179,6 +181,23 @@ public class TuioDemo : Form , TuioListener
         System.Timers.Timer uiTimer = new System.Timers.Timer(500);
         uiTimer.Elapsed += (s, e) => { try { Invoke((Action)Invalidate); } catch { } };
         uiTimer.Start();
+        
+        menuSelectTimer = new System.Timers.Timer(3000);
+        menuSelectTimer.AutoReset = false;
+        menuSelectTimer.Elapsed += (s, e) => {
+            if (tuioMarker100Visible)
+            {
+                if (selectedMenuItem >= 0 && selectedMenuItem <= 4)
+                {
+                    page = selectedMenuItem;
+                    selectedArtifactId = -1; // reset artifact selection
+                }
+                selectedMenuItem = -1;
+                tuioMarker100Visible = false;
+                tuioMarker100SessionId = -1;
+                try { Invoke((Action)Invalidate); } catch { }
+            }
+        };
 
         verbose = false;
 			fullscreen = false;
@@ -275,6 +294,7 @@ public class TuioDemo : Form , TuioListener
             // Handle circular menu marker (TUIO ID 100)
             if (o.SymbolID == 100)
             {
+                if (menuSelectTimer != null) menuSelectTimer.Stop();
                 tuioMarker100Visible = true;
                 tuioMarker100SessionId = o.SessionID;
                 UpdateMenuSelectionFromRotation(o.Angle);
@@ -282,9 +302,21 @@ public class TuioDemo : Form , TuioListener
             }
             else if (o.SymbolID == 101)
             {
-                audioMuted = true;
-                StopAudio();
-                Console.WriteLine("Audio Muted by Marker 101");
+                audioMuted = !audioMuted;
+                if (audioMuted)
+                {
+                    StopAudio();
+                    Console.WriteLine("Audio Muted by Marker 101");
+                }
+                else
+                {
+                    Console.WriteLine("Audio Unmuted by Marker 101");
+                    if (page == 5 && playingArtifactId != -1)
+                    {
+                        ArtifactRecord artifact = GetArtifactById(playingArtifactId);
+                        if (artifact != null) PlayAudio(artifact.audioPath);
+                    }
+                }
             }
             else
             {
@@ -299,6 +331,7 @@ public class TuioDemo : Form , TuioListener
             // Handle circular menu marker (TUIO ID 100)
             if (o.SymbolID == 100)
             {
+                if (menuSelectTimer != null) menuSelectTimer.Stop();
                 tuioMarker100Visible = true;
                 tuioMarker100SessionId = o.SessionID;
                 UpdateMenuSelectionFromRotation(o.Angle);
@@ -317,17 +350,12 @@ public class TuioDemo : Form , TuioListener
             
             if (o.SymbolID == 100 && o.SessionID == tuioMarker100SessionId)
             {
-                tuioMarker100Visible = false;
-                tuioMarker100SessionId = -1;
-                
-                // When marker is lifted, navigate to the selected page
-                if (selectedMenuItem >= 0 && selectedMenuItem <= 4)
+                // When marker is lifted, keep the menu visible but start the 3-second selection timer
+                if (menuSelectTimer != null) 
                 {
-                    page = selectedMenuItem;
-                    selectedArtifactId = -1; // reset artifact selection
+                    menuSelectTimer.Stop();
+                    menuSelectTimer.Start();
                 }
-                selectedMenuItem = -1;
-                Invalidate();
             }
 		}
 
@@ -783,9 +811,6 @@ public class TuioDemo : Form , TuioListener
 
         ArtifactRecord artifact = GetArtifactByTuioId(markerId);
         if (artifact == null) return;
-        
-        // Unmute when a new artifact marker is displayed
-        audioMuted = false;
 
         if (InvokeRequired)
         {
@@ -1038,7 +1063,7 @@ public class TuioDemo : Form , TuioListener
         g.FillRectangle(bgrBrush, new Rectangle(0, 0, this.ClientSize.Width, this.ClientSize.Height));
 
         // Top Header Line
-        g.DrawLine(borderPen, 0, 80, this.ClientSize.Width, 80);
+        g.DrawLine(borderPen, 0, 105, this.ClientSize.Width, 105);
         
         // Draw Application Title
         Font titleFont = new Font("Segoe UI", 24f, FontStyle.Bold);
@@ -1071,8 +1096,11 @@ public class TuioDemo : Form , TuioListener
         g.FillEllipse(new SolidBrush(gestureActive ? Color.Green : Color.Gray), statusX, 60, 12, 12);
         g.DrawString("Gesture: " + (gestureActive ? "Active" : "Waiting"), statusFont, fntBrush, statusX + 20, 58);
 
+        g.FillEllipse(new SolidBrush(audioMuted ? Color.Red : Color.Green), statusX, 80, 12, 12);
+        g.DrawString("Audio: " + (audioMuted ? "Muted 🔇" : "Playing 🔊"), statusFont, fntBrush, statusX + 20, 78);
+
         // Draw Page Content
-        int contentY = 100;
+        int contentY = 120;
 
         if (uname == "Visitor" && page != 5)
         {
