@@ -1,0 +1,16 @@
+- **Grading Criteria:**
+
+| **Items** | | **Actual Grade** | **Notes** |
+| --- | | --- | --- | --- |
+| Display AR Object | 1 | | |
+| Utilizing Object Tracking with yolo | 1 | |
+| CRUD Content based on the context. | 2 | |
+| Applying context awareness service (scenario) | 1 | |
+| Classifying trajectories (Skelton/Object/Laser) using 1 dollar in scenario | 1 | |
+| Face Identification scenario | 1 | |
+| Facial Expressions monitor and developing adaptive interface | 1 | |
+| Gaze Tracking reports or hits, analysis and adapting interface. | 2 | |
+| Evaluation Experiment | 2 | |
+| Writing Results | 2 | |
+| Evaluation Feedback | 1 | |
+| **Bonus enrich idea** | 2 | | |
