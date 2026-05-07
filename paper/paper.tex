@@ -35,7 +35,7 @@
 \maketitle
 
 \begin{abstract}
-MuseSense is a museum guide system that combines tangible markers, computer vision, interactive three-dimensional artifact models, and synchronized audio narration in a single visitor workflow. The system uses reacTIVision/TUIO markers for direct artifact selection, a Python-based vision service for face-aware session handling and background sensing, and a C\# WinForms client for real-time 3D rendering, narration playback, favorites management, and visitor-facing interaction. The implementation is organized as two coordinated components: the main museum client and a supporting background service for Bluetooth-based identity handling. The system architecture supports a gesture pathway, currently validated as a secondary input channel. This paper documents the design rationale, software architecture, interaction flow, and system-level validation of the current implementation, and defines a comparative user-study protocol against a tablet baseline. It also situates MuseSense within prior literature on tangible interaction, physical interaction design, public displays, museum HCI, vision-based perception, and gesture recognition.
+MuseSense is a museum guide system that combines tangible markers, computer vision, interactive three-dimensional artifact models, and synchronized audio narration in one visitor workflow. The system uses reacTIVision/TUIO markers for direct artifact selection, a Python vision service for face-aware session handling and background sensing, and a C\# WinForms client for real-time 3D rendering, narration playback, favorites management, and visitor interaction. The implementation has two connected parts: the main museum client and a background service for Bluetooth-based identity handling. The architecture also supports a gesture pathway, currently validated as a secondary input channel. This paper describes the design choices, software architecture, interaction flow, and system-level validation of the current implementation, and defines a comparative user-study protocol against a tablet baseline. It also places MuseSense in prior work on tangible interaction, physical interaction design, public displays, museum HCI, vision-based perception, and gesture recognition.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -43,22 +43,22 @@ museum HCI, tangible interaction, TUIO, reacTIVision, MediaPipe, face recognitio
 \end{IEEEkeywords}
 
 \section{Introduction}
-Museums increasingly rely on digital systems to support artifact exploration, yet many installations still force visitors to choose between hands-on physical interaction and screen-based navigation. MuseSense addresses this gap by integrating tangible marker interaction, face-based personalization, 3D model exploration, and synchronized narration into one coherent visitor experience.
+Museums increasingly rely on digital systems to support artifact exploration, but many installations still force visitors to choose between hands-on physical interaction and screen-based navigation. MuseSense addresses this gap by integrating tangible marker interaction, face-based personalization, 3D model exploration, and synchronized narration into one clear visitor experience.
 
-This paper makes three contributions. First, it presents the implemented architecture of a museum guide that separates perception (camera, face recognition, marker tracking) from presentation (3D rendering, narration, interaction coordination) while preserving responsive interaction flow. Second, it defines a state-driven interaction model that governs artifact selection, session binding, and favorites persistence in a shared public environment. Third, it situates this approach within HCI literature on tangible interaction, physical interfaces, public displays, and museum-centered design, arguing that embodied, marker-based control is well suited to cultural heritage settings.
+This paper makes three contributions. First, it presents the implemented architecture of a museum guide that separates perception (camera, face recognition, marker tracking) from presentation (3D rendering, narration, interaction coordination) while keeping interaction responsive. Second, it defines a state-driven interaction model that controls artifact selection, session binding, and favorites storage in a shared public environment. Third, it relates this approach to HCI literature on tangible interaction, physical interfaces, public displays, and museum-centered design, and argues that marker-based physical control fits cultural heritage settings well.
 
 \section{Literature Review}
 \subsection{Physical and Tangible Interaction}
-MuseSense follows embodied and tangible interaction perspectives that treat physical action as central to meaning-making rather than only as input mechanics. Tangible Bits established graspable artifacts as effective bridges between physical and digital representations~\cite{ishii1997}, and Dourish argued that situated action and context shape interaction quality~\cite{dourish2001}. Building on this foundation, Hornecker and Buur emphasized both manipulation and social coordination in shared tangible systems~\cite{horneckerbuur2006}. In MuseSense, the marker functions simultaneously as selector and public interaction cue, aligning design decisions with this embodied-social framing.
+MuseSense follows embodied and tangible interaction perspectives that treat physical action as central to meaning-making, not only as an input method. Tangible Bits showed that graspable artifacts can connect physical and digital representations~\cite{ishii1997}, and Dourish argued that situated action and context shape interaction quality~\cite{dourish2001}. Building on this work, Hornecker and Buur emphasized both manipulation and social coordination in shared tangible systems~\cite{horneckerbuur2006}. In MuseSense, the marker works as both a selector and a public interaction cue, matching this embodied and social framing.
 
 \subsection{Public Displays and Museums}
-Because museums are shared public environments, interface legibility must support both active users and observers. Prior public-display work shows that visible, interpretable actions improve entry and engagement, and that systems should support transitions between passive and active states~\cite{brignull2003,muller2010}. Spectator-centered analyses further indicate that non-operators influence comfort and participation around an installation~\cite{reeves2005}. In museum settings, action-oriented tangible design and narrative accessibility remain key principles~\cite{horneckerstifter2006,pietroni2021}, which MuseSense addresses through marker-driven interaction, narration, and lightweight personalization.
+Because museums are shared public environments, interfaces must be easy to read for both active users and observers. Prior public-display work shows that visible, understandable actions improve entry and engagement, and that systems should support transitions between passive and active states~\cite{brignull2003,muller2010}. Spectator-centered studies also show that non-operators affect comfort and participation around an installation~\cite{reeves2005}. In museum settings, action-oriented tangible design and accessible narrative content remain key principles~\cite{horneckerstifter2006,pietroni2021}. MuseSense addresses these through marker-driven interaction, narration, and lightweight personalization.
 
 \subsection{Computer Vision and Gesture Recognition}
-MuseSense treats vision as infrastructure for real-time interaction: MediaPipe and BlazePose provide practical perception pipelines for commodity hardware and responsive pose tracking~\cite{lugaresi2019,bazarevsky2020}. For identity, the system follows embedding-based recognition principles consistent with FaceNet and standard cascaded detection approaches~\cite{schroff2015,zhang2016}. Its gesture pathway draws on lightweight template-recognizer families (\$1, multistroke variants, and \$P) suited to rapid prototyping without heavy training~\cite{wobbrock2007,anthony2010,vatavu2012}. Prior work on gesture appropriateness and automation trust underscores that robustness and social fit are essential in public guides~\cite{rico2010,hoff2015}.
+MuseSense uses vision as core support for real-time interaction: MediaPipe and BlazePose provide practical perception pipelines for common hardware and responsive pose tracking~\cite{lugaresi2019,bazarevsky2020}. For identity, the system follows embedding-based recognition principles consistent with FaceNet and standard cascaded detection approaches~\cite{schroff2015,zhang2016}. Its gesture pathway draws on lightweight template-recognizer families (\$1, multistroke variants, and \$P) that support fast prototyping without heavy training~\cite{wobbrock2007,anthony2010,vatavu2012}. Prior work on gesture appropriateness and automation trust shows that robustness and social fit are essential in public guides~\cite{rico2010,hoff2015}.
 
 \subsection{Narration and Evaluation}
-Narration in MuseSense is treated as an interpretive mechanism that complements visual exploration rather than as an auxiliary media feature. Museum-HCI literature supports audio narrative as a way to enrich context while preserving interface clarity, with evaluation typically centered on workload, comprehension, and engagement~\cite{pietroni2021}. Accordingly, this paper reports architecture and scenario-based validation, while positioning NASA-TLX and thematic analysis as next-step methods for formal user studies~\cite{hart1988,braun2006}.
+Narration in MuseSense is treated as an interpretation tool that supports visual exploration, rather than as an extra media feature. Museum-HCI literature supports audio narrative as a way to add context while keeping interfaces clear, with evaluation typically focused on workload, comprehension, and engagement~\cite{pietroni2021}. Accordingly, this paper reports architecture and scenario-based validation, and identifies NASA-TLX and thematic analysis as next-step methods for formal user studies~\cite{hart1988,braun2006}.
 
 \section{Methods}
 \subsection{HCI Overview Diagram and Architecture}
@@ -73,15 +73,15 @@ MuseSense is implemented as a distributed, local-first system. Fig.~\ref{fig:ove
 
 The perception service captures camera and marker streams, performs identity and marker-state interpretation, and emits compact interaction-state events. The WinForms client consumes these events to update artifact context, 3D rendering, narration, and favorites in real time.
 
-The architecture follows three coordinated paths: sensing (camera/marker to state events), presentation (state events to UI/media updates), and persistence (session and favorites storage). This separation keeps interaction responsive and allows perception and interface modules to evolve independently while preserving a consistent visitor-facing workflow.
+The architecture follows three coordinated paths: sensing (camera/marker to state events), presentation (state events to UI/media updates), and persistence (session and favorites storage). This separation keeps interaction responsive and allows perception and interface modules to evolve independently while keeping a consistent visitor workflow.
 
-\subsection{Interaction State Flow}
-The user experience follows a simple state machine (Fig.~\ref{fig:stateflow}): visitors begin in passive browsing, transition to a recognized session when a known face is detected, and enter artifact-focused mode when a TUIO marker is placed. A recognized user unlocks personalized actions (favorites), while face loss clears the session to prevent previous-visitor binding on shared hardware.
+\subsection{Smart Museum Interaction Flow}
+Figure~\ref{fig:stateflow} presents the Smart Egyptian Museum interaction flow used by MuseSense. The diagram connects sensing inputs (camera and marker events), session logic (recognition, personalization, and reset), and visitor-facing actions (artifact exploration, narration, and favorites) in one clear sequence. It shows how the system moves between idle browsing, personalized guidance, and artifact-focused interaction in a shared kiosk environment.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{paper/sate_flow.jpeg}
-\caption{MuseSense state flow. The system moves between idle browsing, face-based session binding, artifact selection, narration playback, and favorites management.}
+\includegraphics[width=\linewidth]{paper/smart-egyptian-museum-diagram.png}
+\caption{Smart Egyptian Museum interaction flow for MuseSense. The pipeline links sensing, session management, artifact interpretation, narration control, and favorites persistence across the visitor journey.}
 \label{fig:stateflow}
 \end{figure}
 
@@ -90,13 +90,13 @@ The user experience follows a simple state machine (Fig.~\ref{fig:stateflow}): v
 The perception service combines OpenCV capture, MediaPipe Holistic, and embedding-based face recognition~\cite{lugaresi2019,schroff2015}. It reads camera frames from either a local webcam or network stream, applies preprocessing (resolution adaptation, orientation correction), and performs throttled identity checks to control computational cost. When a known face is recognized, the service sends a compact state message to the desktop client; face loss triggers a reset signal.
 
 \subsection{C\# Museum Client}
-The C\# WinForms client listens to TUIO marker events, translates them to artifact indices, and renders 3D models with narration playback and favorites management. The 3D view is implemented with a custom CPU rasterization pipeline in WinForms (System.Drawing), including z-buffered triangle rasterization with frame and thumbnail caching plus view precomputation to maintain responsive interaction on target hardware. This design prioritizes deterministic behavior and broad compatibility with kiosk-class deployments over dependence on a specific GPU runtime.
+The C\# WinForms client listens to TUIO marker events, translates them to artifact indices, and renders 3D models with narration playback and favorites management. The 3D view is implemented with a custom CPU rasterization pipeline in WinForms (System.Drawing), including z-buffered triangle rasterization with frame and thumbnail caching plus view precomputation to maintain responsive interaction on target hardware. This design prioritizes predictable behavior and broad compatibility with kiosk deployments over dependence on a specific GPU runtime.
 
 \subsection{Artifact, Narration, and Favorites Pipeline}
-Artifacts are defined in JSON and bound to TUIO IDs, storing metadata (name, era, origin, description, and model/audio paths). When a marker is placed, the matching artifact record is loaded and rendered with its 3D model and narration. Favorites are persisted locally per user, ensuring self-contained operation and enabling visitors to save and revisit artifacts with minimal friction.
+Artifacts are defined in JSON and bound to TUIO IDs, with metadata (name, era, origin, description, and model/audio paths). When a marker is placed, the matching artifact record is loaded and rendered with its 3D model and narration. Favorites are stored locally per user, enabling self-contained operation and letting visitors save and revisit artifacts with minimal effort.
 
 \subsection{TUIO Marker Input}
-MuseSense uses the TUIO protocol and reacTIVision to track fiducial markers~\cite{tuio2005,kaltenbrunner2007,bencina2005}. Six marker IDs (0--4 for artifacts and 100 for menu control) are assigned to the physical fiducials shown in Fig.~\ref{fig:tuioids}. The tracker emits symbol IDs and pose over UDP, which the desktop application translates into artifact loading and menu selection. Marker orientation is preserved, making physical marker movement directly visible in the digital view.
+MuseSense uses the TUIO protocol and reacTIVision to track fiducial (physical) markers~\cite{tuio2005,kaltenbrunner2007,bencina2005}. Six marker IDs (0--4 for artifacts and 100 for menu control) are assigned to the physical markers shown in Fig.~\ref{fig:tuioids}. The tracker emits symbol IDs and pose over UDP, which the desktop application translates into artifact loading and menu selection. Marker orientation is preserved, making physical marker movement directly visible in the digital view.
 
 \begin{figure}[t]
 \centering
@@ -111,7 +111,7 @@ MuseSense uses the TUIO protocol and reacTIVision to track fiducial markers~\cit
 \includegraphics[width=0.29\linewidth]{paper/Diagrams/TUIO/TUIO-page-00101.jpg} \\
 \small ID 3 & \small ID 4 & \small ID 100
 \end{tabular}
-\caption{Primary TUIO fiducials used by MuseSense. IDs 0--4 drive artifact selection, while ID 100 controls the circular marker menu.}
+\caption{Primary TUIO markers used by MuseSense. IDs 0--4 drive artifact selection, while ID 100 controls the circular marker menu.}
 \label{fig:tuioids}
 \end{figure}
 
@@ -156,17 +156,17 @@ The screen presents saved artifacts with per-item actions, plus list-level contr
 \end{figure}
 
 \section{Experiments}
-The evaluation strategy combines (1) structured scenario-based system validation for engineering robustness and (2) a pre-registered small comparative user-study protocol for future human-subjects testing. This two-layer strategy separates implementation verification from user-level inference and keeps claims aligned with currently available evidence.
+The evaluation strategy combines (1) structured scenario-based system validation for engineering reliability and (2) a pre-registered small comparative user-study protocol for future human-subject testing. This two-layer strategy separates implementation verification from user-level findings and keeps claims aligned with currently available evidence.
 
 \subsection{Evaluation Objectives and Scope}
-The primary objective of the current phase was to verify that the integrated interaction loop remains stable under realistic kiosk operating conditions: session entry, artifact activation, media navigation, preference persistence, and return-to-idle behavior in a shared public setting. The focus is system integration validity (``does the multimodal pipeline work reliably as designed?'') rather than population-level usability superiority.
+The primary objective of the current phase was to verify that the integrated interaction loop stays stable under realistic kiosk operating conditions: session entry, artifact activation, media navigation, preference storage, and return-to-idle behavior in a shared public setting. The focus is system integration validity (``does the multimodal pipeline work reliably as designed?'') rather than proving better usability at the population level.
 
-A secondary objective was to define a controlled comparative protocol that can be executed with participants without changing core functionality. This forward-compatible protocol allows the same implementation to support both engineering validation and subsequent HCI evaluation.
+A secondary objective was to define a controlled comparative protocol that can be run with participants without changing core functionality. This forward-compatible protocol allows the same implementation to support both engineering validation and later HCI evaluation.
 
 \subsection{Testbed, Instrumentation, and Trial Procedure}
 Protocol execution followed scripted end-to-end trials in which camera sensing, marker tracking, socket communication, rendering, narration, and persistence were active simultaneously. For each trial, the operator executed a fixed script of interaction events, including user appearance/disappearance, marker placement/removal, artifact switching, narration playback, and favorites save/reload.
 
-Instrumentation combined event timestamps from the perception service and the WinForms client with direct interface observation. Trial logs were used to verify temporal ordering (e.g., marker event $\rightarrow$ artifact load), while screen observation was used to confirm externally visible state transitions and media synchronization. Each trial was scored against predefined acceptance criteria. The integrated criteria and outcomes are summarized in Table~\ref{tab:validation}.
+Instrumentation combined event timestamps from the perception service and the WinForms client with direct interface observation. Trial logs were used to verify temporal ordering (e.g., marker event $\rightarrow$ artifact load), while screen observation confirmed visible state transitions and media synchronization. Each trial was scored against predefined acceptance criteria. The integrated criteria and outcomes are summarized in Table~\ref{tab:validation}.
 
 \begin{table*}[t]
 \caption{Unified System-Level Validation Criteria and Outcomes}
@@ -198,12 +198,12 @@ The scripted validation set contained five scenario classes:
     \item favorites persistence across save, reload, and session transitions.
 \end{enumerate}
 
-An individual scenario was marked as passed only when all associated criteria were satisfied in sequence. For example, marker-driven selection required correct artifact context, stable interface update, and preserved narration/model consistency after switching. This conjunctive pass rule reduced the chance that partial success would be misinterpreted as full workflow reliability.
+An individual scenario was marked as passed only when all associated criteria were satisfied in sequence. For example, marker-driven selection required correct artifact context, stable interface updates, and preserved narration/model consistency after switching. This strict pass rule reduced the chance that partial success would be mistaken for full workflow reliability.
 
 \subsection{Data Recording and Analysis Plan for Engineering Trials}
-For each trial run, the following were recorded: observed latency windows for marker/session events, success/failure outcomes for persistence actions, and qualitative notes on rendering stability and interaction continuity. Analysis was criterion-based rather than inferential: outcomes were mapped directly to pass/fail status under the thresholds in Table~\ref{tab:validation}.
+For each trial run, the following were recorded: observed latency windows for marker/session events, success/failure outcomes for persistence actions, and qualitative notes on rendering stability and interaction continuity. Analysis was criterion-based rather than based on statistical inference: outcomes were mapped directly to pass/fail status under the thresholds in Table~\ref{tab:validation}.
 
-This protocol prioritizes internal validity for integration claims and provides a reproducible engineering baseline. It does not claim population-level usability superiority over alternative interfaces; that claim is deferred to controlled participant studies.
+This protocol focuses on internal validity for integration claims and provides a reproducible engineering baseline. It does not claim population-level usability superiority over alternative interfaces; that claim is left to controlled participant studies.
 
 \subsection{Small Comparative User-Study Protocol}
 To complement system-level validation, we define a small comparative user-study protocol with 12--20 participants. Each participant completes the same artifact-discovery tasks under two conditions: (1) MuseSense with tangible markers and (2) a functionally equivalent tablet interface with touch-only navigation. Condition order is counterbalanced.
@@ -211,18 +211,18 @@ To complement system-level validation, we define a small comparative user-study 
 \subsection{Planned Measures and Comparative Analysis}
 The task set includes finding specified artifacts, opening detailed descriptions, replaying narration, and saving favorites. The planned quantitative measures are perceived usability using the System Usability Scale questionnaire~\cite{brooke1996}, task completion time, and a short post-task learning check based on artifact-content recall questions.
 
-To reduce instrumentation bias, both conditions use equivalent task wording, identical artifact content, and matched completion criteria. The analysis plan is within-subject comparison across conditions, with effect direction interpreted jointly across usability, efficiency, and recall rather than from a single metric. Four semi-structured interview questions are used to capture perceived ease of use, comfort with marker interaction, perceived learning, and overall interaction-style preference.
+To reduce instrumentation bias, both conditions use equivalent task wording, identical artifact content, and matched completion criteria. The analysis plan uses within-subject comparison across conditions, with effect direction interpreted jointly across usability, efficiency, and recall rather than from a single metric. Four semi-structured interview questions are used to capture perceived ease of use, comfort with marker interaction, perceived learning, and overall interaction-style preference.
 
 \subsection{Threats to Validity and Mitigation}
-The current engineering trials are limited by site-specific hardware, local lighting conditions, and scripted operator behavior, which may under-represent deployment variability. The planned participant study addresses part of this limitation through counterbalancing, standardized task scripts, and mixed-method data (questionnaire, performance, and interview evidence). Remaining external-validity risks, such as cross-museum differences in visitor flow and ambient conditions, are treated as out-of-scope for the present phase and motivate future multi-site replication.
+The current engineering trials are limited by site-specific hardware, local lighting conditions, and scripted operator behavior, which may not fully represent deployment variability. The planned participant study addresses part of this limitation through counterbalancing, standardized task scripts, and mixed-method data (questionnaire, performance, and interview evidence). Remaining external-validity risks, such as cross-museum differences in visitor flow and ambient conditions, are outside the scope of the present phase and motivate future multi-site replication.
 
 \section{System Implementation \& Preliminary Validation}
 Internal engineering checks indicate that the implemented pipeline largely satisfies the acceptance criteria (Table~\ref{tab:validation}). Marker-driven artifact activation, face-driven session binding, and preference persistence operated stably under scripted trials. Rendering and narration remained synchronized with artifact context during normal use.
 
-The interface evidence (Subsection~\ref{sec:ui_screens}, Fig.~\ref{fig:ui_artifacts}--\ref{fig:ui_favorites}) indicates that system state transitions are externally legible, which is important for museum deployment where spectators and first-time participants must understand the system through observation~\cite{reeves2005,brignull2003}.
+The interface evidence (Subsection~\ref{sec:ui_screens}, Fig.~\ref{fig:ui_artifacts}--\ref{fig:ui_favorites}) indicates that system state transitions are easy to notice, which is important for museum deployment where spectators and first-time participants must understand the system through observation~\cite{reeves2005,brignull2003}.
 
 \subsection{Comparison with Representative Museum Interaction Systems}
-Table~\ref{tab:comparison} situates MuseSense against representative museum interaction systems. The comparison highlights that MuseSense combines tangible control, vision-based session binding, and synchronized 3D/audio presentation in a single workflow, while the cited systems emphasize accessibility, physically situated interaction, or public-display guidance rather than this exact multimodal combination.
+Table~\ref{tab:comparison} compares MuseSense with representative museum interaction systems. The comparison shows that MuseSense combines tangible control, vision-based session binding, and synchronized 3D/audio presentation in one workflow, while the cited systems emphasize accessibility, physically situated interaction, or public-display guidance rather than this exact multimodal combination.
 
 \begin{table}[t]
 \caption{Comparison with Representative Museum Interaction Systems}
@@ -243,16 +243,16 @@ MuseSense (this paper) & Tangible + vision + 3D/audio & Face-bound local favorit
 \end{table}
 
 \subsection{Privacy and Ethical Considerations}
-The system uses local-first architecture for identity and preference processing, eliminating cloud analytics dependencies and reducing exposure risk. Importantly, face-based personalization stores only face embeddings (numerical feature vectors) derived through FaceNet-style representation learning~\cite{schroff2015}, not raw images or pixel data. All face embeddings and preference records are retained locally on the museum kiosk, with no external transmission. However, face-based personalization requires explicit visitor consent, guest-mode options, and documented data-retention and deletion policies for production deployment. Clear on-screen notices must inform visitors that face recognition is active and provide accessible opt-out mechanisms.
+The system uses a local-first architecture for identity and preference processing, removing cloud analytics dependencies and reducing exposure risk. Importantly, face-based personalization stores only face embeddings (numerical feature vectors) derived through FaceNet-style representation learning~\cite{schroff2015}, not raw images or pixel data. All face embeddings and preference records are kept locally on the museum kiosk, with no external transmission. However, face-based personalization requires explicit visitor consent, guest-mode options, and documented data-retention and deletion policies for production deployment. Clear on-screen notices must inform visitors that face recognition is active and provide accessible opt-out mechanisms.
 
 \section{Conclusion}
-MuseSense integrates tangible marker control, face-based session binding, 3D artifact exploration, and synchronized narration into a coherent museum guide. This paper has documented the distributed perception-presentation architecture, defined the state-driven interaction model, and situated the approach within HCI literature on tangible interaction and museum design.
+MuseSense integrates tangible marker control, face-based session binding, 3D artifact exploration, and synchronized narration into a clear museum guide. This paper has documented the distributed perception-presentation architecture, defined the state-driven interaction model, and related the approach to HCI literature on tangible interaction and museum design.
 
-Current limitations are that the validation evidence is still scenario-based, not a full participant study, and that the gesture-primary path remains only partially integrated. Internal validity is also bounded by single-site hardware and lighting conditions, and broader generalization will require multi-site testing.
+Current limitations are that the validation evidence is still scenario-based, not a full participant study, and that the gesture-primary path remains only partially integrated. Internal validity is also limited by single-site hardware and lighting conditions, and broader generalization will require multi-site testing.
 
 Future work will include a comparative user study targeting 16 participants (planned range: 12--20), using MuseSense and a functionally equivalent tablet interface under counterbalanced conditions. The planned measures are perceived usability, task completion time, artifact-content recall, and brief semi-structured interviews on ease of use, comfort with marker interaction, perceived learning, and interface preference. Additional next steps include implementing privacy-consent flows and completing the gesture pathway.
 
-The current implementation demonstrates that museum guides can be physically legible and digitally rich without forcing screen-first interaction patterns.
+The current implementation demonstrates that museum guides can be physically readable and digitally rich without forcing screen-first interaction patterns.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
