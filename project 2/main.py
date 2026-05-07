@@ -214,6 +214,8 @@ last_gaze_zone = ""
 latest_expression = None
 gesture_points = []
 circle_points = []
+expression_log_until = 0.0
+last_expression_signature = ""
 
 
 all_macs = []
@@ -407,15 +409,24 @@ while cap.isOpened():
         image_hight, image_width, _ = frame.shape
 
         analysis_frame_counter += 1
-        if analysis_frame_counter % 10 == 0:
+        if analysis_frame_counter % 15 == 0:
             analysis_frame_counter = 0
             expression = expression_tracker.analyze(frame_rgb)
             if expression is not None:
                 latest_expression = expression
 
-                if expression["emotion"] != last_emotion or expression["gaze_zone"] != last_gaze_zone:
+                current_signature = f"{expression['emotion']}:{expression['gaze_zone']}"
+                can_log_expression = (
+                    time.monotonic() >= expression_log_until
+                    and expression.get("window_size", 1) >= 3
+                    and current_signature != last_expression_signature
+                )
+
+                if can_log_expression:
                     last_emotion = expression["emotion"]
                     last_gaze_zone = expression["gaze_zone"]
+                    last_expression_signature = current_signature
+                    expression_log_until = time.monotonic() + 2.0
 
                     gaze_hit = gaze_tracker.register(expression["gaze_zone"])
                     context_store.update_category_score(
@@ -435,7 +446,7 @@ while cap.isOpened():
                     print("[EVENT]", event_to_line(adaptive_event))
 
         object_frame_counter += 1
-        if object_frame_counter % 8 == 0:
+        if object_frame_counter % 18 == 0:
             object_frame_counter = 0
             detection = yolo_tracker.detect_primary(f_frame)
             if detection is not None:
