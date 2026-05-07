@@ -65,9 +65,3 @@ Expected:
 
 - Run Cell 3 first (version check)
 - Then run Cell 1 or Cell 2
-
-## Notes
-
-- Do not commit `venv` to git.
-- Each teammate creates their own local `venv`.
-- Share code and `requirements.txt`, not virtual environments.
