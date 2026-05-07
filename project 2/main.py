@@ -1,4 +1,13 @@
+import logging
+import os
 import warnings
+
+# Configure TensorFlow logging before importing libraries that may initialize it.
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+
+logging.getLogger("tensorflow").setLevel(logging.ERROR)
+logging.getLogger("absl").setLevel(logging.ERROR)
 
 warnings.filterwarnings(
     "ignore",
@@ -6,18 +15,28 @@ warnings.filterwarnings(
     category=UserWarning,
     module=r"google\.protobuf\.symbol_database",
 )
+warnings.filterwarnings(
+    "ignore",
+    message=r".*tf\.losses\.sparse_softmax_cross_entropy is deprecated.*",
+)
 
 import cv2
 import mediapipe as mp
 import numpy as np
 import socket
 import pickle
-import socket
 import json
 import bluetooth
 import time
 from dollarpy import Point
+from gestures import (
+    is_circle_like,
+    is_gesture_significant,
+    show_gesture_feedback,
+    draw_gesture_feedback,
+)
 from pathlib import Path
+from users import normalize_mac, load_users_by_mac
 from movements import recognizer
 from context_store import ContextStore, apply_gesture_action
 from event_protocol import build_event, event_to_line
@@ -33,51 +52,7 @@ PHONE_BT_NAME = "Phone"
 USERS_JSON_PATH = Path("TUIO11_NET-master") / "bin" / "Debug" / "users.json"
 
 
-def normalize_mac(mac: str) -> str:
-    return mac.strip().upper().replace("-", ":")
-
-
-def load_users_by_mac(json_path: Path = USERS_JSON_PATH) -> dict[str, dict]:
-    if not json_path.exists():
-        print(f"[USERS] users.json not found at {json_path}")
-        return {}
-
-    try:
-        with json_path.open("r", encoding="utf-8") as json_file:
-            users_data = json.load(json_file)
-    except Exception as e:
-        print(f"[USERS] Failed to read users.json: {e}")
-        return {}
-
-    users_by_mac: dict[str, dict] = {}
-    if isinstance(users_data, list):
-        for user in users_data:
-            if not isinstance(user, dict):
-                continue
-            name = user.get("name")
-            mac_field = user.get("mac")
-
-            if not name or not mac_field:
-                continue
-
-            if isinstance(mac_field, list):
-                mac_values = [str(mac).strip() for mac in mac_field if str(mac).strip()]
-            else:
-                mac_values = [str(mac_field).strip()]
-
-            normalized_macs = [normalize_mac(mac) for mac in mac_values if mac]
-
-            for normalized_mac in normalized_macs:
-                users_by_mac[normalized_mac] = {
-                    "type": "user_login",
-                    "name": str(name).strip(),
-                    "age": str(user.get("age", "")).strip(),
-                    "gender": str(user.get("gender", "")).strip(),
-                    "mac": normalized_mac,
-                    "Profile": str(user.get("Profile", "")).strip(),
-                }
-
-    return users_by_mac
+# user / bluetooth helpers moved to users.py
 
 
 def send_socket_message(connection: socket.socket, payload: str) -> None:
@@ -87,104 +62,7 @@ def send_socket_message(connection: socket.socket, payload: str) -> None:
     connection.sendall(f"{payload}\n".encode("utf-8"))
 
 
-gesture_feedback_text = ""
-gesture_feedback_until = 0.0
-gesture_cooldown_until = 0.0
-
-
-def show_gesture_feedback(message: str, duration: float = 2.0) -> None:
-    global gesture_feedback_text, gesture_feedback_until
-    gesture_feedback_text = message
-    gesture_feedback_until = time.monotonic() + duration
-
-
-def draw_gesture_feedback(frame: np.ndarray) -> None:
-    if time.monotonic() >= gesture_feedback_until or not gesture_feedback_text:
-        return
-
-    cv2.putText(
-        frame,
-        gesture_feedback_text,
-        (20, 60),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.8,
-        (0, 255, 255),
-        2,
-    )
-
-
-def gesture_path_stats(points: list[Point]) -> dict[str, float]:
-    xs = [point.x for point in points]
-    ys = [point.y for point in points]
-    min_x = min(xs)
-    max_x = max(xs)
-    min_y = min(ys)
-    max_y = max(ys)
-    width = max_x - min_x
-    height = max_y - min_y
-    path_length = 0.0
-
-    for index in range(1, len(points)):
-        dx = points[index].x - points[index - 1].x
-        dy = points[index].y - points[index - 1].y
-        path_length += (dx * dx + dy * dy) ** 0.5
-
-    return {
-        "width": float(width),
-        "height": float(height),
-        "path_length": float(path_length),
-        "start_end_distance": float(
-            ((points[0].x - points[-1].x) ** 2 + (points[0].y - points[-1].y) ** 2) ** 0.5
-        ),
-        "center_x": float(sum(xs) / len(xs)),
-        "center_y": float(sum(ys) / len(ys)),
-    }
-
-
-def is_circle_like(points: list[Point]) -> bool:
-    if len(points) < 18:
-        return False
-
-    stats = gesture_path_stats(points)
-    width = stats["width"]
-    height = stats["height"]
-    if width < 70 or height < 70:
-        return False
-
-    smaller = min(width, height)
-    larger = max(width, height)
-    if smaller <= 0 or larger / smaller > 1.5:
-        return False
-
-    if stats["path_length"] < max(width, height) * 2.2:
-        return False
-
-    if stats["start_end_distance"] > max(width, height) * 0.45:
-        return False
-
-    radii = []
-    for point in points:
-        dx = point.x - stats["center_x"]
-        dy = point.y - stats["center_y"]
-        radii.append((dx * dx + dy * dy) ** 0.5)
-
-    mean_radius = sum(radii) / len(radii)
-    if mean_radius <= 0:
-        return False
-
-    average_deviation = sum(abs(radius - mean_radius) for radius in radii) / len(radii)
-    if average_deviation / mean_radius > 0.35:
-        return False
-
-    return True
-
-
-def is_gesture_significant(points: list[Point]) -> bool:
-    if len(points) < 12:
-        return False
-
-    stats = gesture_path_stats(points)
-    return stats["width"] >= 80 or stats["height"] >= 80 or stats["path_length"] >= 160
+# gesture helper functions moved to gestures.py
 
 
 soc = socket.socket()
@@ -238,10 +116,10 @@ class HCIServer:
     # Step 2 · Bluetooth Scan
 
     def scan_bluetooth(self) -> tuple[str | None, dict | None]:
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("[BT] ========== BLUETOOTH DISCOVERY START ==========")
         print("[BT] Scanning for Bluetooth devices (8 seconds)…")
-        users_by_mac = load_users_by_mac()
+        users_by_mac = load_users_by_mac(USERS_JSON_PATH)
         print(f"[BT] Known users in system: {len(users_by_mac)}")
 
         try:
@@ -251,13 +129,15 @@ class HCIServer:
         except Exception as e:
             print(f"[BT] ERROR during scan: {type(e).__name__}")
             print(f"[BT] Error message: {e}")
-            print("[BT] (Make sure Bluetooth adapter is enabled and PyBluez is installed)")
+            print(
+                "[BT] (Make sure Bluetooth adapter is enabled and PyBluez is installed)"
+            )
             return None, None
 
         if len(devices) > 0:
-            print("[BT] " + "-"*56)
+            print("[BT] " + "-" * 56)
             print("[BT] DISCOVERED DEVICES:")
-            print("[BT] " + "-"*56)
+            print("[BT] " + "-" * 56)
             selected_addr = None
 
             for index, (addr, name) in enumerate(devices, start=1):
@@ -271,7 +151,7 @@ class HCIServer:
                     print(
                         f"[BT]      ✓ MATCH FOUND: User '{matched_user['name']}' (Profile: {matched_user.get('Profile', 'N/A')})"
                     )
-                    print("[BT] " + "-"*56)
+                    print("[BT] " + "-" * 56)
                     print(f"[BT] ========== RETURNING MATCHED USER ==========\n")
                     return addr, matched_user
                 else:
@@ -281,26 +161,28 @@ class HCIServer:
                     print(f"[BT]      → Selected as PHONE_BT_NAME candidate")
                     selected_addr = addr
 
-            print("[BT] " + "-"*56)
+            print("[BT] " + "-" * 56)
             if selected_addr is None:
                 selected_addr = devices[0][0]
                 print(f"[BT] No phone name match, using first device: {selected_addr}")
             else:
                 print(f"[BT] Selected device (phone match): {selected_addr}")
 
-            print("[BT] " + "-"*56)
+            print("[BT] " + "-" * 56)
             print(f"[BT] ========== RETURNING SELECTED MAC ==========\n")
             return selected_addr, None
 
         else:
-            print("[BT] " + "-"*56)
+            print("[BT] " + "-" * 56)
             print("[BT] NO DEVICES FOUND")
             print("[BT] Possible reasons:")
             print("[BT]   - No Bluetooth devices nearby")
             print("[BT]   - Devices are in pairing mode or hidden")
             print("[BT]   - Bluetooth adapter may be disabled")
-            print("[BT] " + "-"*56)
-            print("[BT] ========== BLUETOOTH DISCOVERY COMPLETE (NO DEVICES) ==========\n")
+            print("[BT] " + "-" * 56)
+            print(
+                "[BT] ========== BLUETOOTH DISCOVERY COMPLETE (NO DEVICES) ==========\n"
+            )
             return None, None
 
 
@@ -347,16 +229,8 @@ while cap.isOpened():
             )
             user_login = 1
         elif address is not None:
-            # Send a valid JSON for unmatched MAC so C# TryHandleLoginPayload doesn't fail
-            fallback_payload = {
-                "type": "user_login",
-                "name": "Visitor",
-                "mac": normalize_mac(address),
-                "error": "No match for this device in the system"
-            }
-            message_payload = json.dumps(fallback_payload)
-            print("Sending MAC as Visitor:", message_payload)
-            send_socket_message(conn, message_payload)
+            print("Sending MAC:", address)
+            send_socket_message(conn, address)
             context_store.log_event(
                 build_event(
                     "guest_session",
@@ -366,17 +240,6 @@ while cap.isOpened():
                     },
                 )
             )
-            user_login = 1
-        else:
-            # Send a valid JSON when no devices are found so C# doesn't hang forever
-            no_device_payload = {
-                "type": "user_login",
-                "name": "Visitor",
-                "error": "No Bluetooth devices found"
-            }
-            message_payload = json.dumps(no_device_payload)
-            print("Sending No Devices Found payload:", message_payload)
-            send_socket_message(conn, message_payload)
             user_login = 1
     try:
 
@@ -439,7 +302,9 @@ while cap.isOpened():
                             "user": active_user_name,
                             "expression": expression,
                             "gaze": gaze_hit,
-                            "recommended": context_store.get_context_recommendation(active_user_name),
+                            "recommended": context_store.get_context_recommendation(
+                                active_user_name
+                            ),
                         },
                     )
                     context_store.log_event(adaptive_event)
@@ -577,9 +442,7 @@ while cap.isOpened():
                 print(f"[GESTURE] {feedback_message}")
                 show_gesture_feedback(feedback_message)
             elif action_result.get("action") != "none":
-                feedback_message = (
-                    f"Action: {action_result.get('action')} ({action_result.get('result')})"
-                )
+                feedback_message = f"Action: {action_result.get('action')} ({action_result.get('result')})"
                 print(f"[CONTEXT] {feedback_message}")
                 show_gesture_feedback(feedback_message)
 
