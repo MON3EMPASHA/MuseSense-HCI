@@ -41,6 +41,16 @@
         "favorites": 1.0
       },
       "updated_at": 1778174038
+    },
+    "Mohamed Ibrahim": {
+      "profile": "objects/obj5.png",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "updated_at": 0
     }
   },
   "events": [
@@ -1264,10 +1274,129 @@
           "reason": "Highest score=7.2"
         }
       }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778174989,
+      "type": "face_login",
+      "payload": {
+        "user": "Mohamed Ibrahim",
+        "source": "bluetooth_match"
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778174992,
+      "type": "object_tracking",
+      "payload": {
+        "user": "Mohamed Ibrahim",
+        "object": {
+          "label": "clock",
+          "confidence": 0.589,
+          "bbox": [
+            209,
+            117,
+            283,
+            146
+          ],
+          "center": [
+            246,
+            131
+          ]
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778174993,
+      "type": "object_tracking",
+      "payload": {
+        "user": "Mohamed Ibrahim",
+        "object": {
+          "label": "bird",
+          "confidence": 0.59,
+          "bbox": [
+            198,
+            106,
+            283,
+            145
+          ],
+          "center": [
+            240,
+            125
+          ]
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778174994,
+      "type": "object_tracking",
+      "payload": {
+        "user": "Mohamed Ibrahim",
+        "object": {
+          "label": "clock",
+          "confidence": 0.555,
+          "bbox": [
+            209,
+            117,
+            283,
+            146
+          ],
+          "center": [
+            246,
+            131
+          ]
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778174996,
+      "type": "object_tracking",
+      "payload": {
+        "user": "Mohamed Ibrahim",
+        "object": {
+          "label": "bird",
+          "confidence": 0.59,
+          "bbox": [
+            198,
+            106,
+            283,
+            145
+          ],
+          "center": [
+            240,
+            125
+          ]
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778174997,
+      "type": "object_tracking",
+      "payload": {
+        "user": "Mohamed Ibrahim",
+        "object": {
+          "label": "clock",
+          "confidence": 0.665,
+          "bbox": [
+            210,
+            106,
+            283,
+            146
+          ],
+          "center": [
+            246,
+            126
+          ]
+        }
+      }
     }
   ],
   "meta": {
     "version": 1,
-    "updated_at": 1778174091
+    "updated_at": 1778174997
   }
 }
