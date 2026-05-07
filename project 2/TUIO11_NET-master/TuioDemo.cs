@@ -43,29 +43,38 @@ public class TuioDemo : Form , TuioListener
         // setting default colors and different gender colors
         private struct ColorTheme
         {
-            public Color backgroundDark;
+            public Color background;
             public Color cardBackground;
+            public Color textDark;
+            public Color textLight;
             public Color accentLight; 
             public Color accentBubble;
             public Color avatarBackground;
+            public Color border;
         }
         
         private ColorTheme maleTheme = new ColorTheme
         {
-            backgroundDark = Color.FromArgb(0, 0, 64),
-            cardBackground = Color.FromArgb(30, 30, 60),
-            accentLight = Color.FromArgb(100, 200, 255),
-            accentBubble = Color.FromArgb(64, 64, 64),
-            avatarBackground = Color.FromArgb(80, 80, 120)
+            background = Color.FromArgb(245, 246, 248),
+            cardBackground = Color.FromArgb(255, 255, 255),
+            textDark = Color.FromArgb(40, 40, 40),
+            textLight = Color.FromArgb(120, 120, 120),
+            accentLight = Color.FromArgb(0, 122, 255),
+            accentBubble = Color.FromArgb(200, 220, 255),
+            avatarBackground = Color.FromArgb(220, 230, 250),
+            border = Color.FromArgb(230, 230, 230)
         };
         
         private ColorTheme femaleTheme = new ColorTheme
         {
-            backgroundDark = Color.FromArgb(64, 20, 40),
-            cardBackground = Color.FromArgb(80, 30, 60),
-            accentLight = Color.FromArgb(255, 150, 200),
-            accentBubble = Color.FromArgb(100, 40, 80),
-            avatarBackground = Color.FromArgb(120, 60, 90)
+            background = Color.FromArgb(245, 246, 248),
+            cardBackground = Color.FromArgb(255, 255, 255),
+            textDark = Color.FromArgb(40, 40, 40),
+            textLight = Color.FromArgb(120, 120, 120),
+            accentLight = Color.FromArgb(255, 105, 180),
+            accentBubble = Color.FromArgb(255, 220, 235),
+            avatarBackground = Color.FromArgb(250, 230, 240),
+            border = Color.FromArgb(230, 230, 230)
         };
         
         private TuioClient client;
@@ -85,14 +94,16 @@ public class TuioDemo : Form , TuioListener
 		private bool verbose;
 
 		Font font = new Font("Arial", 10.0f);
-		SolidBrush fntBrush = new SolidBrush(Color.White);
-		SolidBrush bgrBrush = new SolidBrush(Color.FromArgb(0,0,64));       // changes by gender
-		SolidBrush cardBsh_dynamic = new SolidBrush(Color.FromArgb(30, 30, 60));
-		SolidBrush accentBrush = new SolidBrush(Color.FromArgb(100, 200, 255));
-		SolidBrush avatarBrush = new SolidBrush(Color.FromArgb(80, 80, 120));
+		SolidBrush fntBrush = new SolidBrush(Color.FromArgb(40, 40, 40));
+		SolidBrush textLightBrush = new SolidBrush(Color.FromArgb(120, 120, 120));
+		SolidBrush bgrBrush = new SolidBrush(Color.FromArgb(245, 246, 248));       // changes by gender
+		SolidBrush cardBsh_dynamic = new SolidBrush(Color.FromArgb(255, 255, 255));
+		SolidBrush accentBrush = new SolidBrush(Color.FromArgb(0, 122, 255));
+		SolidBrush avatarBrush = new SolidBrush(Color.FromArgb(220, 230, 250));
+		Pen borderPen = new Pen(Color.FromArgb(230, 230, 230), 1);
 		SolidBrush curBrush = new SolidBrush(Color.FromArgb(192, 0, 192));
 		SolidBrush objBrush = new SolidBrush(Color.FromArgb(64, 0, 0));
-		SolidBrush blbBrush = new SolidBrush(Color.FromArgb(64, 64, 64));
+		SolidBrush blbBrush = new SolidBrush(Color.FromArgb(200, 220, 255));
         private Panel pnlCard;
         private Label lblHello;
         private PictureBox pictureBox1;
@@ -146,7 +157,7 @@ public class TuioDemo : Form , TuioListener
 
         // Circular menu control
         bool tuioMarker100Visible = false;
-        int selectedMenuItem = -1; // -1=none, 0=Egypt, 1=China, 2=Europe, 3=Favorites
+        int selectedMenuItem = -1; // -1=none, 0=Home, 1=Profile, 2=Artifacts, 3=Favorites, 4=Explore
         long tuioMarker100SessionId = -1;
 
 		public TuioDemo(int port) {
@@ -284,13 +295,9 @@ public class TuioDemo : Form , TuioListener
                 tuioMarker100Visible = false;
                 
                 // Navigate to the selected menu item
-                if (selectedMenuItem >= 0 && selectedMenuItem < 3)
+                if (selectedMenuItem >= 0 && selectedMenuItem <= 4)
                 {
-                    GoToCountryPage(selectedMenuItem); // 0=Egypt, 1=China, 2=Europe
-                }
-                else if (selectedMenuItem == 3)
-                {
-                    GoToFavoritesPage(); // Go to Favorites page using users.json data
+                    GoToPage(selectedMenuItem); 
                 }
                 
                 selectedMenuItem = -1;
@@ -384,9 +391,7 @@ public class TuioDemo : Form , TuioListener
     string msg = "";
 	string oldmsg = "";
     int login = 0;
-    int page = 0;    
-    int currentCountry = 0;  // 0=Egypt, 1=China, 2=Europe
-    string[] countries = { "Egypt", "China", "Europe" };    
+    int page = 0; // 0=Home, 1=Profile, 2=Artifacts, 3=Favorites, 4=Explore, 5=Detail
     string btStatus = "Waiting...";
 
     // load artifacts text/image data from artifacts.json
@@ -575,16 +580,6 @@ public class TuioDemo : Form , TuioListener
         return null;
     }
 
-    // get artifacts by country name
-    List<ArtifactRecord> GetArtifactsByCountry(string country)
-    {
-        List<ArtifactRecord> result = new List<ArtifactRecord>();
-        foreach (ArtifactRecord artifact in artifacts)
-        {
-            if (artifact.country == country) result.Add(artifact);
-        }
-        return result;
-    }
 
     // gui color is blue if gender is male pink if female
     private void SetThemeByGender(string gender)
@@ -596,7 +591,7 @@ public class TuioDemo : Form , TuioListener
             selectedTheme = femaleTheme;
         }
         
-        bgrBrush.Color = selectedTheme.backgroundDark;
+        bgrBrush.Color = selectedTheme.background;
         cardBsh.Color = selectedTheme.cardBackground;
         accentBrush.Color = selectedTheme.accentLight;
         avatarBrush.Color = selectedTheme.avatarBackground;
@@ -636,31 +631,18 @@ public class TuioDemo : Form , TuioListener
     // update menu selection based on TUIO marker rotation
     void UpdateMenuSelectionFromRotation(double angleRadians)
     {
-        // convert the radians to degrees formula 
         double angleDegrees = angleRadians * 180.0 / Math.PI;
         angleDegrees = angleDegrees % 360.0;
         if (angleDegrees < 0) angleDegrees += 360.0;
-
         
-        // countries degresse index
-        int[] menuPositions = { 0, 90, 180, 270 }; // China, Europe, Favorites, Egypt
-        double minDifference = 360.0;
-        int closestMenuItem = -1;
+        // 5 menu items -> 72 degrees each
+        double sectorSize = 360.0 / 5;
+        int closestMenuItem = (int)Math.Round(angleDegrees / sectorSize) % 5;
 
-        for (int i = 0; i < 4; i++)
-        {
-            
-            double diff = Math.Abs(angleDegrees - menuPositions[i]);
-            if (diff > 180) diff = 360 - diff;
-
-            if (diff < minDifference)
-            {
-                minDifference = diff;
-                closestMenuItem = i;
-            }
-        }
-
-        int[] itemMap = { 1, 2, 3, 0 }; 
+        // Map sector to menu item
+        // Sectors: 0(right), 1(bottom right), 2(bottom left), 3(top left), 4(top right)
+        // Let's map them to: 0=Home, 1=Profile, 2=Artifacts, 3=Favorites, 4=Explore
+        int[] itemMap = { 4, 3, 2, 1, 0 }; // Just an example mapping, we will draw them in order later.
         selectedMenuItem = itemMap[closestMenuItem];
         
         if (verbose)
@@ -693,41 +675,21 @@ public class TuioDemo : Form , TuioListener
         Invalidate();
     }
 
-    void GoToFavoritesPage()
+    void GoToPage(int pageIndex)
     {
         if (InvokeRequired)
         {
             BeginInvoke((MethodInvoker)delegate
             {
-                RefreshCurrentUserFromUsersFile();
-                favoritesPageIndex = 0;
-                page = 6;
+                if (pageIndex == 3 || pageIndex == 6) { RefreshCurrentUserFromUsersFile(); favoritesPageIndex = 0; }
+                page = pageIndex;
                 Invalidate();
             });
             return;
         }
 
-        RefreshCurrentUserFromUsersFile();
-        favoritesPageIndex = 0;
-        page = 6;
-        Invalidate();
-    }
-
-    void GoToCountryPage(int countryIndex)
-    {
-        if (InvokeRequired)
-        {
-            BeginInvoke((MethodInvoker)delegate
-            {
-                currentCountry = countryIndex;
-                page = 0;  // Set to non-5/non-6 page to trigger country render
-                Invalidate();
-            });
-            return;
-        }
-
-        currentCountry = countryIndex;
-        page = 0;  // Set to non-5/non-6 page to trigger country render
+        if (pageIndex == 3 || pageIndex == 6) { RefreshCurrentUserFromUsersFile(); favoritesPageIndex = 0; }
+        page = pageIndex;
         Invalidate();
     }
 
@@ -865,21 +827,13 @@ public class TuioDemo : Form , TuioListener
             {
                 if (msg.Trim() == "SwipeRight")
                 {
-                    if (page == 6)
-                        page = 0;
-                    else
-                    {
-                        currentCountry++;
-                        if (currentCountry > 2) currentCountry = 0;
-                    }
+                    if (page < 4) page++;
+                    else if (page == 4) page = 0;
                 }
                 if (msg.Trim() == "SwipeLeft")
                 {
-                    if (page != 6)
-                    {
-                        currentCountry--;
-                        if (currentCountry < 0) currentCountry = 2;
-                    }
+                    if (page > 0 && page <= 4) page--;
+                    else if (page == 0) page = 4;
                 }
                 if (msg.Trim() == "Circle" && page == 5 && selectedArtifactId >= 0)
                 {
@@ -899,226 +853,249 @@ public class TuioDemo : Form , TuioListener
 
     int room = 0;
     protected override void OnPaintBackground(PaintEventArgs pevent)
-		{
-			// Getting the graphics object
-			Graphics g = pevent.Graphics;
+    {
+        // Getting the graphics object
+        Graphics g = pevent.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.FillRectangle(bgrBrush, new Rectangle(0, 0, this.ClientSize.Width, this.ClientSize.Height));
-        //gui for logn fr:
+
+        // Top Header Line
+        g.DrawLine(borderPen, 0, 80, this.ClientSize.Width, 80);
+        
+        // Draw Application Title
+        Font titleFont = new Font("Segoe UI", 24f, FontStyle.Bold);
+        g.DrawString("Smart Egyptian Museum", titleFont, fntBrush, 30, 20);
+
+        // Draw User Status in Center
+        if (uname != "Visitor")
+        {
+            Font userFont = new Font("Segoe UI", 14f, FontStyle.Regular);
+            string userText = "Welcome " + uname;
+            SizeF userSize = g.MeasureString(userText, userFont);
+            g.DrawString(userText, userFont, fntBrush, (this.ClientSize.Width - userSize.Width) / 2, 15);
+            
+            string btText = "Bluetooth Connected";
+            SizeF btSize = g.MeasureString(btText, userFont);
+            g.DrawString(btText, new Font("Segoe UI", 12f, FontStyle.Bold), textLightBrush, (this.ClientSize.Width - btSize.Width) / 2, 45);
+        }
+
+        // Draw System Status on Right
+        int statusX = this.ClientSize.Width - 250;
+        Font statusFont = new Font("Segoe UI", 10f, FontStyle.Bold);
+        g.FillEllipse(new SolidBrush(Color.Green), statusX, 20, 12, 12);
+        g.DrawString("Camera: Online", statusFont, fntBrush, statusX + 20, 18);
+        
+        g.FillEllipse(new SolidBrush(Color.Green), statusX, 40, 12, 12);
+        g.DrawString("Marker Engine: Ready", statusFont, fntBrush, statusX + 20, 38);
+        
+        g.FillEllipse(new SolidBrush(Color.Green), statusX, 60, 12, 12);
+        g.DrawString("Gesture: Active", statusFont, fntBrush, statusX + 20, 58);
+
+        // Draw Page Content
+        int contentY = 100;
 
         if (uname == "Visitor" && page != 5)
         {
+            // Login screen
             int cw = 500, ch = 500;
             int cX = (this.ClientSize.Width - cw) / 2;
             int cY = (this.ClientSize.Height - ch) / 2;
            
-            g.FillRectangle(cardBsh, cX, cY, cw, ch);
+            g.FillRectangle(cardBsh_dynamic, cX, cY, cw, ch);
+            g.DrawRectangle(borderPen, cX, cY, cw, ch);
             g.FillEllipse(avatarBrush, cX + 190, cY + 60, 120, 120);
-            Font hellofont = new Font("Arial", 22f, FontStyle.Bold);
-            if (upic != null)
-                g.DrawImage(upic, cX + 190, cY + 60, 120, 120);
-            else
-                g.FillEllipse(avatarBrush, cX + 190, cY + 60, 120, 120);
+            Font hellofont = new Font("Segoe UI", 22f, FontStyle.Bold);
+            if (upic != null) g.DrawImage(upic, cX + 190, cY + 60, 120, 120);
+            else g.FillEllipse(avatarBrush, cX + 190, cY + 60, 120, 120);
+            
             g.DrawString("Hello, " + uname, hellofont, fntBrush, cX + 150, cY + 210);
-            Font otherfont = new Font("Arial", 13f);
-            SolidBrush silverboibush = new SolidBrush(Color.Silver);
-            g.DrawString("Bluetooth Verification", otherfont, silverboibush, cX + 140, cY + 270);
-            Font statusfont = new Font("Arial", 11f, FontStyle.Italic);
-            g.DrawString(btStatus, statusfont, accentBrush, cX + 120, cY + 330);
-           
-            //end of gui for login
+            g.DrawString("Bluetooth Verification", new Font("Segoe UI", 13f), textLightBrush, cX + 140, cY + 270);
+            g.DrawString(btStatus, new Font("Segoe UI", 11f, FontStyle.Italic), accentBrush, cX + 120, cY + 330);
         }
-        // After login: show country artifacts grid
-        else if (uname != "Visitor" && page != 5 && page != 6)
+        else if (page == 0) // Home
         {
-            // Get current country name and its artifacts
-            string selectedCountry = countries[currentCountry];
-            List<ArtifactRecord> countryArtifacts = GetArtifactsByCountry(selectedCountry);
+            g.DrawString("Home Page", new Font("Segoe UI", 28f, FontStyle.Bold), fntBrush, 50, contentY);
+            g.DrawString("Swipe Left/Right to explore the museum.", new Font("Segoe UI", 14f), textLightBrush, 50, contentY + 60);
+        }
+        else if (page == 1) // Profile
+        {
+            g.DrawString("User Profile", new Font("Segoe UI", 28f, FontStyle.Bold), fntBrush, 50, contentY);
+            if (currentUser != null) {
+                g.DrawString("Age: " + currentUser.age, new Font("Segoe UI", 14f), fntBrush, 50, contentY + 60);
+                g.DrawString("Gender: " + currentUser.gender, new Font("Segoe UI", 14f), fntBrush, 50, contentY + 90);
+            }
+        }
+        else if (page == 2) // Artifacts Grid
+        {
+            g.DrawString("All Artifacts", new Font("Segoe UI", 24f, FontStyle.Bold), fntBrush, 40, contentY);
+            
+            // Draw mock search/filter bar
+            g.FillRectangle(cardBsh_dynamic, 40, contentY + 40, 400, 40);
+            g.DrawRectangle(borderPen, 40, contentY + 40, 400, 40);
+            g.DrawString("Search by name, era...", new Font("Segoe UI", 10f), textLightBrush, 50, contentY + 50);
 
-            // Draw header with country name and swipe hints
-            g.DrawString("Hello, " + uname, new Font("Arial", 20f, FontStyle.Bold), fntBrush, 40, 30);
-            if (upic != null)
-                g.DrawImage(upic, 60, 90, 100, 100);
-            else
-                g.FillEllipse(avatarBrush, 60, 90, 100, 100);
-
-            g.DrawString(selectedCountry, new Font("Arial", 28f, FontStyle.Bold), fntBrush, this.ClientSize.Width / 2 - 60, 50);
-            g.DrawString("Swipe Left/Right to change country  |  Scan marker to view artifact", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), 40, this.ClientSize.Height - 40);
-
-            // Draw artifact grid (show up to 6 artifacts: 3 columns x 2 rows)
-            if (countryArtifacts.Count > 0)
+            if (artifacts.Count > 0)
             {
                 int cardW = 280;
-                int cardH = 280;
-                int gap = 30;
+                int cardH = 340;
+                int gap = 20;
                 int colsPerRow = 3;
-                int totalWidth = (cardW + gap) * colsPerRow;
-                int startX = (this.ClientSize.Width - totalWidth) / 2;
-                int startY = 130;
+                int startX = 40;
+                int startY = contentY + 100;
 
-                for (int i = 0; i < countryArtifacts.Count && i < 6; i++)
+                for (int i = 0; i < artifacts.Count && i < 6; i++)
                 {
-                    ArtifactRecord artifact = countryArtifacts[i];
+                    ArtifactRecord artifact = artifacts[i];
                     int col = i % colsPerRow;
                     int row = i / colsPerRow;
                     int x = startX + col * (cardW + gap);
-                    int y = startY + row * (cardH + gap + 50);
+                    int y = startY + row * (cardH + gap);
 
-                    // Draw card background
-                    g.FillRectangle(cardBsh, x, y, cardW, cardH);
+                    g.FillRectangle(cardBsh_dynamic, x, y, cardW, cardH);
+                    g.DrawRectangle(borderPen, x, y, cardW, cardH);
 
-                    // Draw artifact image
                     string imagePath = ResolveArtifactAssetPath(artifact.objPath);
                     if (File.Exists(imagePath))
                     {
                         try
                         {
                             Image artifactImg = Image.FromFile(imagePath);
-                            g.DrawImage(artifactImg, x + 10, y + 10, cardW - 20, cardH - 60);
+                            g.DrawImage(artifactImg, x, y, cardW, cardH - 120);
                             artifactImg.Dispose();
                         }
                         catch { }
                     }
 
-                    // Draw artifact name below image
-                    g.DrawString(artifact.name, new Font("Arial", 11f, FontStyle.Bold), fntBrush, x + 10, y + cardH - 45);
-
-                    // Draw TUIO marker ID
-                    g.DrawString("TUIO: " + artifact.tuioId, new Font("Arial", 10f), new SolidBrush(Color.Yellow), x + 10, y + cardH - 25);
+                    g.DrawString(artifact.name, new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, x + 10, y + cardH - 110);
+                    g.DrawString(artifact.era, new Font("Segoe UI", 10f), textLightBrush, x + 10, y + cardH - 85);
+                    g.DrawString("TUIO: " + artifact.tuioId, new Font("Segoe UI", 9f), accentBrush, x + 10, y + cardH - 65);
+                    
+                    // mock buttons
+                    g.DrawRectangle(borderPen, x + 10, y + cardH - 40, 80, 30);
+                    g.DrawString("View", new Font("Segoe UI", 9f), fntBrush, x + 30, y + cardH - 33);
                 }
             }
         }
-        // artifact details page (opened directly by marker scan)
-        else if (page == 5 && selectedArtifactId >= 0)
-        {
-            ArtifactRecord artifact = GetArtifactById(selectedArtifactId);
-            if (artifact != null)
-            {
-                int cardW = 1200;
-                int cardH = 640;
-                int cardX = (this.ClientSize.Width - cardW) / 2;
-                int cardY = (this.ClientSize.Height - cardH) / 2;
-                g.FillRectangle(cardBsh, cardX, cardY, cardW, cardH);
-
-                int imgX = cardX + 30;
-                int imgY = cardY + 70;
-                int imgW = 430;
-                int imgH = 500;
-                g.FillRectangle(new SolidBrush(Color.FromArgb(60, 60, 100)), imgX, imgY, imgW, imgH);
-
-                string imagePath = ResolveArtifactAssetPath(artifact.objPath);
-                if (File.Exists(imagePath))
-                {
-                    Image artifactImage = Image.FromFile(imagePath);
-                    g.DrawImage(artifactImage, imgX + 10, imgY + 10, imgW - 20, imgH - 20);
-                    artifactImage.Dispose();
-                }
-
-                int textX = imgX + imgW + 30;
-                int textY = imgY;
-                int textW = cardW - (textX - cardX) - 30;
-
-                g.DrawString(artifact.name, new Font("Arial", 24f, FontStyle.Bold), fntBrush, textX, textY);
-                g.DrawString("Marker ID (TUIO): " + artifact.tuioId, new Font("Arial", 12f, FontStyle.Italic), new SolidBrush(Color.LightGray), textX, textY + 44);
-
-                Font keyFont = new Font("Arial", 12f, FontStyle.Bold);
-                Font valFont = new Font("Arial", 12f);
-                int lineY = textY + 80;
-
-                g.DrawString("Birth Date:", keyFont, fntBrush, textX, lineY);
-                g.DrawString(artifact.birthDate, valFont, fntBrush, textX + 120, lineY);
-                lineY += 30;
-
-                g.DrawString("Era:", keyFont, fntBrush, textX, lineY);
-                g.DrawString(artifact.era, valFont, fntBrush, textX + 120, lineY);
-                lineY += 30;
-
-                g.DrawString("Origin:", keyFont, fntBrush, textX, lineY);
-                g.DrawString(artifact.origin, valFont, fntBrush, textX + 120, lineY);
-                lineY += 42;
-
-                g.DrawString("Description:", keyFont, fntBrush, textX, lineY);
-                RectangleF descRect = new RectangleF(textX, lineY + 26, textW, 280);
-                g.DrawString(artifact.description, valFont, fntBrush, descRect);
-
-                // Draw heart icon and favorite instructions
-                g.DrawString(artifactFavoriteHint, new Font("Arial", 12f, FontStyle.Bold), new SolidBrush(Color.FromArgb(255, 192, 203)), textX, cardY + cardH - 60);
-                g.DrawString("SwipeRight: Home  |  SwipeLeft: News", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), textX, cardY + cardH - 34);
-            }
-        }
-        // favorites page
-        else if (page == 6)
+        else if (page == 3 || page == 6) // Favorites List
         {
             RefreshCurrentUserFromUsersFile();
-
-            // Header layout similar to country screen
-            g.DrawString("Hello, " + uname, new Font("Arial", 20f, FontStyle.Bold), fntBrush, 40, 30);
-            if (upic != null)
-                g.DrawImage(upic, 60, 90, 100, 100);
-            else
-                g.FillEllipse(avatarBrush, 60, 90, 100, 100);
-
-            Font titleFont = new Font("Arial", 28f, FontStyle.Bold);
-            string title = "My Favorites";
-            SizeF titleSize = g.MeasureString(title, titleFont);
-            float titleX = (this.ClientSize.Width - titleSize.Width) / 2f;
-            g.DrawString(title, titleFont, fntBrush, titleX, 50);
+            g.DrawString("My Favourites", new Font("Segoe UI", 24f, FontStyle.Bold), fntBrush, 40, contentY);
 
             if (currentUser == null || currentUser.favorites == null || currentUser.favorites.Count == 0)
             {
-                g.DrawString("No favorites yet", new Font("Arial", 16f), fntBrush, 50, 150);
+                g.DrawString("No favorites yet", new Font("Segoe UI", 16f), textLightBrush, 50, contentY + 60);
             }
             else
             {
-                // Build list from users.json favorite IDs, then draw in centered grid.
                 List<ArtifactRecord> favoriteArtifacts = new List<ArtifactRecord>();
-                for (int i = 0; i < currentUser.favorites.Count; i++)
+                foreach (int id in currentUser.favorites)
                 {
-                    int artifactId = currentUser.favorites[i];
-                    ArtifactRecord artifact = GetArtifactById(artifactId);
+                    ArtifactRecord artifact = GetArtifactById(id);
                     if (artifact != null) favoriteArtifacts.Add(artifact);
                 }
 
-                int cardW = 280;
-                int cardH = 280;
-                int gap = 30;
-                int colsPerRow = 3;
-                int totalWidth = (cardW + gap) * colsPerRow;
-                int startX = (this.ClientSize.Width - totalWidth) / 2;
-                int startY = 130;
+                int startX = 40;
+                int startY = contentY + 60;
+                int itemH = 100;
+                int itemW = 800;
 
                 for (int i = 0; i < favoriteArtifacts.Count; i++)
                 {
                     ArtifactRecord artifact = favoriteArtifacts[i];
-                    int col = i % colsPerRow;
-                    int row = i / colsPerRow;
-                    int x = startX + col * (cardW + gap);
-                    int y = startY + row * (cardH + gap + 50);
+                    int y = startY + i * (itemH + 10);
 
-                    // Draw card background
-                    g.FillRectangle(cardBsh, x, y, cardW, cardH);
+                    g.FillRectangle(cardBsh_dynamic, startX, y, itemW, itemH);
+                    g.DrawRectangle(borderPen, startX, y, itemW, itemH);
 
-                    // Draw artifact image
                     string imagePath = ResolveArtifactAssetPath(artifact.objPath);
                     if (File.Exists(imagePath))
                     {
                         try
                         {
                             Image artifactImage = Image.FromFile(imagePath);
-                            g.DrawImage(artifactImage, x + 10, y + 10, cardW - 20, cardH - 60);
+                            g.DrawImage(artifactImage, startX + 10, y + 10, 80, 80);
                             artifactImage.Dispose();
                         }
                         catch { }
                     }
 
-                    // Draw artifact name and TUIO ID like country cards
-                    g.DrawString(artifact.name, new Font("Arial", 11f, FontStyle.Bold), fntBrush, x + 10, y + cardH - 45);
-                    g.DrawString("TUIO: " + artifact.tuioId, new Font("Arial", 10f), new SolidBrush(Color.Yellow), x + 10, y + cardH - 25);
+                    g.DrawString(artifact.name, new Font("Segoe UI", 14f, FontStyle.Bold), fntBrush, startX + 110, y + 20);
+                    g.DrawString(artifact.era, new Font("Segoe UI", 11f), textLightBrush, startX + 110, y + 50);
                 }
             }
-
-            // Navigation hints
-            g.DrawString("SwipeRight: Home  |  SwipeLeft: News", new Font("Arial", 11f, FontStyle.Italic), new SolidBrush(Color.Silver), 50, this.ClientSize.Height - 34);
         }
+        else if (page == 4) // Explore
+        {
+            g.DrawString("Explore the Museum Map", new Font("Segoe UI", 28f, FontStyle.Bold), fntBrush, 50, contentY);
+            g.DrawString("Interactive map coming soon...", new Font("Segoe UI", 14f), textLightBrush, 50, contentY + 60);
+        }
+        else if (page == 5 && selectedArtifactId >= 0) // Details
+        {
+            ArtifactRecord artifact = GetArtifactById(selectedArtifactId);
+            if (artifact != null)
+            {
+                int leftW = 600;
+                int rightW = 400;
+                int startX = 40;
+                
+                // Left 3D Viewer Panel
+                g.FillRectangle(cardBsh_dynamic, startX, contentY, leftW, 500);
+                g.DrawRectangle(borderPen, startX, contentY, leftW, 500);
+                
+                string imagePath = ResolveArtifactAssetPath(artifact.objPath);
+                if (File.Exists(imagePath))
+                {
+                    Image artifactImage = Image.FromFile(imagePath);
+                    g.DrawImage(artifactImage, startX + 20, contentY + 20, leftW - 40, 460);
+                    artifactImage.Dispose();
+                }
+                
+                // Right Metadata Panel
+                int rightX = startX + leftW + 30;
+                g.DrawString("Artifact Metadata", new Font("Segoe UI", 16f, FontStyle.Bold), fntBrush, rightX, contentY);
+                
+                Font keyFont = new Font("Segoe UI", 12f, FontStyle.Bold);
+                Font valFont = new Font("Segoe UI", 12f);
+                int lineY = contentY + 40;
+
+                g.DrawString("Name:", keyFont, fntBrush, rightX, lineY);
+                g.DrawString(artifact.name, valFont, fntBrush, rightX + 120, lineY);
+                lineY += 30;
+
+                g.DrawString("Era:", keyFont, fntBrush, rightX, lineY);
+                g.DrawString(artifact.era, valFont, fntBrush, rightX + 120, lineY);
+                lineY += 30;
+
+                g.DrawString("Origin:", keyFont, fntBrush, rightX, lineY);
+                g.DrawString(artifact.origin, valFont, fntBrush, rightX + 120, lineY);
+                lineY += 40;
+
+                g.DrawString("Description:", keyFont, fntBrush, rightX, lineY);
+                RectangleF descRect = new RectangleF(rightX, lineY + 26, rightW, 280);
+                g.DrawString(artifact.description, valFont, textLightBrush, descRect);
+
+                g.DrawString(artifactFavoriteHint, new Font("Segoe UI", 12f, FontStyle.Bold), accentBrush, rightX, contentY + 450);
+            }
+        }
+        
+        // Draw Right Live Feed Placeholder
+        if (uname != "Visitor" && page != 1)
+        {
+            int liveX = this.ClientSize.Width - 340;
+            int liveY = contentY;
+            g.DrawString("Live Feed", new Font("Segoe UI", 16f, FontStyle.Bold), fntBrush, liveX, liveY);
+            g.FillRectangle(new SolidBrush(Color.FromArgb(230, 230, 230)), liveX, liveY + 40, 300, 250);
+            g.DrawRectangle(borderPen, liveX, liveY + 40, 300, 250);
+            g.DrawString("Camera View Placeholder", new Font("Segoe UI", 12f), textLightBrush, liveX + 50, liveY + 150);
+            
+            // Gesture panel
+            g.DrawString("Gesture Recognition", new Font("Segoe UI", 16f, FontStyle.Bold), fntBrush, liveX, liveY + 310);
+            g.DrawString("O Circle = Select\n<- Swipe Left = Prev\n-> Swipe Right = Next", new Font("Segoe UI", 12f), textLightBrush, liveX, liveY + 350);
+            g.DrawString("MediaPipe: Tracking", new Font("Segoe UI", 10f, FontStyle.Bold), new SolidBrush(Color.Green), liveX, liveY + 430);
+        }
+
+        // Draw Navigation hint
+        g.DrawString("Swipe Left/Right to Navigate  |  Make a CIRCLE to select", new Font("Segoe UI", 11f, FontStyle.Italic), textLightBrush, 40, this.ClientSize.Height - 40);
         // draw the cursor path
         if (cursorList.Count > 0) {
  			 lock(cursorList) {
@@ -1261,24 +1238,29 @@ public class TuioDemo : Form , TuioListener
 
     }
 	 
-    // Draw circular menu with 4 items (Egypt, China, Europe, Favorites)
+    // Draw circular menu with 5 items
     private void DrawCircularMenu(Graphics g, int screenWidth, int screenHeight)
     {
         if (!tuioMarker100Visible) return;
 
-        // Menu configuration
-        int centerX = screenWidth - this.ClientSize.Width / 2;
-        int centerY = screenHeight - this.ClientSize.Height / 2;
-        int radius = 90; 
-        int itemSize = 80;
-        int imageSize = 60;
+        // Menu configuration (bottom center)
+        int centerX = screenWidth / 2;
+        int centerY = screenHeight - 120;
+        int radius = 110; 
+        int itemSize = 70;
 
-        string[] menuLabels = { "Egypt", "China", "Europe", "Favorites" };
-        string[] menuImages = { "Countries/egypt.png", "Countries/china.png", "Countries/europe.png", "heart.png" };
+        string[] menuLabels = { "Home", "Profile", "Artifacts", "Favourites", "Explore" };
         
-        double[] angles = { -90, 0, 90, 180 };
+        // Arrange in an arc over the top of the center (from left to right)
+        // 180 = Left, 216, 252, 288, 324, 360 = Right. Or spread them evenly in a circle.
+        // Let's do a semi-circle: 180, 225, 270, 315, 360
+        double[] angles = { 180, 225, 270, 315, 360 };
 
-        for (int i = 0; i < 4; i++)
+        // Draw center marker indicator
+        g.FillEllipse(new SolidBrush(Color.FromArgb(40, 40, 60)), centerX - 50, centerY - 50, 100, 100);
+        g.DrawEllipse(new Pen(Color.Gold, 2), centerX - 50, centerY - 50, 100, 100);
+
+        for (int i = 0; i < 5; i++)
         {
             double radians = angles[i] * Math.PI / 180.0;
             int itemX = centerX + (int)(radius * Math.Cos(radians)) - itemSize / 2;
@@ -1286,42 +1268,28 @@ public class TuioDemo : Form , TuioListener
 
             bool isSelected = (i == selectedMenuItem);
             
+            // Connecting line
+            g.DrawLine(new Pen(Color.FromArgb(200, 200, 200), 2), centerX, centerY, itemX + itemSize/2, itemY + itemSize/2);
+
             Color bgColor = isSelected 
-                ? Color.FromArgb(255, 200, 0) // Yellow highlight for selected
-                : Color.FromArgb(60, 60, 100); // Default dark blue
+                ? accentBrush.Color // Accent highlight for selected
+                : Color.White; // Default white
+            
             SolidBrush itemBrush = new SolidBrush(bgColor);
             g.FillEllipse(itemBrush, itemX, itemY, itemSize, itemSize);
 
-            // Draw border for selected item
-            if (isSelected)
-            {
-                Pen highlightPen = new Pen(Color.White, 3);
-                g.DrawEllipse(highlightPen, itemX, itemY, itemSize, itemSize);
-            }
+            // Draw border 
+            Pen highlightPen = isSelected ? new Pen(Color.White, 3) : borderPen;
+            g.DrawEllipse(highlightPen, itemX, itemY, itemSize, itemSize);
 
-            // Load and draw the image
-            string imagePath = menuImages[i];
-            string absolutePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, imagePath);
-            
-            if (File.Exists(absolutePath))
-            {
-                try
-                {
-                    Image menuImage = Image.FromFile(absolutePath);
-                    int imgX = itemX + (itemSize - imageSize) / 2;
-                    int imgY = itemY + (itemSize - imageSize) / 2;
-                    g.DrawImage(menuImage, imgX, imgY, imageSize, imageSize);
-                    menuImage.Dispose();
-                }
-                catch { }
-            }
-
-            Font labelFont = new Font("Arial", 10f, FontStyle.Bold);
-            SolidBrush labelBrush = isSelected ? new SolidBrush(Color.Yellow) : new SolidBrush(Color.White);
+            Font labelFont = new Font("Arial", 9f, isSelected ? FontStyle.Bold : FontStyle.Regular);
+            SolidBrush labelBrush = isSelected ? new SolidBrush(Color.White) : textLightBrush;
             StringFormat format = new StringFormat();
             format.Alignment = StringAlignment.Center;
+            
+            // Draw label
             g.DrawString(menuLabels[i], labelFont, labelBrush, 
-                         itemX + itemSize / 2, itemY + itemSize + 5, format);
+                         itemX + itemSize / 2, itemY + itemSize / 2 - 6, format);
         }
     }
 

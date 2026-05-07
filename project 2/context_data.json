@@ -41,6 +41,19 @@
         "favorites": 1.0
       },
       "updated_at": 1778174038
+    },
+    "Abdelmonem Hatem": {
+      "profile": "objects/obj4.png",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {
+        "happy": 3.6,
+        "focused": 1.0
+      },
+      "updated_at": 1778179659
     }
   },
   "events": [
@@ -1264,10 +1277,234 @@
           "reason": "Highest score=7.2"
         }
       }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778178993,
+      "type": "face_login",
+      "payload": {
+        "user": "Abdelmonem Hatem",
+        "source": "bluetooth_match"
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778178995,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Abdelmonem Hatem",
+        "expression": {
+          "emotion": "happy",
+          "raw_emotion": "happy",
+          "mouth_width_ratio": 0.374,
+          "mouth_curve_ratio": 0.027,
+          "mouth_open_ratio": 0.001,
+          "mouth_open": 0.097,
+          "mouth_curve": 3.363,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.9,
+          "window_size": 1
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 1,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=0.9"
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778179101,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Abdelmonem Hatem",
+        "expression": {
+          "emotion": "focused",
+          "raw_emotion": "focused",
+          "mouth_width_ratio": 0.312,
+          "mouth_curve_ratio": -0.007,
+          "mouth_open_ratio": 0.005,
+          "mouth_open": 0.658,
+          "mouth_curve": -0.901,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.5,
+          "window_size": 5,
+          "emotion_stability": 0.6,
+          "gaze_stability": 1.0
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 2,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=0.9"
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778179105,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Abdelmonem Hatem",
+        "expression": {
+          "emotion": "happy",
+          "raw_emotion": "happy",
+          "mouth_width_ratio": 0.369,
+          "mouth_curve_ratio": 0.022,
+          "mouth_open_ratio": 0.002,
+          "mouth_open": 0.226,
+          "mouth_curve": 3.139,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.9,
+          "window_size": 5,
+          "emotion_stability": 0.6,
+          "gaze_stability": 1.0
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 3,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=1.8"
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778179532,
+      "type": "face_login",
+      "payload": {
+        "user": "Abdelmonem Hatem",
+        "source": "bluetooth_match"
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778179536,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Abdelmonem Hatem",
+        "expression": {
+          "emotion": "happy",
+          "raw_emotion": "happy",
+          "mouth_width_ratio": 0.347,
+          "mouth_curve_ratio": 0.04,
+          "mouth_open_ratio": 0.008,
+          "mouth_open": 0.972,
+          "mouth_curve": 5.123,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.9,
+          "window_size": 1
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 1,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=2.7"
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778179654,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Abdelmonem Hatem",
+        "expression": {
+          "emotion": "focused",
+          "raw_emotion": "focused",
+          "mouth_width_ratio": 0.343,
+          "mouth_curve_ratio": -0.002,
+          "mouth_open_ratio": 0.001,
+          "mouth_open": 0.258,
+          "mouth_curve": -0.462,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.5,
+          "window_size": 5,
+          "emotion_stability": 0.6,
+          "gaze_stability": 1.0
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 2,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=2.7"
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778179659,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Abdelmonem Hatem",
+        "expression": {
+          "emotion": "happy",
+          "raw_emotion": "happy",
+          "mouth_width_ratio": 0.321,
+          "mouth_curve_ratio": 0.001,
+          "mouth_open_ratio": 0.004,
+          "mouth_open": 0.455,
+          "mouth_curve": 0.136,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.9,
+          "window_size": 5,
+          "emotion_stability": 0.6,
+          "gaze_stability": 1.0
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 3,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=3.6"
+        }
+      }
     }
   ],
   "meta": {
     "version": 1,
-    "updated_at": 1778174091
+    "updated_at": 1778179659
   }
 }
