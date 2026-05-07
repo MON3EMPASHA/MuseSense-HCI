@@ -31,6 +31,8 @@ using System.IO;
 using System.Web.Script.Serialization;
 using System.Runtime.Serialization.Json;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Media;
+using System.Diagnostics;
 
 public class TuioDemo : Form , TuioListener
 	{
@@ -76,6 +78,8 @@ public class TuioDemo : Form , TuioListener
             avatarBackground = Color.FromArgb(250, 230, 240),
             border = Color.FromArgb(230, 230, 230)
         };
+
+        private ColorTheme currentTheme = new ColorTheme();
         
         private TuioClient client;
 		private Dictionary<long,TuioObject> objectList;
@@ -160,6 +164,14 @@ public class TuioDemo : Form , TuioListener
         int selectedMenuItem = -1; // -1=none, 0=Home, 1=Profile, 2=Artifacts, 3=Favorites, 4=Explore
         long tuioMarker100SessionId = -1;
         TuioClient tuioClient;
+        
+        SoundPlayer currentAudioPlayer = null;
+        int playingArtifactId = -1;
+        bool audioMuted = false;
+        
+        PictureBox artifact3DPictureBox;
+        
+        System.Timers.Timer menuSelectTimer;
 
 		public TuioDemo(int port) {
         System.Timers.Timer slideTimer = new System.Timers.Timer(3000);
@@ -169,6 +181,23 @@ public class TuioDemo : Form , TuioListener
         System.Timers.Timer uiTimer = new System.Timers.Timer(500);
         uiTimer.Elapsed += (s, e) => { try { Invoke((Action)Invalidate); } catch { } };
         uiTimer.Start();
+        
+        menuSelectTimer = new System.Timers.Timer(3000);
+        menuSelectTimer.AutoReset = false;
+        menuSelectTimer.Elapsed += (s, e) => {
+            if (tuioMarker100Visible)
+            {
+                if (selectedMenuItem >= 0 && selectedMenuItem <= 4)
+                {
+                    page = selectedMenuItem;
+                    selectedArtifactId = -1; // reset artifact selection
+                }
+                selectedMenuItem = -1;
+                tuioMarker100Visible = false;
+                tuioMarker100SessionId = -1;
+                try { Invoke((Action)Invalidate); } catch { }
+            }
+        };
 
         verbose = false;
 			fullscreen = false;
@@ -181,6 +210,11 @@ public class TuioDemo : Form , TuioListener
 			this.Text = "TuioDemo";
         this.WindowState = FormWindowState.Maximized;
         this.FormBorderStyle = FormBorderStyle.None;
+
+        artifact3DPictureBox = new PictureBox();
+        artifact3DPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+        artifact3DPictureBox.Visible = false;
+        this.Controls.Add(artifact3DPictureBox);
 
         this.Closing+=new CancelEventHandler(Form_Closing);
 			this.KeyDown+=new KeyEventHandler(Form_KeyDown);
@@ -260,10 +294,29 @@ public class TuioDemo : Form , TuioListener
             // Handle circular menu marker (TUIO ID 100)
             if (o.SymbolID == 100)
             {
+                if (menuSelectTimer != null) menuSelectTimer.Stop();
                 tuioMarker100Visible = true;
                 tuioMarker100SessionId = o.SessionID;
                 UpdateMenuSelectionFromRotation(o.Angle);
                 Invalidate();
+            }
+            else if (o.SymbolID == 101)
+            {
+                audioMuted = !audioMuted;
+                if (audioMuted)
+                {
+                    StopAudio();
+                    Console.WriteLine("Audio Muted by Marker 101");
+                }
+                else
+                {
+                    Console.WriteLine("Audio Unmuted by Marker 101");
+                    if (page == 5 && playingArtifactId != -1)
+                    {
+                        ArtifactRecord artifact = GetArtifactById(playingArtifactId);
+                        if (artifact != null) PlayAudio(artifact.audioPath);
+                    }
+                }
             }
             else
             {
@@ -278,6 +331,7 @@ public class TuioDemo : Form , TuioListener
             // Handle circular menu marker (TUIO ID 100)
             if (o.SymbolID == 100)
             {
+                if (menuSelectTimer != null) menuSelectTimer.Stop();
                 tuioMarker100Visible = true;
                 tuioMarker100SessionId = o.SessionID;
                 UpdateMenuSelectionFromRotation(o.Angle);
@@ -292,23 +346,16 @@ public class TuioDemo : Form , TuioListener
 		public void removeTuioObject(TuioObject o) {
 			lock(objectList) {
 				objectList.Remove(o.SessionID);
-			}
-			if (verbose) Console.WriteLine("del obj "+o.SymbolID+" ("+o.SessionID+")");
+			} if (verbose) Console.WriteLine("del obj "+o.SymbolID+" ("+o.SessionID+")");
             
-            // Handle circular menu marker removal (TUIO ID 100)
             if (o.SymbolID == 100 && o.SessionID == tuioMarker100SessionId)
             {
-                tuioMarker100Visible = false;
-                
-                // Navigate to the selected menu item
-                if (selectedMenuItem >= 0 && selectedMenuItem <= 4)
+                // When marker is lifted, keep the menu visible but start the 3-second selection timer
+                if (menuSelectTimer != null) 
                 {
-                    GoToPage(selectedMenuItem); 
+                    menuSelectTimer.Stop();
+                    menuSelectTimer.Start();
                 }
-                
-                selectedMenuItem = -1;
-                tuioMarker100SessionId = -1;
-                Invalidate();
             }
 		}
 
@@ -592,20 +639,110 @@ public class TuioDemo : Form , TuioListener
     // gui color is blue if gender is male pink if female
     private void SetThemeByGender(string gender)
     {
-        ColorTheme selectedTheme = maleTheme;
-        
+        currentTheme = maleTheme;
+
         if (!string.IsNullOrEmpty(gender) && gender.ToLower() == "female")
         {
-            selectedTheme = femaleTheme;
+            currentTheme = femaleTheme;
         }
-        
-        bgrBrush.Color = selectedTheme.background;
-        cardBsh.Color = selectedTheme.cardBackground;
-        accentBrush.Color = selectedTheme.accentLight;
-        avatarBrush.Color = selectedTheme.avatarBackground;
-        blbBrush.Color = selectedTheme.accentBubble;
-        
+
+        bgrBrush.Color = currentTheme.background;
+        cardBsh.Color = currentTheme.cardBackground;
+        accentBrush.Color = currentTheme.accentLight;
+        avatarBrush.Color = currentTheme.avatarBackground;
+        blbBrush.Color = currentTheme.accentBubble;
+
         Console.WriteLine($"Theme applied: {gender ?? "male"} ({(gender?.ToLower() == "female" ? "PINK" : "BLUE")})");
+    }
+
+    private string ResolveAudioPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        string absPath = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\", path));
+        if (File.Exists(absPath)) return absPath;
+        return null;
+    }
+
+    private string Resolve3DModelPath(string artifactName)
+    {
+        string modelsDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "3d models"));
+        if (!Directory.Exists(modelsDir)) return null;
+        
+        try
+        {
+            if (artifactName.Contains("Tutankhamun")) 
+            {
+                var files = Directory.GetFiles(Path.Combine(modelsDir, "Mask of Tutankhamun"), "*.obj", SearchOption.AllDirectories);
+                if (files.Length > 0) return files[0];
+            }
+            else if (artifactName.Contains("Ramses"))
+            {
+                var files = Directory.GetFiles(Path.Combine(modelsDir, "Ramses II statue at the Grand Egyptian Museum"), "*.obj", SearchOption.AllDirectories);
+                if (files.Length > 0) return files[0];
+            }
+            else if (artifactName.Contains("Senwosret"))
+            {
+                var files = Directory.GetFiles(Path.Combine(modelsDir, "King Senwosret III (1836-1818 BC)"), "*.obj", SearchOption.AllDirectories);
+                if (files.Length > 0) return files[0];
+            }
+            else if (artifactName.Contains("Nefertiti"))
+            {
+                var files = Directory.GetFiles(Path.Combine(modelsDir, "bust-of-nefertiti"), "*.obj", SearchOption.AllDirectories);
+                if (files.Length > 0) return files[0];
+            }
+            else if (artifactName.Contains("Horus"))
+            {
+                var files = Directory.GetFiles(Path.Combine(modelsDir, "Horus"), "*.obj", SearchOption.AllDirectories);
+                if (files.Length > 0) return files[0];
+            }
+            else if (artifactName.Contains("Scarab"))
+            {
+                string file = Path.Combine(modelsDir, "uploads_files_5401330_beetle.obj");
+                if (File.Exists(file)) return file;
+            }
+            else if (artifactName.Contains("Sphinx"))
+            {
+                string file = Path.Combine(modelsDir, "uploads_files_4313395_Abolhole-PBR.obj");
+                if (File.Exists(file)) return file;
+            }
+        } catch { }
+        return null;
+    }
+
+    private string Resolve3DModelGifPath(string artifactName)
+    {
+        string objPath = Resolve3DModelPath(artifactName);
+        if (objPath != null)
+        {
+            string gifPath = Path.ChangeExtension(objPath, ".gif");
+            if (File.Exists(gifPath)) return gifPath;
+        }
+        return null;
+    }
+
+    private void PlayAudio(string path)
+    {
+        if (audioMuted) return;
+        string fullPath = ResolveAudioPath(path);
+        if (fullPath != null)
+        {
+            try {
+                if (currentAudioPlayer != null) currentAudioPlayer.Stop();
+                currentAudioPlayer = new SoundPlayer(fullPath);
+                currentAudioPlayer.Play();
+            } catch { }
+        }
+    }
+
+    private void StopAudio()
+    {
+        try {
+            if (currentAudioPlayer != null) {
+                currentAudioPlayer.Stop();
+                currentAudioPlayer.Dispose();
+                currentAudioPlayer = null;
+            }
+        } catch { }
     }
 
     // find the real image path from objPath field in json
@@ -643,15 +780,25 @@ public class TuioDemo : Form , TuioListener
         angleDegrees = angleDegrees % 360.0;
         if (angleDegrees < 0) angleDegrees += 360.0;
         
-        // 5 menu items -> 72 degrees each
-        double sectorSize = 360.0 / 5;
-        int closestMenuItem = (int)Math.Round(angleDegrees / sectorSize) % 5;
-
-        // Map sector to menu item
-        // Sectors: 0(right), 1(bottom right), 2(bottom left), 3(top left), 4(top right)
-        // Let's map them to: 0=Home, 1=Profile, 2=Artifacts, 3=Favorites, 4=Explore
-        int[] itemMap = { 4, 3, 2, 1, 0 }; // Just an example mapping, we will draw them in order later.
-        selectedMenuItem = itemMap[closestMenuItem];
+        // Define visual angles for the 5 menu items (0 to 360 format)
+        // 0=Home(270), 1=Profile(198), 2=Artifacts(342), 3=Favourites(126), 4=Explore(54)
+        double[] targetAngles = { 270.0, 198.0, 342.0, 126.0, 54.0 };
+        
+        int closestItem = 0;
+        double minDiff = 360.0;
+        
+        for (int i = 0; i < 5; i++)
+        {
+            double diff = Math.Abs(angleDegrees - targetAngles[i]);
+            if (diff > 180.0) diff = 360.0 - diff;
+            if (diff < minDiff)
+            {
+                minDiff = diff;
+                closestItem = i;
+            }
+        }
+        
+        selectedMenuItem = closestItem;
         
         if (verbose)
             Console.WriteLine("Menu selection updated: angle=" + angleDegrees.ToString("F1") + "° -> item=" + selectedMenuItem);
@@ -873,6 +1020,18 @@ public class TuioDemo : Form , TuioListener
                         Console.WriteLine("Artifact added to favourites");
                     }
                 }
+                if ((msg.Trim() == "ZoomIn" || msg.Trim() == "ZoomOut") && page == 5 && selectedArtifactId >= 0)
+                {
+                    ArtifactRecord artifact = GetArtifactById(selectedArtifactId);
+                    if (artifact != null)
+                    {
+                        string objPath = Resolve3DModelPath(artifact.name);
+                        if (objPath != null)
+                        {
+                            try { Process.Start(objPath); } catch { }
+                        }
+                    }
+                }
                 Invoke((Action)(Invalidate));
             }
 
@@ -884,13 +1043,27 @@ public class TuioDemo : Form , TuioListener
     int room = 0;
     protected override void OnPaintBackground(PaintEventArgs pevent)
     {
+        // Stop audio if navigating away from Details page
+        if (page != 5)
+        {
+            if (playingArtifactId != -1)
+            {
+                StopAudio();
+                playingArtifactId = -1;
+            }
+            if (artifact3DPictureBox.Visible)
+            {
+                artifact3DPictureBox.Visible = false;
+            }
+        }
+
         // Getting the graphics object
         Graphics g = pevent.Graphics;
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.FillRectangle(bgrBrush, new Rectangle(0, 0, this.ClientSize.Width, this.ClientSize.Height));
 
         // Top Header Line
-        g.DrawLine(borderPen, 0, 80, this.ClientSize.Width, 80);
+        g.DrawLine(borderPen, 0, 105, this.ClientSize.Width, 105);
         
         // Draw Application Title
         Font titleFont = new Font("Segoe UI", 24f, FontStyle.Bold);
@@ -923,8 +1096,11 @@ public class TuioDemo : Form , TuioListener
         g.FillEllipse(new SolidBrush(gestureActive ? Color.Green : Color.Gray), statusX, 60, 12, 12);
         g.DrawString("Gesture: " + (gestureActive ? "Active" : "Waiting"), statusFont, fntBrush, statusX + 20, 58);
 
+        g.FillEllipse(new SolidBrush(audioMuted ? Color.Red : Color.Green), statusX, 80, 12, 12);
+        g.DrawString("Audio: " + (audioMuted ? "Muted 🔇" : "Playing 🔊"), statusFont, fntBrush, statusX + 20, 78);
+
         // Draw Page Content
-        int contentY = 100;
+        int contentY = 120;
 
         if (uname == "Visitor" && page != 5)
         {
@@ -1102,6 +1278,13 @@ public class TuioDemo : Form , TuioListener
             ArtifactRecord artifact = GetArtifactById(selectedArtifactId);
             if (artifact != null)
             {
+                if (playingArtifactId != selectedArtifactId)
+                {
+                    StopAudio();
+                    playingArtifactId = selectedArtifactId;
+                    PlayAudio(artifact.audioPath);
+                }
+
                 int leftW = 600;
                 int rightW = 400;
                 int startX = 40;
@@ -1110,12 +1293,28 @@ public class TuioDemo : Form , TuioListener
                 g.FillRectangle(cardBsh_dynamic, startX, contentY, leftW, 500);
                 g.DrawRectangle(borderPen, startX, contentY, leftW, 500);
                 
-                string imagePath = ResolveArtifactAssetPath(artifact.objPath);
-                if (File.Exists(imagePath))
+                string gifPath = Resolve3DModelGifPath(artifact.name);
+                if (gifPath != null)
                 {
-                    Image artifactImage = Image.FromFile(imagePath);
-                    g.DrawImage(artifactImage, startX + 20, contentY + 20, leftW - 40, 460);
-                    artifactImage.Dispose();
+                    if (artifact3DPictureBox.ImageLocation != gifPath)
+                    {
+                        artifact3DPictureBox.ImageLocation = gifPath;
+                        artifact3DPictureBox.LoadAsync();
+                    }
+                    artifact3DPictureBox.BackColor = currentTheme.cardBackground;
+                    artifact3DPictureBox.Bounds = new Rectangle(startX + 20, contentY + 20, leftW - 40, 460);
+                    if (!artifact3DPictureBox.Visible) artifact3DPictureBox.Visible = true;
+                }
+                else
+                {
+                    if (artifact3DPictureBox.Visible) artifact3DPictureBox.Visible = false;
+                    string imagePath = ResolveArtifactAssetPath(artifact.objPath);
+                    if (File.Exists(imagePath))
+                    {
+                        Image artifactImage = Image.FromFile(imagePath);
+                        g.DrawImage(artifactImage, startX + 20, contentY + 20, leftW - 40, 460);
+                        artifactImage.Dispose();
+                    }
                 }
                 
                 // Right Metadata Panel
@@ -1137,9 +1336,20 @@ public class TuioDemo : Form , TuioListener
                 g.DrawString("Origin:", keyFont, fntBrush, rightX, lineY);
                 g.DrawString(artifact.origin, valFont, fntBrush, rightX + 120, lineY);
                 lineY += 40;
+                
+                bool hasAudio = ResolveAudioPath(artifact.audioPath) != null;
+                bool has3D = Resolve3DModelPath(artifact.name) != null;
+                
+                g.DrawString("3D Model:", keyFont, fntBrush, rightX, lineY);
+                g.DrawString(has3D ? "Available (Zoom to View)" : "Coming soon", valFont, has3D ? accentBrush : textLightBrush, rightX + 120, lineY);
+                lineY += 30;
+                
+                g.DrawString("Audio:", keyFont, fntBrush, rightX, lineY);
+                g.DrawString(hasAudio ? "Playing now" : "Coming soon", valFont, hasAudio ? accentBrush : textLightBrush, rightX + 120, lineY);
+                lineY += 40;
 
                 g.DrawString("Description:", keyFont, fntBrush, rightX, lineY);
-                RectangleF descRect = new RectangleF(rightX, lineY + 26, rightW, 280);
+                RectangleF descRect = new RectangleF(rightX, lineY + 26, rightW, 200);
                 g.DrawString(artifact.description, valFont, textLightBrush, descRect);
 
                 g.DrawString(artifactFavoriteHint, new Font("Segoe UI", 12f, FontStyle.Bold), accentBrush, rightX, contentY + 450);
@@ -1150,80 +1360,12 @@ public class TuioDemo : Form , TuioListener
 
         // Draw Navigation hint
         g.DrawString("Swipe Left/Right to Navigate  |  Make a CIRCLE to select", new Font("Segoe UI", 11f, FontStyle.Italic), textLightBrush, 40, this.ClientSize.Height - 40);
-        // draw the cursor path
-        if (cursorList.Count > 0) {
- 			 lock(cursorList) {
-			 foreach (TuioCursor tcur in cursorList.Values) {
-					List<TuioPoint> path = tcur.Path;
-					TuioPoint current_point = path[0];
+        
+        // Removed TUIO debug drawing for objects, cursors, and blobs to keep UI clean.
 
-					for (int i = 0; i < path.Count; i++) {
-						TuioPoint next_point = path[i];
-						g.DrawLine(curPen, current_point.getScreenX(width), current_point.getScreenY(height), next_point.getScreenX(width), next_point.getScreenY(height));
-						current_point = next_point;
-					}
-					g.FillEllipse(curBrush, current_point.getScreenX(width) - height / 100, current_point.getScreenY(height) - height / 100, height / 50, height / 50);
-					g.DrawString(tcur.CursorID + "", font, fntBrush, new PointF(tcur.getScreenX(width) - 10, tcur.getScreenY(height) - 10));
-				}
-			}
-		 }
-
-			// draw the objects
-            if (objectList.Count > 0 && page != 5) {
- 				lock(objectList) {
-					foreach (TuioObject tobj in objectList.Values) {
-                    int size = height / 10;
-                    int ox = tobj.getScreenX(width);
-                    int oy = tobj.getScreenY(height);
-
-                    g.TranslateTransform(ox, oy);
-                    g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
-                    g.TranslateTransform(-ox, -oy);
-
-                    g.FillRectangle(objBrush, new Rectangle(ox - size / 2, oy - size / 2, size, size));
-
-
-
-
-
-
-
-                    g.TranslateTransform(ox, oy);
-						g.RotateTransform(-1 * (float)(tobj.Angle / Math.PI * 180.0f));
-						g.TranslateTransform(-ox, -oy);
-
-						g.DrawString(tobj.SymbolID + "", font, fntBrush, new PointF(ox - 10, oy - 10));
-					}
-				}
-			}
-
-			// draw the blobs
-			if (blobList.Count > 0) {
-				lock(blobList) {
-					foreach (TuioBlob tblb in blobList.Values) {
-						int bx = tblb.getScreenX(width);
-						int by = tblb.getScreenY(height);
-						float bw = tblb.Width*width;
-						float bh = tblb.Height*height;
-
-						g.TranslateTransform(bx, by);
-						g.RotateTransform((float)(tblb.Angle / Math.PI * 180.0f));
-						g.TranslateTransform(-bx, -by);
-
-						g.FillEllipse(blbBrush, bx - bw / 2, by - bh / 2, bw, bh);
-
-						g.TranslateTransform(bx, by);
-						g.RotateTransform(-1 * (float)(tblb.Angle / Math.PI * 180.0f));
-						g.TranslateTransform(-bx, -by);
-						
-						g.DrawString(tblb.BlobID + "", font, fntBrush, new PointF(bx, by));
-					}
-				}
-			}
-
-            // Draw the circular menu
-            DrawCircularMenu(g, this.ClientSize.Width, this.ClientSize.Height);
-		}
+        // Draw the circular menu
+        DrawCircularMenu(g, this.ClientSize.Width, this.ClientSize.Height);
+    }
 
     private void InitializeComponent()
     {
@@ -1297,53 +1439,62 @@ public class TuioDemo : Form , TuioListener
     {
         if (!tuioMarker100Visible) return;
 
-        // Menu configuration (bottom center)
-        int centerX = screenWidth / 2;
-        int centerY = screenHeight - 120;
-        int radius = 110; 
-        int itemSize = 70;
+        // Menu configuration
+        int radius = 90; 
+        int itemSize = 65;
+        int centerSize = 90;
+        int centerX = screenWidth - radius - itemSize - 30; // Bottom Right
+        int centerY = screenHeight - radius - itemSize - 30; 
 
         string[] menuLabels = { "Home", "Profile", "Artifacts", "Favourites", "Explore" };
+        string[] menuIcons = { "🏠", "👤", "🏛", "❤", "🧭" };
         
-        // Arrange in an arc over the top of the center (from left to right)
-        // 180 = Left, 216, 252, 288, 324, 360 = Right. Or spread them evenly in a circle.
-        // Let's do a semi-circle: 180, 225, 270, 315, 360
-        double[] angles = { 180, 225, 270, 315, 360 };
+        // Pentagon layout matching the Update logic:
+        // 0=Home (-90), 1=Profile (-162), 2=Artifacts (-18), 3=Favourites (126), 4=Explore (54)
+        double[] finalAngles = { -90, -162, -18, 126, 54 };
 
-        // Draw center marker indicator
-        g.FillEllipse(new SolidBrush(Color.FromArgb(40, 40, 60)), centerX - 50, centerY - 50, 100, 100);
-        g.DrawEllipse(new Pen(Color.Gold, 2), centerX - 50, centerY - 50, 100, 100);
+        // Draw center circle
+        SolidBrush centerBrush = new SolidBrush(Color.FromArgb(28, 44, 70)); // Dark blue
+        g.FillEllipse(centerBrush, centerX - centerSize/2, centerY - centerSize/2, centerSize, centerSize);
+        
+        // Try drawing pharaoh mask in center
+        try {
+            string maskPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "artifacts", "Tutankhamun.png");
+            if (File.Exists(maskPath)) {
+                Image maskImg = Image.FromFile(maskPath);
+                g.DrawImage(maskImg, centerX - 25, centerY - 30, 50, 60);
+                maskImg.Dispose();
+            }
+        } catch { }
 
+        Font iconFont = new Font("Segoe UI Emoji", 14f);
+        Font labelFont = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+        StringFormat format = new StringFormat();
+        format.Alignment = StringAlignment.Center;
+        
         for (int i = 0; i < 5; i++)
         {
-            double radians = angles[i] * Math.PI / 180.0;
+            double radians = finalAngles[i] * Math.PI / 180.0;
             int itemX = centerX + (int)(radius * Math.Cos(radians)) - itemSize / 2;
             int itemY = centerY + (int)(radius * Math.Sin(radians)) - itemSize / 2;
 
             bool isSelected = (i == selectedMenuItem);
             
-            // Connecting line
-            g.DrawLine(new Pen(Color.FromArgb(200, 200, 200), 2), centerX, centerY, itemX + itemSize/2, itemY + itemSize/2);
-
-            Color bgColor = isSelected 
-                ? accentBrush.Color // Accent highlight for selected
-                : Color.White; // Default white
-            
+            Color bgColor = isSelected ? Color.FromArgb(232, 240, 254) : Color.White;
             SolidBrush itemBrush = new SolidBrush(bgColor);
             g.FillEllipse(itemBrush, itemX, itemY, itemSize, itemSize);
 
             // Draw border 
-            Pen highlightPen = isSelected ? new Pen(Color.White, 3) : borderPen;
+            Pen highlightPen = isSelected ? new Pen(Color.FromArgb(66, 133, 244), 3) : new Pen(Color.FromArgb(180, 190, 210), 2);
             g.DrawEllipse(highlightPen, itemX, itemY, itemSize, itemSize);
 
-            Font labelFont = new Font("Arial", 9f, isSelected ? FontStyle.Bold : FontStyle.Regular);
-            SolidBrush labelBrush = isSelected ? new SolidBrush(Color.White) : textLightBrush;
-            StringFormat format = new StringFormat();
-            format.Alignment = StringAlignment.Center;
+            SolidBrush textBrush = new SolidBrush(Color.FromArgb(28, 44, 70)); // Dark blue text
+            
+            // Draw Icon
+            g.DrawString(menuIcons[i], iconFont, textBrush, itemX + itemSize / 2, itemY + 10, format);
             
             // Draw label
-            g.DrawString(menuLabels[i], labelFont, labelBrush, 
-                         itemX + itemSize / 2, itemY + itemSize / 2 - 6, format);
+            g.DrawString(menuLabels[i], labelFont, textBrush, itemX + itemSize / 2, itemY + itemSize / 2 + 10, format);
         }
     }
 
