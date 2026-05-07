@@ -43,6 +43,6 @@
     "gender": "male",
     "mac": ["5C:56:A4:71:B0:DA", "43:D5:F9:A1:62:7A"],
     "Profile": "objects/obj5.png",
-    "favorites": []
+    "favorites": [1, 2, 4]
   }
 ]
