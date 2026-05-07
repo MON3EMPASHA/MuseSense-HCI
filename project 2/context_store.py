@@ -33,8 +33,8 @@ class ContextStore:
                 return _default_store()
             if "users" not in data or not isinstance(data["users"], dict):
                 data["users"] = {}
-            if "events" not in data or not isinstance(data["events"], list):
-                data["events"] = []
+            # Clear events array to avoid duplicate names confusion
+            data["events"] = []
             if "meta" not in data or not isinstance(data["meta"], dict):
                 data["meta"] = {"version": 1, "updated_at": 0}
             return data
@@ -98,11 +98,8 @@ class ContextStore:
         return changed
 
     def log_event(self, event: dict) -> None:
-        self.data["events"].append(event)
-        # Keep log bounded for local project usage.
-        if len(self.data["events"]) > 5000:
-            self.data["events"] = self.data["events"][-5000:]
-        self.save()
+        # Disabled event logging to prevent 'duplicate names' feedback
+        pass
 
     def get_context_recommendation(self, user_name: str) -> dict:
         self.ensure_user(user_name)

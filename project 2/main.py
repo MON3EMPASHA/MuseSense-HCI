@@ -345,8 +345,16 @@ while cap.isOpened():
             )
             user_login = 1
         elif address is not None:
-            print("Sending MAC:", address)
-            send_socket_message(conn, address)
+            # Send a valid JSON for unmatched MAC so C# TryHandleLoginPayload doesn't fail
+            fallback_payload = {
+                "type": "user_login",
+                "name": "Visitor",
+                "mac": normalize_mac(address),
+                "error": "No match for this device in the system"
+            }
+            message_payload = json.dumps(fallback_payload)
+            print("Sending MAC as Visitor:", message_payload)
+            send_socket_message(conn, message_payload)
             context_store.log_event(
                 build_event(
                     "guest_session",
@@ -356,6 +364,17 @@ while cap.isOpened():
                     },
                 )
             )
+            user_login = 1
+        else:
+            # Send a valid JSON when no devices are found so C# doesn't hang forever
+            no_device_payload = {
+                "type": "user_login",
+                "name": "Visitor",
+                "error": "No Bluetooth devices found"
+            }
+            message_payload = json.dumps(no_device_payload)
+            print("Sending No Devices Found payload:", message_payload)
+            send_socket_message(conn, message_payload)
             user_login = 1
     try:
 

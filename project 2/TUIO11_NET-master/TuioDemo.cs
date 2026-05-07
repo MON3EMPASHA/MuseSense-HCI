@@ -159,11 +159,17 @@ public class TuioDemo : Form , TuioListener
         bool tuioMarker100Visible = false;
         int selectedMenuItem = -1; // -1=none, 0=Home, 1=Profile, 2=Artifacts, 3=Favorites, 4=Explore
         long tuioMarker100SessionId = -1;
+        TuioClient tuioClient;
 
 		public TuioDemo(int port) {
         System.Timers.Timer slideTimer = new System.Timers.Timer(3000);
         slideTimer.Elapsed += (s, e) => { slideIndex = (slideIndex + 1) % 5; ; Invoke((Action)Invalidate); };
         slideTimer.Start();
+        
+        System.Timers.Timer uiTimer = new System.Timers.Timer(500);
+        uiTimer.Elapsed += (s, e) => { try { Invoke((Action)Invalidate); } catch { } };
+        uiTimer.Start();
+
         verbose = false;
 			fullscreen = false;
 			width = window_width;
@@ -186,11 +192,11 @@ public class TuioDemo : Form , TuioListener
 			objectList = new Dictionary<long,TuioObject>(128);
 			cursorList = new Dictionary<long,TuioCursor>(128);
 			blobList   = new Dictionary<long,TuioBlob>(128);
-			
-			client = new TuioClient(port);
-			client.addTuioListener(this);
 
-			client.connect();
+			tuioClient = new TuioClient(port);
+			tuioClient.addTuioListener(this);
+
+			tuioClient.connect();
 			Thread socketThread = new Thread(stream);
 			socketThread.IsBackground = true;
 			socketThread.Start();//this right here is to recive stuff from our python code: hand gestures and facial recognition
@@ -392,7 +398,9 @@ public class TuioDemo : Form , TuioListener
 	string oldmsg = "";
     int login = 0;
     int page = 0; // 0=Home, 1=Profile, 2=Artifacts, 3=Favorites, 4=Explore, 5=Detail
-    string btStatus = "Waiting...";
+    string btStatus = "Connecting to Vision Engine...";
+    string cameraStatusStr = "Offline";
+    DateTime lastGestureTime = DateTime.MinValue;
 
     // load artifacts text/image data from artifacts.json
     void LoadArtifacts()
@@ -702,6 +710,7 @@ public class TuioDemo : Form , TuioListener
         public string gender { get; set; }
         public string mac { get; set; }
         public string Profile { get; set; }
+        public string error { get; set; }
     }
 
     private bool TryHandleLoginPayload(string rawMessage)
@@ -743,7 +752,15 @@ public class TuioDemo : Form , TuioListener
             }
 
             login = 1;
-            btStatus = "Matched";
+            
+            if (!string.IsNullOrEmpty(payload.error))
+            {
+                btStatus = payload.error;
+            }
+            else
+            {
+                btStatus = "Matched";
+            }
             
             // change theme by gender
             if (currentUser != null)
@@ -771,18 +788,31 @@ public class TuioDemo : Form , TuioListener
         if (!c.connectToSocket("localhost", 5000))    
         {
             Console.WriteLine("Could not connect.");
+            btStatus = "Vision Engine Offline";
+            Invoke((Action)(Invalidate));
             return;
         }
+        
+        cameraStatusStr = "Online";
+        btStatus = "Waiting for Bluetooth Device...";
+        Invoke((Action)(Invalidate));
         
         while (true)
         {
             msg = c.recieveMessage();
+            if (msg == null) // Connection dropped
+            {
+                cameraStatusStr = "Offline";
+                btStatus = "Vision Engine Offline";
+                Invoke((Action)(Invalidate));
+                break;
+            }
             if (string.IsNullOrWhiteSpace(msg))
             {
-                btStatus = "Waiting...";
-                Invoke((Action)(Invalidate));
                 continue;
             }
+            
+            lastGestureTime = DateTime.Now;
             //MessageBox.Show(msg);
             if (msg == "q")
             {
@@ -882,14 +912,16 @@ public class TuioDemo : Form , TuioListener
         // Draw System Status on Right
         int statusX = this.ClientSize.Width - 250;
         Font statusFont = new Font("Segoe UI", 10f, FontStyle.Bold);
-        g.FillEllipse(new SolidBrush(Color.Green), statusX, 20, 12, 12);
-        g.DrawString("Camera: Online", statusFont, fntBrush, statusX + 20, 18);
+        g.FillEllipse(new SolidBrush(cameraStatusStr == "Online" ? Color.Green : Color.Red), statusX, 20, 12, 12);
+        g.DrawString("Camera: " + cameraStatusStr, statusFont, fntBrush, statusX + 20, 18);
         
-        g.FillEllipse(new SolidBrush(Color.Green), statusX, 40, 12, 12);
-        g.DrawString("Marker Engine: Ready", statusFont, fntBrush, statusX + 20, 38);
+        bool markerReady = (tuioClient != null && tuioClient.isConnected());
+        g.FillEllipse(new SolidBrush(markerReady ? Color.Green : Color.Orange), statusX, 40, 12, 12);
+        g.DrawString("Marker Engine: " + (markerReady ? "Ready" : "Waiting"), statusFont, fntBrush, statusX + 20, 38);
         
-        g.FillEllipse(new SolidBrush(Color.Green), statusX, 60, 12, 12);
-        g.DrawString("Gesture: Active", statusFont, fntBrush, statusX + 20, 58);
+        bool gestureActive = (DateTime.Now - lastGestureTime).TotalSeconds < 2.0;
+        g.FillEllipse(new SolidBrush(gestureActive ? Color.Green : Color.Gray), statusX, 60, 12, 12);
+        g.DrawString("Gesture: " + (gestureActive ? "Active" : "Waiting"), statusFont, fntBrush, statusX + 20, 58);
 
         // Draw Page Content
         int contentY = 100;
@@ -916,6 +948,42 @@ public class TuioDemo : Form , TuioListener
         {
             g.DrawString("Home Page", new Font("Segoe UI", 28f, FontStyle.Bold), fntBrush, 50, contentY);
             g.DrawString("Swipe Left/Right to explore the museum.", new Font("Segoe UI", 14f), textLightBrush, 50, contentY + 60);
+
+            if (artifacts != null && artifacts.Count > 0)
+            {
+                g.DrawString("Featured Artifacts", new Font("Segoe UI", 18f, FontStyle.Bold), fntBrush, 50, contentY + 120);
+                
+                int cardW = 280;
+                int cardH = 340;
+                int gap = 20;
+                int startX = 50;
+                int startY = contentY + 160;
+
+                for (int i = 0; i < artifacts.Count && i < 3; i++)
+                {
+                    ArtifactRecord artifact = artifacts[i];
+                    int x = startX + i * (cardW + gap);
+                    int y = startY;
+
+                    g.FillRectangle(cardBsh_dynamic, x, y, cardW, cardH);
+                    g.DrawRectangle(borderPen, x, y, cardW, cardH);
+
+                    string imagePath = ResolveArtifactAssetPath(artifact.objPath);
+                    if (File.Exists(imagePath))
+                    {
+                        try
+                        {
+                            Image artifactImg = Image.FromFile(imagePath);
+                            g.DrawImage(artifactImg, x, y, cardW, cardH - 120);
+                            artifactImg.Dispose();
+                        }
+                        catch { }
+                    }
+
+                    g.DrawString(artifact.name, new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, x + 10, y + cardH - 110);
+                    g.DrawString(artifact.era, new Font("Segoe UI", 10f), textLightBrush, x + 10, y + cardH - 85);
+                }
+            }
         }
         else if (page == 1) // Profile
         {
@@ -1078,21 +1146,7 @@ public class TuioDemo : Form , TuioListener
             }
         }
         
-        // Draw Right Live Feed Placeholder
-        if (uname != "Visitor" && page != 1)
-        {
-            int liveX = this.ClientSize.Width - 340;
-            int liveY = contentY;
-            g.DrawString("Live Feed", new Font("Segoe UI", 16f, FontStyle.Bold), fntBrush, liveX, liveY);
-            g.FillRectangle(new SolidBrush(Color.FromArgb(230, 230, 230)), liveX, liveY + 40, 300, 250);
-            g.DrawRectangle(borderPen, liveX, liveY + 40, 300, 250);
-            g.DrawString("Camera View Placeholder", new Font("Segoe UI", 12f), textLightBrush, liveX + 50, liveY + 150);
-            
-            // Gesture panel
-            g.DrawString("Gesture Recognition", new Font("Segoe UI", 16f, FontStyle.Bold), fntBrush, liveX, liveY + 310);
-            g.DrawString("O Circle = Select\n<- Swipe Left = Prev\n-> Swipe Right = Next", new Font("Segoe UI", 12f), textLightBrush, liveX, liveY + 350);
-            g.DrawString("MediaPipe: Tracking", new Font("Segoe UI", 10f, FontStyle.Bold), new SolidBrush(Color.Green), liveX, liveY + 430);
-        }
+
 
         // Draw Navigation hint
         g.DrawString("Swipe Left/Right to Navigate  |  Make a CIRCLE to select", new Font("Segoe UI", 11f, FontStyle.Italic), textLightBrush, 40, this.ClientSize.Height - 40);
