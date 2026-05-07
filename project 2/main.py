@@ -25,6 +25,7 @@ import mediapipe as mp
 import numpy as np
 import socket
 import pickle
+import socket
 import json
 import bluetooth
 import time
@@ -419,7 +420,10 @@ while cap.isOpened():
         )
         draw_gesture_feedback(annotated_image)
         expression_tracker.draw_overlay(annotated_image, latest_expression)
-        cv2.imshow("Output", annotated_image)
+        display_image = cv2.resize(
+            annotated_image, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR
+        )
+        cv2.imshow("Output", display_image)
         # logic to send msg to unity
         if msg != "" and msg != old_msg:  # only send when there's actually something
             action_result = apply_gesture_action(context_store, active_user_name, msg)

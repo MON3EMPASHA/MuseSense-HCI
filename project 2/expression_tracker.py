@@ -72,9 +72,9 @@ class ExpressionTracker:
 
         if mouth_open_ratio >= 0.075:
             emotion = "surprised"
-        elif mouth_width_ratio >= 0.288 and mouth_curve_ratio >= -0.01:
+        elif mouth_width_ratio >= 0.35 and mouth_curve_ratio >= 0.015:
             emotion = "happy"
-        elif mouth_width_ratio <= 0.276 and mouth_open_ratio <= 0.05:
+        elif mouth_width_ratio < 0.345 and mouth_open_ratio <= 0.06:
             emotion = "neutral"
         else:
             emotion = "focused"
@@ -118,6 +118,7 @@ class ExpressionTracker:
             "mouth_open_ratio": round(mouth_open_ratio, 3),
             "mouth_open": round(mouth_open, 3),
             "mouth_curve": round(mouth_curve, 3),
+            "gaze_delta": round(gaze_delta, 3),
             "gaze_zone": gaze_zone,
             "raw_gaze_zone": gaze_zone,
             "valence": valence,
@@ -144,6 +145,7 @@ class ExpressionTracker:
             f"{analysis.get('raw_gaze_zone', analysis['gaze_zone'])}"
             f" | WidthR: {analysis.get('mouth_width_ratio', 0)}"
             f" | OpenR: {analysis.get('mouth_open_ratio', 0)}"
+            f" | GazeD: {analysis.get('gaze_delta', 0)}"
         )
         cv2.putText(
             frame,

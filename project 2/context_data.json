@@ -35,13 +35,13 @@
         "good_to_see": []
       },
       "category_scores": {
-        "happy": 9.5,
-        "focused": 5.0,
+        "happy": 11.3,
+        "focused": 7.5,
         "neutral": 0.7,
         "favorites": 1.0,
-        "surprised": 0.7
+        "surprised": 2.1
       },
-      "updated_at": 1778180109
+      "updated_at": 1778187465
     },
     "Abdelmonem Hatem": {
       "profile": "objects/obj4.png",
@@ -82,6 +82,6 @@
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778185448
+    "updated_at": 1778187465
   }
 }
