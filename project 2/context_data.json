@@ -35,12 +35,13 @@
         "good_to_see": []
       },
       "category_scores": {
-        "happy": 7.2,
-        "focused": 4.0,
+        "happy": 9.5,
+        "focused": 5.0,
         "neutral": 0.7,
-        "favorites": 1.0
+        "favorites": 1.0,
+        "surprised": 0.7
       },
-      "updated_at": 1778174038
+      "updated_at": 1778180109
     },
     "Abdelmonem Hatem": {
       "profile": "objects/obj4.png",
@@ -1956,10 +1957,251 @@
           "reason": "Highest score=9.0"
         }
       }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778180074,
+      "type": "face_login",
+      "payload": {
+        "user": "Mohamed Taha",
+        "source": "bluetooth_match"
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778180076,
+      "type": "object_tracking",
+      "payload": {
+        "user": "Mohamed Taha",
+        "object": {
+          "label": "person",
+          "confidence": 0.848,
+          "bbox": [
+            93,
+            104,
+            274,
+            278
+          ],
+          "center": [
+            183,
+            191
+          ]
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778180079,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Mohamed Taha",
+        "expression": {
+          "emotion": "happy",
+          "raw_emotion": "focused",
+          "mouth_width_ratio": 0.388,
+          "mouth_curve_ratio": -0.016,
+          "mouth_open_ratio": 0.0,
+          "mouth_open": 0.0,
+          "mouth_curve": -2.194,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.5,
+          "window_size": 3,
+          "emotion_stability": 0.667,
+          "gaze_stability": 1.0
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 1,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=7.7"
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778180083,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Mohamed Taha",
+        "expression": {
+          "emotion": "focused",
+          "raw_emotion": "focused",
+          "mouth_width_ratio": 0.387,
+          "mouth_curve_ratio": -0.014,
+          "mouth_open_ratio": 0.0,
+          "mouth_open": 0.066,
+          "mouth_curve": -1.905,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.5,
+          "window_size": 5,
+          "emotion_stability": 0.6,
+          "gaze_stability": 1.0
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 2,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=7.7"
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778180090,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Mohamed Taha",
+        "expression": {
+          "emotion": "happy",
+          "raw_emotion": "happy",
+          "mouth_width_ratio": 0.379,
+          "mouth_curve_ratio": -0.01,
+          "mouth_open_ratio": 0.016,
+          "mouth_open": 2.136,
+          "mouth_curve": -1.271,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.9,
+          "window_size": 5,
+          "emotion_stability": 0.6,
+          "gaze_stability": 1.0
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 3,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=8.6"
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778180099,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Mohamed Taha",
+        "expression": {
+          "emotion": "focused",
+          "raw_emotion": "focused",
+          "mouth_width_ratio": 0.389,
+          "mouth_curve_ratio": -0.015,
+          "mouth_open_ratio": 0.0,
+          "mouth_open": 0.0,
+          "mouth_curve": -1.878,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.5,
+          "window_size": 5,
+          "emotion_stability": 0.6,
+          "gaze_stability": 1.0
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 4,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=8.6"
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778180103,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Mohamed Taha",
+        "expression": {
+          "emotion": "surprised",
+          "raw_emotion": "surprised",
+          "mouth_width_ratio": 0.497,
+          "mouth_curve_ratio": 0.037,
+          "mouth_open_ratio": 0.08,
+          "mouth_open": 10.339,
+          "mouth_curve": 4.832,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.7,
+          "window_size": 5,
+          "emotion_stability": 0.6,
+          "gaze_stability": 1.0
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 5,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=8.6"
+        }
+      }
+    },
+    {
+      "version": "v1",
+      "timestamp": 1778180109,
+      "type": "expression_gaze_update",
+      "payload": {
+        "user": "Mohamed Taha",
+        "expression": {
+          "emotion": "happy",
+          "raw_emotion": "happy",
+          "mouth_width_ratio": 0.399,
+          "mouth_curve_ratio": 0.024,
+          "mouth_open_ratio": 0.048,
+          "mouth_open": 6.339,
+          "mouth_curve": 3.137,
+          "gaze_zone": "center",
+          "raw_gaze_zone": "center",
+          "valence": 0.9,
+          "window_size": 5,
+          "emotion_stability": 0.6,
+          "gaze_stability": 1.0
+        },
+        "gaze": {
+          "zone": "center",
+          "hit_counts": {
+            "left": 0,
+            "center": 6,
+            "right": 0
+          }
+        },
+        "recommended": {
+          "category": "happy",
+          "reason": "Highest score=9.5"
+        }
+      }
     }
   ],
   "meta": {
     "version": 1,
-    "updated_at": 1778179741
+    "updated_at": 1778180109
   }
 }

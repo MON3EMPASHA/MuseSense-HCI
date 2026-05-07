@@ -17,7 +17,6 @@ class ExpressionTracker:
         )
         self.mp_face_mesh = mp.solutions.face_mesh
         self._recent_results: deque[dict] = deque(maxlen=5)
-        self._last_output: dict | None = None
 
     def _smooth_analysis(self) -> dict | None:
         if len(self._recent_results) < 3:
@@ -43,7 +42,7 @@ class ExpressionTracker:
     def analyze(self, frame_rgb) -> dict | None:
         results = self.face_mesh.process(frame_rgb)
         if not results.multi_face_landmarks:
-            return self._last_output
+            return None
 
         face_landmarks = results.multi_face_landmarks[0].landmark
         image_height, image_width, _ = frame_rgb.shape
@@ -71,11 +70,11 @@ class ExpressionTracker:
         mouth_open_ratio = mouth_open / face_height
         mouth_curve_ratio = mouth_curve / face_height
 
-        if mouth_open_ratio >= 0.065:
+        if mouth_open_ratio >= 0.075:
             emotion = "surprised"
-        elif mouth_width_ratio >= 0.295 and mouth_curve_ratio >= 0.0:
+        elif mouth_width_ratio >= 0.288 and mouth_curve_ratio >= -0.01:
             emotion = "happy"
-        elif mouth_width_ratio <= 0.285 and mouth_open_ratio <= 0.045:
+        elif mouth_width_ratio <= 0.276 and mouth_open_ratio <= 0.05:
             emotion = "neutral"
         else:
             emotion = "focused"
@@ -128,10 +127,8 @@ class ExpressionTracker:
         self._recent_results.append(raw_analysis)
         smoothed_analysis = self._smooth_analysis()
         if smoothed_analysis is not None:
-            self._last_output = smoothed_analysis
             return smoothed_analysis
 
-        self._last_output = raw_analysis
         return raw_analysis
 
     def draw_overlay(self, frame, analysis: dict | None) -> None:
@@ -147,39 +144,6 @@ class ExpressionTracker:
             f"{analysis.get('raw_gaze_zone', analysis['gaze_zone'])}"
             f" | WidthR: {analysis.get('mouth_width_ratio', 0)}"
             f" | OpenR: {analysis.get('mouth_open_ratio', 0)}"
-        )
-        cv2.putText(
-            frame,
-            text,
-            (20, 95),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.65,
-            (255, 200, 0),
-            2,
-        )
-        cv2.putText(
-            frame,
-            detail_text,
-            (20, 125),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.55,
-            (255, 230, 120),
-            2,
-        )
-
-    def draw_overlay(self, frame, analysis: dict | None) -> None:
-        if analysis is None:
-            return
-
-        text = (
-            f"Emotion: {analysis['emotion']} | Gaze: {analysis['gaze_zone']}"
-            f" | Window: {analysis.get('window_size', 1)}"
-        )
-        detail_text = (
-            f"Raw: {analysis.get('raw_emotion', analysis['emotion'])} / "
-            f"{analysis.get('raw_gaze_zone', analysis['gaze_zone'])}"
-            f" | Smile: {analysis['smile_ratio']} | Curve: {analysis.get('mouth_curve', 0)}"
-            f" | Signal: {analysis.get('smile_signal', analysis['smile_ratio'])}"
         )
         cv2.putText(
             frame,
