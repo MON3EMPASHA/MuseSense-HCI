@@ -37,35 +37,50 @@
     "Mohamed Ibrahim": {
       "profile": "objects/obj5.png",
       "lists": {
-        "favorites": [],
+        "favorites": [
+          {
+            "item_id": "Mask of Tutankhamun",
+            "category": "Egypt",
+            "source": "gesture",
+            "gesture": "Circle",
+            "timestamp": 1778278224
+          },
+          {
+            "item_id": "current_artifact",
+            "category": "general",
+            "source": "gesture",
+            "gesture": "Circle",
+            "timestamp": 1778278251
+          }
+        ],
         "explore_later": [],
         "good_to_see": []
       },
       "category_scores": {
-        "person": 5.9,
-        "Egypt": 5.3,
-        "cell phone": -0.3
+        "Egypt": 22.3,
+        "favorites": 2.0
       },
       "artifact_scores": {
-        "person": 5.9,
-        "King Senwosret III": 3.2,
-        "Mask of Tutankhamun": 2.1,
-        "cell phone": -0.3
+        "King Senwosret III": 8.6,
+        "Mask of Tutankhamun": 11.9,
+        "Bust of Nefertiti": 1.2,
+        "Ramses II Statue": 0.2,
+        "Sacred Scarab Beetle": 0.4
       },
       "context": {
-        "current_artifact": "person",
-        "current_category": "person",
-        "last_object": "person",
-        "last_gesture": "",
-        "last_emotion": "happy",
-        "last_gaze": "center"
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "King Senwosret III",
+        "last_gesture": "Circle",
+        "last_emotion": "sad",
+        "last_gaze": "right"
       },
-      "updated_at": 1778276047
+      "updated_at": 1778278755
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778263651
+    "updated_at": 1778278755
   }
 }

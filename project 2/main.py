@@ -54,7 +54,8 @@ PHONE_BT_NAME = "Phone"
 USERS_JSON_PATH = Path("TUIO11_NET-master") / "bin" / "Debug" / "users.json"
 ARTIFACTS_JSON_PATH = Path("TUIO11_NET-master") / "artifacts.json"
 TUIO_PRIORITY_SECONDS = 3.0
-SKIP_CONTEXT_LABELS = {"person"}
+CSHARP_CONTEXT_PRIORITY_SECONDS = 10.0
+SKIP_CONTEXT_LABELS = {"person", "cell phone", "mobile phone"}
 
 
 # user / bluetooth helpers moved to users.py
@@ -333,6 +334,35 @@ if login_message is not None:
 elif address is not None:
     active_user_name = f"guest_{normalize_mac(address).replace(':', '')}"
     context_store.ensure_user(active_user_name)
+else:
+    context_store.ensure_user(active_user_name)
+
+# Clean up any previously persisted invalid artifacts (e.g. YOLO "person").
+try:
+    snapshot = context_store.get_context_snapshot(active_user_name)
+    current_artifact = str(snapshot.get("current_artifact") or "").strip().lower()
+    if current_artifact in SKIP_CONTEXT_LABELS:
+        context_store.update_context(active_user_name, current_artifact="", current_category="")
+
+    user_data = context_store.data.get("users", {}).get(active_user_name, {})
+    if isinstance(user_data, dict):
+        changed = False
+        category_scores = user_data.get("category_scores")
+        if isinstance(category_scores, dict):
+            for bad in list(category_scores.keys()):
+                if str(bad).strip().lower() in SKIP_CONTEXT_LABELS:
+                    category_scores.pop(bad, None)
+                    changed = True
+        artifact_scores = user_data.get("artifact_scores")
+        if isinstance(artifact_scores, dict):
+            for bad in list(artifact_scores.keys()):
+                if str(bad).strip().lower() in SKIP_CONTEXT_LABELS:
+                    artifact_scores.pop(bad, None)
+                    changed = True
+        if changed:
+            context_store.save()
+except Exception:
+    pass
 
 gaze_session = GazeSessionLogger(active_user_name)
 reports_dir = Path("reports")
@@ -345,6 +375,7 @@ flag_bluetooth = 0
 socket_buffer = ""
 last_tuio_marker_id = None
 tuio_last_seen = 0.0
+csharp_context_last_seen = 0.0
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret or frame is None:
@@ -427,6 +458,7 @@ while cap.isOpened():
                             or ""
                         ).strip()
                         if artifact_name:
+                            csharp_context_last_seen = time.monotonic()
                             context_store.update_context(
                                 active_user_name,
                                 current_artifact=artifact_name,
@@ -437,7 +469,16 @@ while cap.isOpened():
                     elif msg_type in {"context_update"}:
                         artifact_name = str(msg_obj.get("current_artifact", "")).strip()
                         category = str(msg_obj.get("current_category", "")).strip()
-                        if artifact_name or category:
+                        if bool(msg_obj.get("clear")):
+                            csharp_context_last_seen = time.monotonic()
+                            context_store.update_context(
+                                active_user_name,
+                                current_artifact="",
+                                current_category="",
+                            )
+                            print("[CONTEXT] Cleared focus (C# home)")
+                        elif artifact_name or category:
+                            csharp_context_last_seen = time.monotonic()
                             context_store.update_context(
                                 active_user_name,
                                 current_artifact=artifact_name or None,
@@ -548,12 +589,10 @@ while cap.isOpened():
                     context_snapshot = context_store.get_context_snapshot(active_user_name)
                     focused_artifact = (
                         context_snapshot.get("current_artifact")
-                        or context_snapshot.get("last_object")
                         or ""
                     )
                     focused_category = (
                         context_snapshot.get("current_category")
-                        or context_snapshot.get("last_object")
                         or ""
                     )
 
@@ -602,10 +641,19 @@ while cap.isOpened():
             if detection is not None:
                 if time.monotonic() - tuio_last_seen <= TUIO_PRIORITY_SECONDS:
                     detection = None
+                elif time.monotonic() - csharp_context_last_seen <= CSHARP_CONTEXT_PRIORITY_SECONDS:
+                    detection = None
             if detection is not None:
                 x1, y1, x2, y2 = detection["bbox"]
                 label = str(detection["label"])
                 confidence = detection["confidence"]
+
+                # Camera often detects the visitor as "person", which is not a museum artifact.
+                # Never overwrite the currently focused artifact with "person".
+                if label.strip().lower() == "person":
+                    detection = None
+
+            if detection is not None:
                 cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 180, 255), 2)
                 cv2.putText(
                     annotated_image,
@@ -619,13 +667,7 @@ while cap.isOpened():
 
                 if label != last_object_label:
                     last_object_label = label
-                    if is_valid_context_label(label):
-                        context_store.update_context(
-                            active_user_name,
-                            current_artifact=label,
-                            current_category=label,
-                            last_object=label,
-                        )
+                    # Keep YOLO as a visual/debug signal only; do not persist it into user context.
                     object_event = build_event(
                         "object_tracking",
                         {
@@ -728,12 +770,10 @@ while cap.isOpened():
             context_snapshot = context_store.get_context_snapshot(active_user_name)
             current_item_id = (
                 context_snapshot.get("current_artifact")
-                or context_snapshot.get("last_object")
                 or "current_artifact"
             )
             current_category = (
                 context_snapshot.get("current_category")
-                or context_snapshot.get("last_object")
                 or "general"
             )
             action_result = apply_gesture_action(

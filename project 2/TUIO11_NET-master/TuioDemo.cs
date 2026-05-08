@@ -987,6 +987,7 @@ public class TuioDemo : Form , TuioListener
                 artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
                 page = 5;
                 SendMarkerUpdate(markerId);
+                SendArtifactFocus(artifact, "tuio");
                 Invalidate();
             });
             return;
@@ -996,6 +997,7 @@ public class TuioDemo : Form , TuioListener
         artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
         page = 5;
         SendMarkerUpdate(markerId);
+        SendArtifactFocus(artifact, "tuio");
         Invalidate();
     }
 
@@ -1015,7 +1017,48 @@ public class TuioDemo : Form , TuioListener
         selectedArtifactId = artifact.id;
         artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
         page = 5;
+        SendArtifactFocus(artifact, "mouse");
         Invalidate();
+    }
+
+    void SendArtifactFocus(ArtifactRecord artifact, string source)
+    {
+        if (socketClient == null || artifact == null) return;
+
+        try
+        {
+            var payload = new Dictionary<string, object>();
+            payload["type"] = "artifact_focus";
+            payload["artifact"] = artifact.name ?? "";
+            payload["category"] = artifact.country ?? artifact.era ?? artifact.origin ?? "general";
+            payload["id"] = artifact.id;
+            payload["tuioId"] = artifact.tuioId;
+            payload["source"] = source ?? "unknown";
+            var serializer = new JavaScriptSerializer();
+            socketClient.sendMessage(serializer.Serialize(payload));
+        }
+        catch (Exception)
+        {
+            // Ignore: socket may be disconnected or serializer may fail on unexpected data.
+        }
+    }
+
+    void SendContextClear(string source)
+    {
+        if (socketClient == null) return;
+
+        try
+        {
+            var payload = new Dictionary<string, object>();
+            payload["type"] = "context_update";
+            payload["clear"] = true;
+            payload["source"] = source ?? "unknown";
+            var serializer = new JavaScriptSerializer();
+            socketClient.sendMessage(serializer.Serialize(payload));
+        }
+        catch (Exception)
+        {
+        }
     }
 
     void GoToPage(int pageIndex)
@@ -1026,6 +1069,11 @@ public class TuioDemo : Form , TuioListener
             {
                 if (pageIndex == 3 || pageIndex == 6) { RefreshCurrentUserFromUsersFile(); favoritesPageIndex = 0; }
                 page = pageIndex;
+                if (pageIndex == 0)
+                {
+                    selectedArtifactId = -1;
+                    SendContextClear("page_home");
+                }
                 Invalidate();
             });
             return;
@@ -1033,6 +1081,11 @@ public class TuioDemo : Form , TuioListener
 
         if (pageIndex == 3 || pageIndex == 6) { RefreshCurrentUserFromUsersFile(); favoritesPageIndex = 0; }
         page = pageIndex;
+        if (pageIndex == 0)
+        {
+            selectedArtifactId = -1;
+            SendContextClear("page_home");
+        }
         Invalidate();
     }
 
@@ -1146,6 +1199,9 @@ public class TuioDemo : Form , TuioListener
         cameraStatusStr = "Online";
         btStatus = "Waiting for Bluetooth Device...";
         Invoke((Action)(Invalidate));
+
+        // Ensure the vision engine starts with no selected artifact until the user opens one.
+        SendContextClear("startup");
         
         while (true)
         {

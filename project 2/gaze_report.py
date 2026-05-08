@@ -18,6 +18,29 @@ def _safe_filename(value: str) -> str:
     return value[:80] or "guest"
 
 
+def _wrap_text(text: str, max_chars: int) -> list[str]:
+    text = (text or "").strip()
+    if not text:
+        return [""]
+    words = text.split()
+    lines: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for w in words:
+        wlen = len(w)
+        next_len = wlen if not current else current_len + 1 + wlen
+        if current and next_len > max_chars:
+            lines.append(" ".join(current))
+            current = [w]
+            current_len = wlen
+        else:
+            current.append(w)
+            current_len = next_len
+    if current:
+        lines.append(" ".join(current))
+    return lines
+
+
 @dataclass
 class GazeSample:
     t: float
@@ -31,7 +54,9 @@ class GazeSample:
 class GazeSessionLogger:
     def __init__(self, user_name: str, session_started_at: float | None = None):
         self.user_name = user_name.strip() or "guest"
-        self.session_started_at = session_started_at if session_started_at is not None else time.time()
+        self.session_started_at = (
+            session_started_at if session_started_at is not None else time.time()
+        )
         self.samples: list[GazeSample] = []
 
     def reset(self, user_name: str | None = None) -> None:
@@ -40,12 +65,16 @@ class GazeSessionLogger:
         self.session_started_at = time.time()
         self.samples.clear()
 
-    def add_expression(self, expression: dict, monotonic_ts: float | None = None) -> None:
+    def add_expression(
+        self, expression: dict, monotonic_ts: float | None = None
+    ) -> None:
         if not isinstance(expression, dict):
             return
 
         t = monotonic_ts if monotonic_ts is not None else time.monotonic()
-        gaze_zone = str(expression.get("gaze_zone", "center")).strip().lower() or "center"
+        gaze_zone = (
+            str(expression.get("gaze_zone", "center")).strip().lower() or "center"
+        )
         if gaze_zone not in {"left", "center", "right"}:
             gaze_zone = "center"
 
@@ -86,13 +115,26 @@ class GazeSessionLogger:
 
         png_path = out_dir / f"{user_slug}_gaze_{stamp}.png"
         json_path = out_dir / f"{user_slug}_gaze_{stamp}.json"
+        heatmap_path = out_dir / f"{user_slug}_gaze_{stamp}_heatmap.png"
 
-        payload = self._build_summary_payload(png_path.name, json_path.name)
+        payload = self._build_summary_payload(
+            png_path.name, json_path.name, heatmap_path.name
+        )
         self._render_png(png_path)
-        json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-        return {"png": str(png_path), "json": str(json_path), "summary": payload}
+        self._render_heatmap(heatmap_path)
+        json_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        return {
+            "png": str(png_path),
+            "json": str(json_path),
+            "heatmap": str(heatmap_path),
+            "summary": payload,
+        }
 
-    def _build_summary_payload(self, png_name: str, json_name: str) -> dict:
+    def _build_summary_payload(
+        self, png_name: str, json_name: str, heatmap_name: str
+    ) -> dict:
         counts = self._zone_counts()
         total = max(sum(counts.values()), 1)
         perc = {k: round((v / total) * 100.0, 1) for k, v in counts.items()}
@@ -101,7 +143,9 @@ class GazeSessionLogger:
         mean_delta = float(sum(deltas) / len(deltas)) if deltas else 0.0
         max_abs_delta = float(max((abs(d) for d in deltas), default=0.0))
 
-        started = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.session_started_at))
+        started = time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(self.session_started_at)
+        )
 
         return {
             "type": "gaze_session_report",
@@ -112,36 +156,97 @@ class GazeSessionLogger:
             "zone_percent": perc,
             "mean_gaze_delta": round(mean_delta, 4),
             "max_abs_gaze_delta": round(max_abs_delta, 4),
-            "artifacts": {"png": png_name, "json": json_name},
+            "artifacts": {"png": png_name, "json": json_name, "heatmap": heatmap_name},
         }
 
     def _render_png(self, path: Path) -> None:
-        width, height = 1100, 650
-        img = np.full((height, width, 3), 245, dtype=np.uint8)
+        width, height = 1280, 720
+        img = np.full((height, width, 3), 252, dtype=np.uint8)
 
-        # Header
-        title = f"Gaze Session Report - {self.user_name}"
-        cv2.putText(img, title, (30, 55), cv2.FONT_HERSHEY_SIMPLEX, 1.05, (20, 20, 20), 2)
+        # Palette
+        text_primary = (25, 25, 25)
+        text_muted = (95, 95, 95)
+        border = (220, 220, 220)
+        card_bg = (255, 255, 255)
+        accent = (210, 120, 40)
+        series_color = (180, 70, 70)
+
+        def card(x: int, y: int, w: int, h: int) -> None:
+            cv2.rectangle(img, (x, y), (x + w, y + h), card_bg, -1)
+            cv2.rectangle(img, (x, y), (x + w, y + h), border, 2)
+
+        # Header card (auto-wrap user name to avoid overlap)
+        header_x, header_y, header_w, header_h = 30, 24, width - 60, 116
+        card(header_x, header_y, header_w, header_h)
+
+        report_title = "Gaze Tracking Session Report"
         cv2.putText(
             img,
-            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.session_started_at)),
-            (30, 90),
+            report_title,
+            (header_x + 20, header_y + 42),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (70, 70, 70),
+            1.05,
+            text_primary,
             2,
         )
+
+        started = time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(self.session_started_at)
+        )
+        cv2.putText(
+            img,
+            started,
+            (header_x + 20, header_y + 78),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.72,
+            text_muted,
+            2,
+        )
+
+        user_lines = _wrap_text(f"User: {self.user_name}", max_chars=40)
+        uy = header_y + 42
+        for idx, line in enumerate(user_lines[:2]):
+            cv2.putText(
+                img,
+                line,
+                (header_x + 720, uy + idx * 34),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.78,
+                text_primary,
+                2,
+            )
 
         counts = self._zone_counts()
         total = max(sum(counts.values()), 1)
         zone_order = ["left", "center", "right"]
-        colors = {"left": (40, 80, 230), "center": (40, 180, 80), "right": (230, 140, 40)}
+        colors = {
+            "left": (210, 90, 60),
+            "center": (70, 170, 110),
+            "right": (60, 125, 210),
+        }
 
-        # Bar chart area
-        bar_x0, bar_y0 = 40, 130
-        bar_w, bar_h = 460, 230
-        cv2.rectangle(img, (bar_x0, bar_y0), (bar_x0 + bar_w, bar_y0 + bar_h), (210, 210, 210), 2)
-        cv2.putText(img, "Zone Distribution", (bar_x0 + 10, bar_y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (30, 30, 30), 2)
+        # Left card: distribution + key metrics
+        left_x, left_y, left_w, left_h = 30, 160, 520, 530
+        card(left_x, left_y, left_w, left_h)
+        cv2.putText(
+            img,
+            "Distribution",
+            (left_x + 20, left_y + 44),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.9,
+            text_primary,
+            2,
+        )
+
+        # Bar chart sub-area
+        bar_x0, bar_y0 = left_x + 20, left_y + 70
+        bar_w, bar_h = left_w - 40, 260
+        cv2.rectangle(
+            img, (bar_x0, bar_y0), (bar_x0 + bar_w, bar_y0 + bar_h), (248, 248, 248), -1
+        )
+        cv2.rectangle(
+            img, (bar_x0, bar_y0), (bar_x0 + bar_w, bar_y0 + bar_h), border, 1
+        )
 
         inner_pad = 24
         slot_w = (bar_w - 2 * inner_pad) // 3
@@ -152,34 +257,106 @@ class GazeSessionLogger:
             cx0 = bar_x0 + inner_pad + i * slot_w
             cx1 = cx0 + slot_w - 18
             base_y = bar_y0 + bar_h - inner_pad
-            h = int(((counts.get(zone, 0) / max_count) if max_count else 0.0) * (bar_h - 2 * inner_pad))
+            h = int(
+                ((counts.get(zone, 0) / max_count) if max_count else 0.0)
+                * (bar_h - 2 * inner_pad)
+            )
             cv2.rectangle(img, (cx0, base_y - h), (cx1, base_y), colors[zone], -1)
             cv2.rectangle(img, (cx0, base_y - h), (cx1, base_y), (60, 60, 60), 1)
 
             pct = (counts.get(zone, 0) / total) * 100.0
-            label = f"{zone.upper()}: {pct:.1f}% ({counts.get(zone, 0)})"
-            cv2.putText(img, label, (cx0, base_y + 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (35, 35, 35), 2)
+            label = f"{zone.upper()}  {pct:.1f}%"
+            sub = f"{counts.get(zone, 0)} samples"
+            cv2.putText(
+                img,
+                label,
+                (cx0, base_y + 28),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.62,
+                text_primary,
+                2,
+            )
+            cv2.putText(
+                img,
+                sub,
+                (cx0, base_y + 54),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.52,
+                text_muted,
+                2,
+            )
 
-        # Time series area
-        ts_x0, ts_y0 = 540, 130
-        ts_w, ts_h = 520, 420
-        cv2.rectangle(img, (ts_x0, ts_y0), (ts_x0 + ts_w, ts_y0 + ts_h), (210, 210, 210), 2)
-        cv2.putText(img, "Gaze Delta Over Time", (ts_x0 + 10, ts_y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (30, 30, 30), 2)
+        # Metrics
+        deltas = [s.gaze_delta for s in self.samples]
+        mean_delta = float(sum(deltas) / len(deltas)) if deltas else 0.0
+        max_abs_delta = float(max((abs(d) for d in deltas), default=0.0))
+
+        mx0 = left_x + 20
+        my0 = left_y + 370
+        cv2.putText(
+            img, "Summary", (mx0, my0), cv2.FONT_HERSHEY_SIMPLEX, 0.9, text_primary, 2
+        )
+        cv2.putText(
+            img,
+            f"Samples: {len(self.samples)}",
+            (mx0, my0 + 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.72,
+            text_primary,
+            2,
+        )
+        cv2.putText(
+            img,
+            f"Mean delta: {mean_delta:+.3f}",
+            (mx0, my0 + 74),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.72,
+            text_primary,
+            2,
+        )
+        cv2.putText(
+            img,
+            f"Max |delta|: {max_abs_delta:.3f}",
+            (mx0, my0 + 108),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.72,
+            text_primary,
+            2,
+        )
+
+        # Right card: time series
+        right_x, right_y, right_w, right_h = 580, 160, width - 610, 530
+        card(right_x, right_y, right_w, right_h)
+        cv2.putText(
+            img,
+            "Gaze Delta Over Time",
+            (right_x + 20, right_y + 44),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.9,
+            text_primary,
+            2,
+        )
 
         # Axes/grid
-        grid_color = (225, 225, 225)
+        ts_x0, ts_y0 = right_x + 20, right_y + 70
+        ts_w, ts_h = right_w - 40, right_h - 110
+        cv2.rectangle(
+            img, (ts_x0, ts_y0), (ts_x0 + ts_w, ts_y0 + ts_h), (248, 248, 248), -1
+        )
+        cv2.rectangle(img, (ts_x0, ts_y0), (ts_x0 + ts_w, ts_y0 + ts_h), border, 1)
+
+        grid_color = (235, 235, 235)
         for gy in range(1, 5):
             y = ts_y0 + int((gy / 5.0) * ts_h)
             cv2.line(img, (ts_x0, y), (ts_x0 + ts_w, y), grid_color, 1)
         mid_y = ts_y0 + ts_h // 2
-        cv2.line(img, (ts_x0, mid_y), (ts_x0 + ts_w, mid_y), (180, 180, 180), 1)
+        cv2.line(img, (ts_x0, mid_y), (ts_x0 + ts_w, mid_y), (200, 200, 200), 1)
 
-        deltas = [s.gaze_delta for s in self.samples]
         if deltas:
-            max_abs = max((abs(d) for d in deltas), default=0.1)
-            max_abs = max(max_abs, 0.1)
-            # Map last N samples to width
-            max_points = 260
+            max_abs = max((abs(d) for d in deltas), default=0.15)
+            max_abs = max(max_abs, 0.15)
+
+            max_points = 420
             series = deltas[-max_points:]
 
             def to_xy(idx: int, delta: float) -> tuple[int, int]:
@@ -190,32 +367,94 @@ class GazeSessionLogger:
 
             pts = [to_xy(i, d) for i, d in enumerate(series)]
             for i in range(1, len(pts)):
-                cv2.line(img, pts[i - 1], pts[i], (60, 60, 200), 2)
+                cv2.line(img, pts[i - 1], pts[i], series_color, 2)
 
-            # Legend numbers
-            mean_delta = sum(series) / len(series)
+            # Tiny legend
             cv2.putText(
                 img,
-                f"mean={mean_delta:+.3f}  max|d|={max_abs:.3f}  samples={len(self.samples)}",
-                (ts_x0 + 12, ts_y0 + ts_h + 34),
+                f"Scale: ±{max_abs:.2f}",
+                (ts_x0 + 12, ts_y0 + ts_h - 12),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (50, 50, 50),
+                0.55,
+                text_muted,
                 2,
             )
         else:
-            cv2.putText(img, "No samples captured.", (ts_x0 + 12, ts_y0 + 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (80, 80, 80), 2)
+            cv2.putText(
+                img,
+                "No gaze samples captured.",
+                (ts_x0 + 16, ts_y0 + 50),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.75,
+                text_muted,
+                2,
+            )
 
-        # Footer hint
+        # Footer (kept short so it never overlaps)
         cv2.putText(
             img,
-            "Tip: For best accuracy, face camera, keep eyes visible, avoid strong side head turns.",
-            (40, height - 25),
+            "Generated by HCI Vision Engine",
+            (30, height - 20),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (70, 70, 70),
+            0.62,
+            text_muted,
             2,
         )
 
         cv2.imwrite(str(path), img)
 
+    def _render_heatmap(self, path: Path) -> None:
+        width, height = 1280, 720
+        heat = np.zeros((height, width), dtype=np.float32)
+
+        def sample_to_xy(sample: GazeSample) -> tuple[int, int]:
+            if sample.gaze_ratio is not None and math.isfinite(sample.gaze_ratio):
+                ratio = sample.gaze_ratio
+                if 0.0 <= ratio <= 1.0:
+                    x = int(ratio * (width - 1))
+                else:
+                    x = int(((ratio + 1.0) / 2.0) * (width - 1))
+            else:
+                zone = sample.gaze_zone
+                if zone == "left":
+                    x = int(0.22 * (width - 1))
+                elif zone == "right":
+                    x = int(0.78 * (width - 1))
+                else:
+                    x = int(0.5 * (width - 1))
+            x = max(0, min(width - 1, x))
+            y = height // 2
+            return x, y
+
+        for sample in self.samples:
+            x, y = sample_to_xy(sample)
+            heat[y, x] += 1.0
+
+        canvas = np.zeros((height, width, 3), dtype=np.uint8)
+        if heat.max() > 0:
+            heat = cv2.GaussianBlur(heat, (0, 0), 45)
+            heat = heat / heat.max()
+            heat_img = np.uint8(heat * 255)
+            color = cv2.applyColorMap(heat_img, cv2.COLORMAP_INFERNO)
+            canvas = cv2.addWeighted(canvas, 0.15, color, 0.85, 0.0)
+
+        cv2.putText(
+            canvas,
+            "Gaze Heatmap",
+            (30, 50),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.0,
+            (240, 240, 240),
+            2,
+        )
+        cv2.putText(
+            canvas,
+            f"Samples: {len(self.samples)}",
+            (30, 85),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (200, 200, 200),
+            2,
+        )
+
+        cv2.imwrite(str(path), canvas)
