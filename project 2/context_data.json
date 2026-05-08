@@ -75,28 +75,38 @@
     "Mohamed Ibrahim": {
       "profile": "objects/obj5.png",
       "lists": {
-        "favorites": [],
+        "favorites": [
+          {
+            "item_id": "person",
+            "category": "person",
+            "source": "gesture",
+            "gesture": "Circle",
+            "timestamp": 1778257313
+          }
+        ],
         "explore_later": [],
         "good_to_see": []
       },
       "category_scores": {
-        "sad": 0.2,
-        "happy": 0.9
+        "sad": 2.5,
+        "happy": 5.3,
+        "neutral": 6.1,
+        "favorites": 1.0
       },
       "context": {
         "current_artifact": "person",
         "current_category": "person",
         "last_object": "person",
-        "last_gesture": "",
-        "last_emotion": "happy",
+        "last_gesture": "Circle",
+        "last_emotion": "neutral",
         "last_gaze": "center"
       },
-      "updated_at": 1778254769
+      "updated_at": 1778257348
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778254769
+    "updated_at": 1778257348
   }
 }

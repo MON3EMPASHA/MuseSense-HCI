@@ -40,7 +40,7 @@ from pathlib import Path
 from users import normalize_mac, load_users_by_mac
 from movements import recognizer
 from context_store import ContextStore, apply_gesture_action
-from event_protocol import build_event, event_to_line
+from event_protocol import build_event, event_to_console, to_pretty_json
 from object_tracking import YoloTracker
 from expression_tracker import ExpressionTracker
 from gaze_tracker import GazeTracker
@@ -347,7 +347,7 @@ while cap.isOpened():
     if user_login == 0:
         if login_message is not None:
             message_payload = json.dumps(login_message)
-            print("Sending login payload:", message_payload)
+            print("[SOCKET] Sending login payload\n" + to_pretty_json(login_message))
             if send_socket_message(conn, message_payload):
                 context_store.log_event(
                     build_event(
@@ -444,7 +444,7 @@ while cap.isOpened():
                         },
                     )
                     context_store.log_event(adaptive_event)
-                    print("[EVENT]", event_to_line(adaptive_event))
+                    print(event_to_console(adaptive_event))
 
         object_frame_counter += 1
         if object_frame_counter % 18 == 0:
@@ -484,7 +484,7 @@ while cap.isOpened():
                         },
                     )
                     context_store.log_event(object_event)
-                    print("[EVENT]", event_to_line(object_event))
+                    print(event_to_console(object_event))
 
         if results.pose_landmarks is not None:
             right_wrist = results.pose_landmarks.landmark[
@@ -602,7 +602,7 @@ while cap.isOpened():
                 },
             )
             context_store.log_event(context_event)
-            print("[EVENT]", event_to_line(context_event))
+            print(event_to_console(context_event))
 
             if send_socket_message(conn, msg):
                 if msg == "Circle":
