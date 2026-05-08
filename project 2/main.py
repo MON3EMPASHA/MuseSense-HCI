@@ -51,6 +51,8 @@ TUIO_NOTE = "Remember to start your TUIO simulator/tracker on port 3333"
 PHONE_CAMERA_URL = ""
 PHONE_BT_NAME = "Phone"
 USERS_JSON_PATH = Path("TUIO11_NET-master") / "bin" / "Debug" / "users.json"
+ARTIFACTS_JSON_PATH = Path("TUIO11_NET-master") / "artifacts.json"
+TUIO_PRIORITY_SECONDS = 3.0
 
 
 # user / bluetooth helpers moved to users.py
@@ -61,6 +63,44 @@ def send_socket_message(connection: socket.socket, payload: str) -> None:
         return
 
     connection.sendall(f"{payload}\n".encode("utf-8"))
+
+
+def load_tuio_artifacts(path: Path) -> dict[int, dict]:
+    if not path.exists():
+        return {}
+
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+        artifacts = data.get("artifacts", []) if isinstance(data, dict) else []
+        mapping: dict[int, dict] = {}
+        for artifact in artifacts:
+            try:
+                tuio_id = int(artifact.get("tuioId"))
+            except (TypeError, ValueError):
+                continue
+            mapping[tuio_id] = artifact
+        return mapping
+    except Exception:
+        return {}
+
+
+def poll_socket_lines(connection: socket.socket, buffer: str) -> tuple[str, list[str]]:
+    lines: list[str] = []
+    try:
+        data = connection.recv(4096)
+        if data:
+            buffer += data.decode("utf-8", errors="ignore")
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                line = line.strip()
+                if line:
+                    lines.append(line)
+    except BlockingIOError:
+        pass
+    except Exception as exc:
+        print(f"[SOCKET] Read failed: {exc}")
+    return buffer, lines
 
 
 # gesture helper functions moved to gestures.py
@@ -75,6 +115,7 @@ Allpoints = []
 mp_pose = mp.solutions.pose
 conn, addr = soc.accept()
 print("Device Connected")
+conn.setblocking(False)
 old_msg = ""
 mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
@@ -195,6 +236,7 @@ context_store = ContextStore()
 yolo_tracker = YoloTracker()
 expression_tracker = ExpressionTracker()
 gaze_tracker = GazeTracker()
+tuio_artifacts = load_tuio_artifacts(ARTIFACTS_JSON_PATH)
 active_user_name = "guest"
 
 if login_message is not None:
@@ -211,11 +253,42 @@ cv2.namedWindow("Output", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("Output", 960, 640)
 user_login = 0
 flag_bluetooth = 0
+socket_buffer = ""
+last_tuio_marker_id = None
+tuio_last_seen = 0.0
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret or frame is None:
         continue
     msg = ""
+
+    socket_buffer, incoming_lines = poll_socket_lines(conn, socket_buffer)
+    for line in incoming_lines:
+        if line.startswith("TUIO:"):
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                try:
+                    marker_id = int(parts[1])
+                except ValueError:
+                    marker_id = None
+                if marker_id is not None and marker_id != last_tuio_marker_id:
+                    artifact = tuio_artifacts.get(marker_id, {})
+                    artifact_name = artifact.get("name") or f"marker_{marker_id}"
+                    category = (
+                        artifact.get("country")
+                        or artifact.get("era")
+                        or artifact.get("origin")
+                        or "general"
+                    )
+                    context_store.update_context(
+                        active_user_name,
+                        current_artifact=artifact_name,
+                        current_category=category,
+                        last_object=artifact_name,
+                    )
+                    last_tuio_marker_id = marker_id
+                    tuio_last_seen = time.monotonic()
+                    print(f"[TUIO] Marker {marker_id} -> {artifact_name}")
     if user_login == 0:
         if login_message is not None:
             message_payload = json.dumps(login_message)
@@ -272,7 +345,6 @@ while cap.isOpened():
         results = holistic.process(frame_rgb)
         annotated_image = f_frame.copy()
         image_height, image_width, _ = frame_rgb.shape
-        image_hight, image_width, _ = frame.shape
 
         analysis_frame_counter += 1
         if analysis_frame_counter % 15 == 0:
@@ -324,6 +396,9 @@ while cap.isOpened():
             object_frame_counter = 0
             detection = yolo_tracker.detect_primary(f_frame)
             if detection is not None:
+                if time.monotonic() - tuio_last_seen <= TUIO_PRIORITY_SECONDS:
+                    detection = None
+            if detection is not None:
                 x1, y1, x2, y2 = detection["bbox"]
                 label = str(detection["label"])
                 confidence = detection["confidence"]
@@ -357,26 +432,20 @@ while cap.isOpened():
                     print("[EVENT]", event_to_line(object_event))
 
         if results.pose_landmarks is not None:
-            right_wrist_x = int(
-                results.pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_WRIST].x
-                * image_width
-            )
-            right_wrist_y = int(
-                results.pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_WRIST].y
-                * image_hight
-            )
-            left_wrist_x = int(
-                results.pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_WRIST].x
-                * image_width
-            )
-            left_wrist_y = int(
-                results.pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_WRIST].y
-                * image_hight
-            )
+            right_wrist = results.pose_landmarks.landmark[
+                mp_pose.PoseLandmark.RIGHT_WRIST
+            ]
+            left_wrist = results.pose_landmarks.landmark[
+                mp_pose.PoseLandmark.LEFT_WRIST
+            ]
+            use_right = right_wrist.visibility >= left_wrist.visibility
+            wrist = right_wrist if use_right else left_wrist
 
-            gesture_points.append(Point(right_wrist_x, right_wrist_y, 1))
-            gesture_points.append(Point(left_wrist_x, left_wrist_y, 1))
-            circle_points.append(Point(right_wrist_x, right_wrist_y, 1))
+            if wrist.visibility >= 0.4:
+                wrist_x = int(wrist.x * image_width)
+                wrist_y = int(wrist.y * image_height)
+                gesture_points.append(Point(wrist_x, wrist_y, 1))
+                circle_points.append(Point(wrist_x, wrist_y, 1))
 
         if frame_count % 30 == 0:
             frame_count = 0
@@ -387,7 +456,11 @@ while cap.isOpened():
                     recognized_score = float(result[1])
                     print(result)
 
-                    if recognized_gesture == "Circle":
+                    if recognized_score < 0.72:
+                        print(
+                            f"[GESTURE] Low score {recognized_score:.2f} for {recognized_gesture}, ignored"
+                        )
+                    elif recognized_gesture == "Circle":
                         if is_circle_like(circle_points):
                             msg = recognized_gesture
                         else:

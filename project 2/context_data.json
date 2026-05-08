@@ -29,20 +29,35 @@
             "source": "gesture",
             "gesture": "Circle",
             "timestamp": 1778173852
+          },
+          {
+            "item_id": "person",
+            "category": "person",
+            "source": "gesture",
+            "gesture": "SwipeRight",
+            "timestamp": 1778246698
           }
         ],
         "explore_later": [],
         "good_to_see": []
       },
       "category_scores": {
-        "happy": 16.4,
+        "happy": 18.8,
         "focused": 8.2,
-        "neutral": 9.3,
-        "favorites": 1.0,
+        "neutral": 14.2,
+        "favorites": 2.5,
         "surprised": 3.5,
-        "sad": 2.2
+        "sad": 4.0
       },
-      "updated_at": 1778189619
+      "updated_at": 1778246780,
+      "context": {
+        "current_artifact": "toothbrush",
+        "current_category": "toothbrush",
+        "last_object": "toothbrush",
+        "last_gesture": "SwipeRight",
+        "last_emotion": "neutral",
+        "last_gaze": "center"
+      }
     },
     "Abdelmonem Hatem": {
       "profile": "objects/obj4.png",
@@ -61,6 +76,6 @@
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778189619
+    "updated_at": 1778246780
   }
 }

@@ -175,7 +175,7 @@ def apply_gesture_action(
     resolved_category = category or "general"
 
     # Keep action mapping procedural and explicit to match lab style.
-    if gesture_key in {"swiperight", "circle"}:
+    if gesture_key in {"circle"}:
         added = store.create_list_item(
             user_name,
             "favorites",
@@ -199,24 +199,6 @@ def apply_gesture_action(
         return {
             "action": "add_favorite",
             "result": "already_exists",
-            "item_id": resolved_item_id,
-            "category": resolved_category,
-        }
-
-    if gesture_key == "swipeleft":
-        removed = store.delete_list_item(user_name, "favorites", resolved_item_id)
-        if removed:
-            score = store.update_category_score(user_name, "favorites", -0.5)
-            return {
-                "action": "remove_favorite",
-                "result": "deleted",
-                "item_id": resolved_item_id,
-                "category": resolved_category,
-                "category_score": score,
-            }
-        return {
-            "action": "remove_favorite",
-            "result": "not_found",
             "item_id": resolved_item_id,
             "category": resolved_category,
         }

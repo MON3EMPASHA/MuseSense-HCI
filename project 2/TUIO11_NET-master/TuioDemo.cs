@@ -1,3 +1,4 @@
+    private int lastMarkerSent = -1;
 /*
 	TUIO C# Demo - part of the reacTIVision project
 	Copyright (c) 2005-2016 Martin Kaltenbrunner <martin@tuio.org>
@@ -164,6 +165,8 @@ public class TuioDemo : Form , TuioListener
         int selectedMenuItem = -1; // -1=none, 0=Home, 1=Profile, 2=Artifacts, 3=Favorites, 4=Explore
         long tuioMarker100SessionId = -1;
         TuioClient tuioClient;
+        Client socketClient;
+        int lastMarkerSent = -1;
         
         SoundPlayer currentAudioPlayer = null;
         int playingArtifactId = -1;
@@ -404,6 +407,8 @@ public class TuioDemo : Form , TuioListener
         public NetworkStream stream;
         public TcpClient client;
         public StreamReader reader;
+        public StreamWriter writer;
+        private readonly object writeLock = new object();
 
         public bool connectToSocket(string host, int portNumber)
         {
@@ -412,6 +417,7 @@ public class TuioDemo : Form , TuioListener
                 client = new TcpClient(host, portNumber);
                 stream = client.GetStream();
                 reader = new StreamReader(stream, Encoding.UTF8);
+                writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
                 Console.WriteLine("connection made ! with " + host);
                 return true;
             }
@@ -440,6 +446,15 @@ public class TuioDemo : Form , TuioListener
             return null;
         }
 
+        public void sendMessage(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message) || writer == null) return;
+
+            lock (writeLock)
+            {
+                writer.WriteLine(message);
+            }
+        }
     }
     string msg = "";
 	string oldmsg = "";
@@ -819,6 +834,7 @@ public class TuioDemo : Form , TuioListener
                 selectedArtifactId = artifact.id;
                 artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
                 page = 5;
+                SendMarkerUpdate(markerId);
                 Invalidate();
             });
             return;
@@ -827,7 +843,16 @@ public class TuioDemo : Form , TuioListener
         selectedArtifactId = artifact.id;
         artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
         page = 5;
+        SendMarkerUpdate(markerId);
         Invalidate();
+    }
+
+    void SendMarkerUpdate(int markerId)
+    {
+        if (socketClient == null) return;
+        if (markerId == lastMarkerSent) return;
+        lastMarkerSent = markerId;
+        socketClient.sendMessage($"TUIO:{markerId}");
     }
 
     void GoToPage(int pageIndex)
@@ -939,6 +964,8 @@ public class TuioDemo : Form , TuioListener
             Invoke((Action)(Invalidate));
             return;
         }
+
+        socketClient = c;
         
         cameraStatusStr = "Online";
         btStatus = "Waiting for Bluetooth Device...";
