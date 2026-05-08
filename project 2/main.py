@@ -129,6 +129,37 @@ def poll_socket_lines(
     return connection, buffer, lines, True
 
 
+def draw_context_debug(
+    frame,
+    store: ContextStore,
+    user_name: str,
+    last_emotion: str,
+    last_delta: float,
+) -> None:
+    user_data = store.data.get("users", {}).get(user_name)
+    if not isinstance(user_data, dict):
+        return
+
+    context = user_data.get("context", {}) if isinstance(user_data.get("context"), dict) else {}
+    current_artifact = str(context.get("current_artifact") or "")
+    current_category = str(context.get("current_category") or "")
+    category_scores = user_data.get("category_scores", {}) if isinstance(user_data.get("category_scores"), dict) else {}
+    artifact_scores = user_data.get("artifact_scores", {}) if isinstance(user_data.get("artifact_scores"), dict) else {}
+
+    category_score = float(category_scores.get(current_category, 0.0)) if current_category else 0.0
+    artifact_score = float(artifact_scores.get(current_artifact, 0.0)) if current_artifact else 0.0
+
+    line1 = f"Artifact: {current_artifact or '-'}"
+    line2 = f"Category: {current_category or '-'}"
+    line3 = f"CatScore: {category_score:.2f} | ArtScore: {artifact_score:.2f}"
+    line4 = f"LastEmotion: {last_emotion or '-'} | Delta: {last_delta:+.2f}"
+
+    cv2.putText(frame, line1, (20, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+    cv2.putText(frame, line2, (20, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+    cv2.putText(frame, line3, (20, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+    cv2.putText(frame, line4, (20, 235), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+
+
 # gesture helper functions moved to gestures.py
 
 
@@ -181,6 +212,8 @@ gesture_points = []
 circle_points = []
 expression_log_until = 0.0
 last_expression_signature = ""
+last_interest_emotion = ""
+last_interest_delta = 0.0
 
 
 all_macs = []
@@ -393,8 +426,17 @@ while cap.isOpened():
                                 )
     if user_login == 0:
         if login_message is not None:
-            message_payload = json.dumps(login_message)
-            print("[SOCKET] Sending login payload\n" + to_pretty_json(login_message))
+            if isinstance(login_message, dict):
+                login_payload = dict(login_message)
+            else:
+                login_payload = {"name": str(login_message)}
+
+            login_payload["type"] = "user_login"
+            if address:
+                login_payload["mac"] = normalize_mac(address)
+
+            message_payload = json.dumps(login_payload)
+            print("[SOCKET] Sending login payload\n" + to_pretty_json(login_payload))
             if send_socket_message(conn, message_payload):
                 context_store.log_event(
                     build_event(
@@ -510,6 +552,9 @@ while cap.isOpened():
                         context_store.update_artifact_score(
                             active_user_name, focused_artifact, interest_delta
                         )
+
+                    last_interest_emotion = expression.get("emotion", "")
+                    last_interest_delta = interest_delta
 
                     adaptive_event = build_event(
                         "expression_gaze_update",
@@ -644,6 +689,13 @@ while cap.isOpened():
         )
         draw_gesture_feedback(display_image)
         expression_tracker.draw_overlay(display_image, latest_expression)
+        draw_context_debug(
+            display_image,
+            context_store,
+            active_user_name,
+            last_interest_emotion,
+            last_interest_delta,
+        )
         cv2.imshow("Output", display_image)
         # logic to send msg to unity
         if msg != "" and msg != old_msg:  # only send when there's actually something

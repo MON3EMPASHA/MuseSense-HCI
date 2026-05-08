@@ -1,116 +1,28 @@
 {
   "users": {
-    "guest": {
-      "profile": "",
-      "lists": {
-        "favorites": [
-          {
-            "item_id": "current_artifact",
-            "source": "gesture",
-            "gesture": "Circle",
-            "timestamp": 1778171974
-          }
-        ],
-        "explore_later": [],
-        "good_to_see": []
-      },
-      "category_scores": {
-        "happy": 1.8,
-        "favorites": 1.0
-      },
-      "updated_at": 1778185866
-    },
     "Mohamed Taha": {
       "profile": "objects/obj3.png",
-      "lists": {
-        "favorites": [
-          {
-            "item_id": "current_artifact",
-            "source": "gesture",
-            "gesture": "Circle",
-            "timestamp": 1778173852
-          },
-          {
-            "item_id": "person",
-            "category": "person",
-            "source": "gesture",
-            "gesture": "SwipeRight",
-            "timestamp": 1778246698
-          }
-        ],
-        "explore_later": [],
-        "good_to_see": []
-      },
-      "category_scores": {
-        "happy": 18.8,
-        "focused": 8.2,
-        "neutral": 14.2,
-        "favorites": 2.5,
-        "surprised": 3.5,
-        "sad": 4.0
-      },
-      "updated_at": 1778246780,
-      "context": {
-        "current_artifact": "toothbrush",
-        "current_category": "toothbrush",
-        "last_object": "toothbrush",
-        "last_gesture": "SwipeRight",
-        "last_emotion": "neutral",
-        "last_gaze": "center"
-      }
-    },
-    "Abdelmonem Hatem": {
-      "profile": "objects/obj4.png",
       "lists": {
         "favorites": [],
         "explore_later": [],
         "good_to_see": []
       },
-      "category_scores": {
-        "happy": 9.0,
-        "focused": 4.5
-      },
-      "updated_at": 1778179741
-    },
-    "Mohamed Ibrahim": {
-      "profile": "objects/obj5.png",
-      "lists": {
-        "favorites": [
-          {
-            "item_id": "person",
-            "category": "person",
-            "source": "gesture",
-            "gesture": "Circle",
-            "timestamp": 1778257313
-          }
-        ],
-        "explore_later": [],
-        "good_to_see": []
-      },
-      "category_scores": {
-        "sad": 2.5,
-        "happy": 5.3,
-        "neutral": 6.1,
-        "favorites": 1.0,
-        "person": 0.9
-      },
+      "category_scores": {},
+      "artifact_scores": {},
       "context": {
-        "current_artifact": "Ramses II Statue",
-        "current_category": "Egypt",
-        "last_object": "Ramses II Statue",
-        "last_gesture": "Circle",
-        "last_emotion": "neutral",
-        "last_gaze": "center"
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "",
+        "last_emotion": "",
+        "last_gaze": ""
       },
-      "updated_at": 1778257948,
-      "artifact_scores": {
-        "person": 0.9
-      }
+      "updated_at": 0
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778257948
+    "updated_at": 1778259833
   }
 }
