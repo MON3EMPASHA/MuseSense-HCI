@@ -27,12 +27,12 @@
         "good_to_see": []
       },
       "category_scores": {
-        "person": 1.9,
+        "person": 5.9,
         "Egypt": 5.3,
         "cell phone": -0.3
       },
       "artifact_scores": {
-        "person": 1.9,
+        "person": 5.9,
         "King Senwosret III": 3.2,
         "Mask of Tutankhamun": 2.1,
         "cell phone": -0.3
@@ -42,15 +42,15 @@
         "current_category": "person",
         "last_object": "person",
         "last_gesture": "",
-        "last_emotion": "neutral",
+        "last_emotion": "happy",
         "last_gaze": "center"
       },
-      "updated_at": 1778260639
+      "updated_at": 1778276047
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778260639
+    "updated_at": 1778276047
   }
 }

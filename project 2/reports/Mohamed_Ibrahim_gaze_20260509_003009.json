@@ -1,0 +1,22 @@
+{
+  "type": "gaze_session_report",
+  "user": "Mohamed Ibrahim",
+  "started_at": "2026-05-09 00:30:09",
+  "sample_count": 0,
+  "zone_counts": {
+    "left": 0,
+    "center": 0,
+    "right": 0
+  },
+  "zone_percent": {
+    "left": 0.0,
+    "center": 0.0,
+    "right": 0.0
+  },
+  "mean_gaze_delta": 0.0,
+  "max_abs_gaze_delta": 0.0,
+  "artifacts": {
+    "png": "Mohamed_Ibrahim_gaze_20260509_003009.png",
+    "json": "Mohamed_Ibrahim_gaze_20260509_003009.json"
+  }
+}

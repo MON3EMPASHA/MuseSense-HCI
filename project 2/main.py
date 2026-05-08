@@ -44,6 +44,7 @@ from event_protocol import build_event, event_to_console, to_pretty_json
 from object_tracking import YoloTracker
 from expression_tracker import ExpressionTracker
 from gaze_tracker import GazeTracker
+from gaze_report import GazeSessionLogger
 
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 5001
@@ -326,6 +327,9 @@ elif address is not None:
     active_user_name = f"guest_{normalize_mac(address).replace(':', '')}"
     context_store.ensure_user(active_user_name)
 
+gaze_session = GazeSessionLogger(active_user_name)
+reports_dir = Path("reports")
+
 cap = cv2.VideoCapture(0)
 cv2.namedWindow("Output", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("Output", 960, 640)
@@ -344,6 +348,19 @@ while cap.isOpened():
         conn, socket_buffer
     )
     if not connection_alive:
+        try:
+            result = gaze_session.save_report(reports_dir)
+            print(f"[GAZE] Saved session report: {result.get('png')}")
+        except Exception as exc:
+            print(f"[GAZE] Failed to save report: {exc}")
+
+        gaze_session.reset(active_user_name)
+        gaze_tracker = GazeTracker()
+        try:
+            expression_tracker.reset_gaze_calibration()
+        except Exception:
+            pass
+
         conn, addr = wait_for_csharp_client(soc)
         conn.setblocking(False)
         socket_buffer = ""
@@ -491,10 +508,11 @@ while cap.isOpened():
         image_height, image_width, _ = frame_rgb.shape
 
         analysis_frame_counter += 1
-        if analysis_frame_counter % 15 == 0:
+        if analysis_frame_counter % 5 == 0:
             analysis_frame_counter = 0
             expression = expression_tracker.analyze(frame_rgb)
             if expression is not None:
+                gaze_session.add_expression(expression, time.monotonic())
                 latest_expression = expression
 
                 current_signature = f"{expression['emotion']}:{expression['gaze_zone']}"
@@ -753,6 +771,12 @@ while cap.isOpened():
         print(e)
     if cv2.waitKey(1) == ord("q"):
         break
+
+try:
+    result = gaze_session.save_report(reports_dir)
+    print(f"[GAZE] Saved session report: {result.get('png')}")
+except Exception as exc:
+    print(f"[GAZE] Failed to save report on exit: {exc}")
 
 cap.release()
 cv2.destroyAllWindows()

@@ -18,6 +18,22 @@ class ExpressionTracker:
         self.mp_face_mesh = mp.solutions.face_mesh
         self._recent_results: deque[dict] = deque(maxlen=5)
 
+        # Gaze calibration / smoothing (normalized per-eye iris position in [0..1]).
+        # We assume the user roughly looks at the screen center during the first few
+        # seconds, then lock a baseline ratio and report deltas relative to it.
+        self._gaze_baseline_ratio: float | None = None
+        self._gaze_calibration_samples: deque[float] = deque(maxlen=60)
+        self._gaze_ema_delta: float = 0.0
+        self._gaze_ema_alpha: float = 0.35
+        self._gaze_calibration_started_at: float | None = None
+        self._gaze_calibration_seconds: float = 3.0
+
+    def reset_gaze_calibration(self) -> None:
+        self._gaze_baseline_ratio = None
+        self._gaze_calibration_samples.clear()
+        self._gaze_ema_delta = 0.0
+        self._gaze_calibration_started_at = None
+
     def _smooth_analysis(self) -> dict | None:
         if len(self._recent_results) < 3:
             return None
@@ -40,6 +56,8 @@ class ExpressionTracker:
         return latest
 
     def analyze(self, frame_rgb) -> dict | None:
+        import time
+
         results = self.face_mesh.process(frame_rgb)
         if not results.multi_face_landmarks:
             return None
@@ -92,26 +110,71 @@ class ExpressionTracker:
         right_eye_outer = point(362)
         right_eye_inner = point(263)
 
-        left_iris = point(468)
-        right_iris = point(473)
+        def safe_points(indices: list[int]) -> list[tuple[float, float]]:
+            pts: list[tuple[float, float]] = []
+            for idx in indices:
+                try:
+                    pts.append(point(idx))
+                except Exception:
+                    continue
+            return pts
 
-        left_eye_center_x = (left_eye_outer[0] + left_eye_inner[0]) / 2.0
-        right_eye_center_x = (right_eye_outer[0] + right_eye_inner[0]) / 2.0
-        eye_center_x = (left_eye_center_x + right_eye_center_x) / 2.0
-        iris_center_x = (left_iris[0] + right_iris[0]) / 2.0
+        def avg_x(indices: list[int]) -> float | None:
+            pts = safe_points(indices)
+            if not pts:
+                return None
+            return sum(p[0] for p in pts) / len(pts)
 
-        # IMPORTANT: normalize by eye width, not full image width. Normalizing by
-        # image width makes deltas tiny and often "stuck" in center.
-        left_eye_width = abs(left_eye_inner[0] - left_eye_outer[0])
-        right_eye_width = abs(right_eye_inner[0] - right_eye_outer[0])
-        eye_width = max((left_eye_width + right_eye_width) / 2.0, 1.0)
+        # MediaPipe FaceMesh iris landmarks when refine_landmarks=True:
+        # Left iris: 468..472, Right iris: 473..477.
+        left_iris_x = avg_x([468, 469, 470, 471, 472])
+        right_iris_x = avg_x([473, 474, 475, 476, 477])
 
-        gaze_delta = (iris_center_x - eye_center_x) / eye_width
+        def iris_ratio(iris_x: float | None, corner_a_x: float, corner_b_x: float) -> float | None:
+            if iris_x is None:
+                return None
+            left_x = min(corner_a_x, corner_b_x)
+            right_x = max(corner_a_x, corner_b_x)
+            width = max(right_x - left_x, 1.0)
+            r = (iris_x - left_x) / width
+            # Clamp to handle occasional landmark jitter.
+            if r < 0.0:
+                return 0.0
+            if r > 1.0:
+                return 1.0
+            return r
 
-        # Thresholds tuned for normalized-by-eye-width deltas.
-        if gaze_delta < -0.15:
+        left_ratio = iris_ratio(left_iris_x, left_eye_outer[0], left_eye_inner[0])
+        right_ratio = iris_ratio(right_iris_x, right_eye_outer[0], right_eye_inner[0])
+        ratios = [r for r in (left_ratio, right_ratio) if r is not None]
+        gaze_ratio = sum(ratios) / len(ratios) if ratios else None
+
+        now = time.monotonic()
+        if self._gaze_calibration_started_at is None:
+            self._gaze_calibration_started_at = now
+
+        if gaze_ratio is not None and self._gaze_baseline_ratio is None:
+            # Collect center-looking samples for a short warmup window.
+            if now - self._gaze_calibration_started_at <= self._gaze_calibration_seconds:
+                self._gaze_calibration_samples.append(gaze_ratio)
+            elif self._gaze_calibration_samples:
+                sorted_samples = sorted(self._gaze_calibration_samples)
+                self._gaze_baseline_ratio = sorted_samples[len(sorted_samples) // 2]
+
+        baseline_ratio = self._gaze_baseline_ratio if self._gaze_baseline_ratio is not None else 0.5
+        raw_gaze_delta = (gaze_ratio - baseline_ratio) if gaze_ratio is not None else 0.0
+        self._gaze_ema_delta = (
+            self._gaze_ema_alpha * raw_gaze_delta + (1.0 - self._gaze_ema_alpha) * self._gaze_ema_delta
+        )
+        gaze_delta = self._gaze_ema_delta
+
+        # Thresholds in "eye-width ratio" space (0..1), relative to baseline.
+        # Smaller thresholds -> more sensitive; larger -> more stable.
+        left_th = -0.07
+        right_th = 0.07
+        if gaze_delta < left_th:
             gaze_zone = "left"
-        elif gaze_delta > 0.15:
+        elif gaze_delta > right_th:
             gaze_zone = "right"
         else:
             gaze_zone = "center"
@@ -133,6 +196,8 @@ class ExpressionTracker:
             "mouth_open_ratio": round(mouth_open_ratio, 3),
             "mouth_open": round(mouth_open, 3),
             "mouth_curve": round(mouth_curve, 3),
+            "gaze_ratio": None if gaze_ratio is None else round(gaze_ratio, 3),
+            "gaze_baseline_ratio": round(baseline_ratio, 3),
             "gaze_delta": round(gaze_delta, 3),
             "gaze_zone": gaze_zone,
             "raw_gaze_zone": gaze_zone,
