@@ -294,6 +294,12 @@ while cap.isOpened():
                     last_expression_signature = current_signature
                     expression_log_until = time.monotonic() + 2.0
 
+                    context_store.update_context(
+                        active_user_name,
+                        last_emotion=expression["emotion"],
+                        last_gaze=expression["gaze_zone"],
+                    )
+
                     gaze_hit = gaze_tracker.register(expression["gaze_zone"])
                     context_store.update_category_score(
                         active_user_name, expression["emotion"], expression["valence"]
@@ -334,6 +340,12 @@ while cap.isOpened():
 
                 if label != last_object_label:
                     last_object_label = label
+                    context_store.update_context(
+                        active_user_name,
+                        current_artifact=label,
+                        current_category=label,
+                        last_object=label,
+                    )
                     object_event = build_event(
                         "object_tracking",
                         {
@@ -428,7 +440,28 @@ while cap.isOpened():
         cv2.imshow("Output", display_image)
         # logic to send msg to unity
         if msg != "" and msg != old_msg:  # only send when there's actually something
-            action_result = apply_gesture_action(context_store, active_user_name, msg)
+            context_snapshot = context_store.get_context_snapshot(active_user_name)
+            current_item_id = (
+                context_snapshot.get("current_artifact")
+                or context_snapshot.get("last_object")
+                or "current_artifact"
+            )
+            current_category = (
+                context_snapshot.get("current_category")
+                or context_snapshot.get("last_object")
+                or "general"
+            )
+            action_result = apply_gesture_action(
+                context_store,
+                active_user_name,
+                msg,
+                item_id=current_item_id,
+                category=current_category,
+            )
+            context_snapshot = context_store.update_context(
+                active_user_name,
+                last_gesture=msg,
+            )
             recommendation = context_store.get_context_recommendation(active_user_name)
             context_event = build_event(
                 "gesture_context_update",
@@ -437,6 +470,7 @@ while cap.isOpened():
                     "gesture": msg,
                     "action": action_result,
                     "recommendation": recommendation,
+                    "context": context_snapshot,
                 },
             )
             context_store.log_event(context_event)

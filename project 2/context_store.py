@@ -56,9 +56,26 @@ class ContextStore:
                     "good_to_see": [],
                 },
                 "category_scores": {},
+                "context": {
+                    "current_artifact": "",
+                    "current_category": "",
+                    "last_object": "",
+                    "last_gesture": "",
+                    "last_emotion": "",
+                    "last_gaze": "",
+                },
                 "updated_at": 0,
             }
             self.save()
+            return
+
+        context = self.data["users"][user_name].setdefault("context", {})
+        context.setdefault("current_artifact", "")
+        context.setdefault("current_category", "")
+        context.setdefault("last_object", "")
+        context.setdefault("last_gesture", "")
+        context.setdefault("last_emotion", "")
+        context.setdefault("last_gaze", "")
 
     def create_list_item(self, user_name: str, list_name: str, item: dict) -> bool:
         self.ensure_user(user_name)
@@ -75,6 +92,20 @@ class ContextStore:
     def read_lists(self, user_name: str) -> dict:
         self.ensure_user(user_name)
         return self.data["users"][user_name]["lists"]
+
+    def update_context(self, user_name: str, **updates) -> dict:
+        self.ensure_user(user_name)
+        context = self.data["users"][user_name].setdefault("context", {})
+        for key, value in updates.items():
+            if value is not None:
+                context[key] = value
+        self.data["users"][user_name]["updated_at"] = int(time.time())
+        self.save()
+        return context
+
+    def get_context_snapshot(self, user_name: str) -> dict:
+        self.ensure_user(user_name)
+        return dict(self.data["users"][user_name].get("context", {}))
 
     def update_category_score(self, user_name: str, category: str, delta: float) -> float:
         self.ensure_user(user_name)
@@ -103,22 +134,45 @@ class ContextStore:
 
     def get_context_recommendation(self, user_name: str) -> dict:
         self.ensure_user(user_name)
+        context = self.data["users"][user_name].get("context", {})
+        current_category = context.get("current_category") or context.get("last_object")
         scores = self.data["users"][user_name].get("category_scores", {})
         if not scores:
+            if current_category:
+                return {
+                    "category": current_category,
+                    "reason": "Using current artifact category",
+                }
             return {
                 "category": "general",
                 "reason": "No category score yet",
             }
 
         top_category = max(scores, key=scores.get)
+        if current_category:
+            top_score = float(scores.get(top_category, 0.0))
+            current_score = float(scores.get(current_category, 0.0))
+            if current_score >= top_score * 0.8:
+                return {
+                    "category": current_category,
+                    "reason": "Current focus is close to top score",
+                }
         return {
             "category": top_category,
             "reason": f"Highest score={scores[top_category]}",
         }
 
 
-def apply_gesture_action(store: ContextStore, user_name: str, gesture_name: str) -> dict:
+def apply_gesture_action(
+    store: ContextStore,
+    user_name: str,
+    gesture_name: str,
+    item_id: str | None = None,
+    category: str | None = None,
+) -> dict:
     gesture_key = gesture_name.strip().lower()
+    resolved_item_id = item_id or "current_artifact"
+    resolved_category = category or "general"
 
     # Keep action mapping procedural and explicit to match lab style.
     if gesture_key in {"swiperight", "circle"}:
@@ -126,7 +180,8 @@ def apply_gesture_action(store: ContextStore, user_name: str, gesture_name: str)
             user_name,
             "favorites",
             {
-                "item_id": "current_artifact",
+                "item_id": resolved_item_id,
+                "category": resolved_category,
                 "source": "gesture",
                 "gesture": gesture_name,
                 "timestamp": int(time.time()),
@@ -137,11 +192,33 @@ def apply_gesture_action(store: ContextStore, user_name: str, gesture_name: str)
             return {
                 "action": "add_favorite",
                 "result": "created",
+                "item_id": resolved_item_id,
+                "category": resolved_category,
                 "category_score": score,
             }
         return {
             "action": "add_favorite",
             "result": "already_exists",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
+        }
+
+    if gesture_key == "swipeleft":
+        removed = store.delete_list_item(user_name, "favorites", resolved_item_id)
+        if removed:
+            score = store.update_category_score(user_name, "favorites", -0.5)
+            return {
+                "action": "remove_favorite",
+                "result": "deleted",
+                "item_id": resolved_item_id,
+                "category": resolved_category,
+                "category_score": score,
+            }
+        return {
+            "action": "remove_favorite",
+            "result": "not_found",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
         }
 
     if gesture_key == "swipeup":
@@ -149,7 +226,8 @@ def apply_gesture_action(store: ContextStore, user_name: str, gesture_name: str)
             user_name,
             "explore_later",
             {
-                "item_id": "current_artifact",
+                "item_id": resolved_item_id,
+                "category": resolved_category,
                 "source": "gesture",
                 "gesture": gesture_name,
                 "timestamp": int(time.time()),
@@ -160,11 +238,15 @@ def apply_gesture_action(store: ContextStore, user_name: str, gesture_name: str)
             return {
                 "action": "add_explore_later",
                 "result": "created",
+                "item_id": resolved_item_id,
+                "category": resolved_category,
                 "category_score": score,
             }
         return {
             "action": "add_explore_later",
             "result": "already_exists",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
         }
 
     if gesture_key in {"thumbsup", "goodtosee"}:
@@ -172,7 +254,8 @@ def apply_gesture_action(store: ContextStore, user_name: str, gesture_name: str)
             user_name,
             "good_to_see",
             {
-                "item_id": "current_artifact",
+                "item_id": resolved_item_id,
+                "category": resolved_category,
                 "source": "gesture",
                 "gesture": gesture_name,
                 "timestamp": int(time.time()),
@@ -183,14 +266,20 @@ def apply_gesture_action(store: ContextStore, user_name: str, gesture_name: str)
             return {
                 "action": "add_good_to_see",
                 "result": "created",
+                "item_id": resolved_item_id,
+                "category": resolved_category,
                 "category_score": score,
             }
         return {
             "action": "add_good_to_see",
             "result": "already_exists",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
         }
 
     return {
         "action": "none",
         "result": "no_mapping",
+        "item_id": resolved_item_id,
+        "category": resolved_category,
     }
