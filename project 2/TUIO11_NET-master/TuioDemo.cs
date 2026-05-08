@@ -1532,65 +1532,201 @@ public class TuioDemo : Form , TuioListener
         }
         else if (page == 2) // Artifacts Grid
         {
-            g.DrawString("All Artifacts", new Font("Segoe UI", 24f, FontStyle.Bold), fntBrush, 40, contentY);
-            
-            // Draw mock search/filter bar
-            g.FillRectangle(cardBsh_dynamic, 40, contentY + 40, 400, 40);
-            g.DrawRectangle(borderPen, 40, contentY + 40, 400, 40);
-            g.DrawString("Search by name, era...", new Font("Segoe UI", 10f), textLightBrush, 50, contentY + 50);
+            g.DrawString("All Artifacts", new Font("Segoe UI", 22f, FontStyle.Bold), fntBrush, 40, contentY);
 
-            if (artifacts.Count > 0)
+            int rightPanelW = 360;
+            int rightPanelX = this.ClientSize.Width - rightPanelW - 40;
+            int rightPanelY = contentY;
+
+            // Search bar
+            Rectangle searchRect = new Rectangle(40, contentY + 38, 430, 34);
+            g.FillRectangle(cardBsh_dynamic, searchRect);
+            g.DrawRectangle(borderPen, searchRect);
+            g.DrawString("Search by name, era, dynasty...", new Font("Segoe UI", 9.5f), textLightBrush, searchRect.X + 12, searchRect.Y + 9);
+
+            // Filters row
+            int filterY = contentY + 82;
+            int filterX = 40;
+            int filterW = 160;
+            int filterH = 28;
+            int filterGap = 12;
+            g.DrawString("Era:", new Font("Segoe UI", 9f, FontStyle.Bold), fntBrush, filterX, filterY + 6);
+            Rectangle eraRect = new Rectangle(filterX + 40, filterY, filterW, filterH);
+            g.FillRectangle(cardBsh_dynamic, eraRect);
+            g.DrawRectangle(borderPen, eraRect);
+            g.DrawString("All Eras", new Font("Segoe UI", 9f), textLightBrush, eraRect.X + 8, eraRect.Y + 6);
+
+            int dynX = eraRect.Right + filterGap + 40;
+            g.DrawString("Dynasty:", new Font("Segoe UI", 9f, FontStyle.Bold), fntBrush, dynX - 55, filterY + 6);
+            Rectangle dynRect = new Rectangle(dynX, filterY, filterW, filterH);
+            g.FillRectangle(cardBsh_dynamic, dynRect);
+            g.DrawRectangle(borderPen, dynRect);
+            g.DrawString("All Dynasties", new Font("Segoe UI", 9f), textLightBrush, dynRect.X + 8, dynRect.Y + 6);
+
+            int matX = dynRect.Right + filterGap + 40;
+            g.DrawString("Material:", new Font("Segoe UI", 9f, FontStyle.Bold), fntBrush, matX - 58, filterY + 6);
+            Rectangle matRect = new Rectangle(matX, filterY, filterW, filterH);
+            g.FillRectangle(cardBsh_dynamic, matRect);
+            g.DrawRectangle(borderPen, matRect);
+            g.DrawString("All Materials", new Font("Segoe UI", 9f), textLightBrush, matRect.X + 8, matRect.Y + 6);
+
+            // Right column - Live feed
+            int liveH = 260;
+            Rectangle liveRect = new Rectangle(rightPanelX, rightPanelY, rightPanelW, liveH);
+            g.FillRectangle(cardBsh_dynamic, liveRect);
+            g.DrawRectangle(borderPen, liveRect);
+            g.DrawString("Live Feed", new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, liveRect.X + 12, liveRect.Y + 10);
+            Rectangle liveInner = new Rectangle(liveRect.X + 12, liveRect.Y + 40, liveRect.Width - 24, liveRect.Height - 60);
+            g.FillRectangle(bgrBrush, liveInner);
+            g.DrawRectangle(borderPen, liveInner);
+            g.DrawString("Camera preview", new Font("Segoe UI", 9f), textLightBrush, liveInner.X + 10, liveInner.Y + 10);
+
+            // Right column - Selected artifact details
+            int detailsY = liveRect.Bottom + 18;
+            int detailsH = 260;
+            Rectangle detailsRect = new Rectangle(rightPanelX, detailsY, rightPanelW, detailsH);
+            g.FillRectangle(cardBsh_dynamic, detailsRect);
+            g.DrawRectangle(borderPen, detailsRect);
+            g.DrawString("Selected Artifact Details", new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, detailsRect.X + 12, detailsRect.Y + 10);
+
+            ArtifactRecord selected = GetArtifactById(selectedArtifactId);
+            if (selected == null && artifacts.Count > 0) selected = artifacts[0];
+            if (selected != null)
             {
-                int cardW = 280;
-                int cardH = 340;
-                int gap = 20;
-                int colsPerRow = 3;
-                int startX = 40;
-                int startY = contentY + 100;
-
-                for (int i = 0; i < artifacts.Count && i < 6; i++)
+                string imagePath = ResolveArtifactAssetPath(selected.objPath);
+                Rectangle imgRect = new Rectangle(detailsRect.X + 12, detailsRect.Y + 42, 110, 110);
+                g.FillRectangle(bgrBrush, imgRect);
+                g.DrawRectangle(borderPen, imgRect);
+                if (File.Exists(imagePath))
                 {
-                    ArtifactRecord artifact = artifacts[i];
-                    int col = i % colsPerRow;
-                    int row = i / colsPerRow;
-                    int x = startX + col * (cardW + gap);
-                    int y = startY + row * (cardH + gap);
-                    Rectangle cardRect = new Rectangle(x, y, cardW, cardH);
-
-                    g.FillRectangle(cardBsh_dynamic, cardRect);
-                    g.DrawRectangle(borderPen, cardRect);
-                    artifactClickTargets.Add(new ArtifactClickTarget { Bounds = cardRect, ArtifactId = artifact.id });
-
-                    string imagePath = ResolveArtifactAssetPath(artifact.objPath);
-                    if (File.Exists(imagePath))
+                    try
                     {
-                        try
-                        {
-                            Image artifactImg = Image.FromFile(imagePath);
-                            g.DrawImage(artifactImg, x, y, cardW, cardH - 120);
-                            artifactImg.Dispose();
-                        }
-                        catch { }
+                        Image artifactImg = Image.FromFile(imagePath);
+                        g.DrawImage(artifactImg, imgRect);
+                        artifactImg.Dispose();
                     }
-
-                    g.DrawString(artifact.name, new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, x + 10, y + cardH - 110);
-                    g.DrawString(artifact.era, new Font("Segoe UI", 10f), textLightBrush, x + 10, y + cardH - 85);
-                    g.DrawString("TUIO: " + artifact.tuioId, new Font("Segoe UI", 9f), accentBrush, x + 10, y + cardH - 65);
-                    
-                    // mock buttons
-                    g.DrawRectangle(borderPen, x + 10, y + cardH - 40, 80, 30);
-                    g.DrawString("View", new Font("Segoe UI", 9f), fntBrush, x + 30, y + cardH - 33);
+                    catch { }
                 }
+                g.DrawString(selected.name, new Font("Segoe UI", 10.5f, FontStyle.Bold), fntBrush, imgRect.Right + 10, imgRect.Y + 4);
+                g.DrawString(selected.era, new Font("Segoe UI", 9f), textLightBrush, imgRect.Right + 10, imgRect.Y + 26);
+                g.DrawString(selected.origin, new Font("Segoe UI", 9f), textLightBrush, imgRect.Right + 10, imgRect.Y + 46);
+                Rectangle descRect = new Rectangle(imgRect.X, imgRect.Bottom + 10, detailsRect.Width - 24, 60);
+                g.DrawString(selected.description, new Font("Segoe UI", 8.5f), textLightBrush, descRect);
+
+                Rectangle btn1 = new Rectangle(detailsRect.X + 12, detailsRect.Bottom - 44, 140, 30);
+                Rectangle btn2 = new Rectangle(detailsRect.X + 160, detailsRect.Bottom - 44, 170, 30);
+                g.FillRectangle(blbBrush, btn1);
+                g.DrawRectangle(borderPen, btn1);
+                g.FillRectangle(blbBrush, btn2);
+                g.DrawRectangle(borderPen, btn2);
+                g.DrawString("Open 3D View", new Font("Segoe UI", 9f, FontStyle.Bold), accentBrush, btn1.X + 18, btn1.Y + 7);
+                g.DrawString("Play Audio Guide", new Font("Segoe UI", 9f, FontStyle.Bold), accentBrush, btn2.X + 18, btn2.Y + 7);
+            }
+
+            // Artifacts grid
+            int gridStartX = 40;
+            int gridStartY = contentY + 130;
+            int gridW = rightPanelX - 60;
+            int gap = 16;
+            int colsPerRow = 4;
+            int cardW = (gridW - (colsPerRow - 1) * gap) / colsPerRow;
+            int cardH = 230;
+
+            for (int i = 0; i < artifacts.Count && i < 8; i++)
+            {
+                ArtifactRecord artifact = artifacts[i];
+                int col = i % colsPerRow;
+                int row = i / colsPerRow;
+                int x = gridStartX + col * (cardW + gap);
+                int y = gridStartY + row * (cardH + gap);
+                Rectangle cardRect = new Rectangle(x, y, cardW, cardH);
+
+                g.FillRectangle(cardBsh_dynamic, cardRect);
+                g.DrawRectangle(borderPen, cardRect);
+                artifactClickTargets.Add(new ArtifactClickTarget { Bounds = cardRect, ArtifactId = artifact.id });
+
+                string imagePath = ResolveArtifactAssetPath(artifact.objPath);
+                if (File.Exists(imagePath))
+                {
+                    try
+                    {
+                        Image artifactImg = Image.FromFile(imagePath);
+                        g.DrawImage(artifactImg, x, y, cardW, cardH - 90);
+                        artifactImg.Dispose();
+                    }
+                    catch { }
+                }
+
+                g.DrawString(artifact.name, new Font("Segoe UI", 10.5f, FontStyle.Bold), fntBrush, x + 8, y + cardH - 82);
+                g.DrawString(artifact.era, new Font("Segoe UI", 9f), textLightBrush, x + 8, y + cardH - 60);
+
+                Rectangle viewBtn = new Rectangle(x + 8, y + cardH - 32, 60, 22);
+                Rectangle listenBtn = new Rectangle(x + 74, y + cardH - 32, 60, 22);
+                Rectangle favBtn = new Rectangle(x + 140, y + cardH - 32, cardW - 148, 22);
+                g.DrawRectangle(borderPen, viewBtn);
+                g.DrawRectangle(borderPen, listenBtn);
+                g.DrawRectangle(borderPen, favBtn);
+                g.DrawString("View", new Font("Segoe UI", 8f), fntBrush, viewBtn.X + 16, viewBtn.Y + 4);
+                g.DrawString("Listen", new Font("Segoe UI", 8f), fntBrush, listenBtn.X + 10, listenBtn.Y + 4);
+                g.DrawString("Add to Fav", new Font("Segoe UI", 8f), fntBrush, favBtn.X + 6, favBtn.Y + 4);
             }
         }
         else if (page == 3 || page == 6) // Favorites List
         {
             RefreshCurrentUserFromUsersFile();
-            g.DrawString("My Favourites", new Font("Segoe UI", 24f, FontStyle.Bold), fntBrush, 40, contentY);
+            g.DrawString("My Favourites", new Font("Segoe UI", 22f, FontStyle.Bold), fntBrush, 40, contentY);
+
+            int summaryW = 240;
+            int rightPanelW = 340;
+            int summaryX = 40;
+            int summaryY = contentY + 50;
+            int listX = summaryX + summaryW + 20;
+            int listW = this.ClientSize.Width - listX - rightPanelW - 60;
+            int rightPanelX = this.ClientSize.Width - rightPanelW - 40;
+
+            Rectangle summaryRect = new Rectangle(summaryX, summaryY, summaryW, 260);
+            g.FillRectangle(cardBsh_dynamic, summaryRect);
+            g.DrawRectangle(borderPen, summaryRect);
+            g.DrawString("Summary", new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, summaryRect.X + 12, summaryRect.Y + 10);
+
+            string lastViewed = "-";
+            if (selectedArtifactId >= 0)
+            {
+                ArtifactRecord lastArtifact = GetArtifactById(selectedArtifactId);
+                if (lastArtifact != null) lastViewed = lastArtifact.name;
+            }
+            int favCount = currentUser?.favorites != null ? currentUser.favorites.Count : 0;
+            g.DrawString("Total favourites: " + favCount, new Font("Segoe UI", 10f), textLightBrush, summaryRect.X + 12, summaryRect.Y + 50);
+            g.DrawString("Last viewed artifact:", new Font("Segoe UI", 10f), textLightBrush, summaryRect.X + 12, summaryRect.Y + 90);
+            g.DrawString(lastViewed, new Font("Segoe UI", 10f, FontStyle.Bold), fntBrush, summaryRect.X + 12, summaryRect.Y + 115);
+
+            Rectangle continueRect = new Rectangle(summaryRect.X + 12, summaryRect.Bottom - 48, summaryRect.Width - 24, 32);
+            g.FillRectangle(blbBrush, continueRect);
+            g.DrawRectangle(borderPen, continueRect);
+            g.DrawString("Continue Tour", new Font("Segoe UI", 9f, FontStyle.Bold), accentBrush, continueRect.X + 38, continueRect.Y + 7);
+
+            // Live feed panel
+            Rectangle liveRect = new Rectangle(rightPanelX, summaryY, rightPanelW, 240);
+            g.FillRectangle(cardBsh_dynamic, liveRect);
+            g.DrawRectangle(borderPen, liveRect);
+            g.DrawString("Live Feed", new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, liveRect.X + 12, liveRect.Y + 10);
+            Rectangle liveInner = new Rectangle(liveRect.X + 12, liveRect.Y + 40, liveRect.Width - 24, liveRect.Height - 60);
+            g.FillRectangle(bgrBrush, liveInner);
+            g.DrawRectangle(borderPen, liveInner);
+
+            // Gesture Recognition panel
+            Rectangle gestureRect = new Rectangle(rightPanelX, liveRect.Bottom + 16, rightPanelW, 180);
+            g.FillRectangle(cardBsh_dynamic, gestureRect);
+            g.DrawRectangle(borderPen, gestureRect);
+            g.DrawString("Gesture Recognition", new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, gestureRect.X + 12, gestureRect.Y + 10);
+            g.DrawString("Circle = Open/Select", new Font("Segoe UI", 9f), textLightBrush, gestureRect.X + 12, gestureRect.Y + 45);
+            g.DrawString("Swipe Left = Previous", new Font("Segoe UI", 9f), textLightBrush, gestureRect.X + 12, gestureRect.Y + 70);
+            g.DrawString("Swipe Right = Next", new Font("Segoe UI", 9f), textLightBrush, gestureRect.X + 12, gestureRect.Y + 95);
+            g.DrawString("MediaPipe: Tracking", new Font("Segoe UI", 9f, FontStyle.Bold), accentBrush, gestureRect.X + 12, gestureRect.Y + 125);
 
             if (currentUser == null || currentUser.favorites == null || currentUser.favorites.Count == 0)
             {
-                g.DrawString("No favorites yet", new Font("Segoe UI", 16f), textLightBrush, 50, contentY + 60);
+                g.DrawString("No favourites yet", new Font("Segoe UI", 14f), textLightBrush, listX, summaryY + 10);
             }
             else
             {
@@ -1601,16 +1737,15 @@ public class TuioDemo : Form , TuioListener
                     if (artifact != null) favoriteArtifacts.Add(artifact);
                 }
 
-                int startX = 40;
-                int startY = contentY + 60;
-                int itemH = 100;
-                int itemW = 800;
+                int itemH = 90;
+                int itemW = listW;
+                int startY = summaryY + 10;
 
                 for (int i = 0; i < favoriteArtifacts.Count; i++)
                 {
                     ArtifactRecord artifact = favoriteArtifacts[i];
                     int y = startY + i * (itemH + 10);
-                    Rectangle itemRect = new Rectangle(startX, y, itemW, itemH);
+                    Rectangle itemRect = new Rectangle(listX, y, itemW, itemH);
 
                     g.FillRectangle(cardBsh_dynamic, itemRect);
                     g.DrawRectangle(borderPen, itemRect);
@@ -1622,15 +1757,21 @@ public class TuioDemo : Form , TuioListener
                         try
                         {
                             Image artifactImage = Image.FromFile(imagePath);
-                            g.DrawImage(artifactImage, startX + 10, y + 10, 80, 80);
+                            g.DrawImage(artifactImage, itemRect.X + 10, itemRect.Y + 10, 70, 70);
                             artifactImage.Dispose();
                         }
                         catch { }
                     }
 
-                    g.DrawString(artifact.name, new Font("Segoe UI", 14f, FontStyle.Bold), fntBrush, startX + 110, y + 20);
-                    g.DrawString(artifact.era, new Font("Segoe UI", 11f), textLightBrush, startX + 110, y + 50);
-                    g.DrawString("TUIO: " + artifact.tuioId, new Font("Segoe UI", 10f, FontStyle.Bold), accentBrush, startX + 650, y + 38);
+                    g.DrawString(artifact.name, new Font("Segoe UI", 11f, FontStyle.Bold), fntBrush, itemRect.X + 95, itemRect.Y + 16);
+                    g.DrawString(artifact.era, new Font("Segoe UI", 9f), textLightBrush, itemRect.X + 95, itemRect.Y + 42);
+
+                    Rectangle viewBtn = new Rectangle(itemRect.Right - 190, itemRect.Y + 28, 70, 26);
+                    Rectangle audioBtn = new Rectangle(itemRect.Right - 110, itemRect.Y + 28, 70, 26);
+                    g.DrawRectangle(borderPen, viewBtn);
+                    g.DrawRectangle(borderPen, audioBtn);
+                    g.DrawString("View 3D", new Font("Segoe UI", 8f), fntBrush, viewBtn.X + 8, viewBtn.Y + 6);
+                    g.DrawString("Play", new Font("Segoe UI", 8f), fntBrush, audioBtn.X + 20, audioBtn.Y + 6);
                 }
             }
         }
@@ -1692,13 +1833,22 @@ public class TuioDemo : Form , TuioListener
                     PlayAudio(artifact.audioPath);
                 }
 
-                int leftW = 600;
-                int rightW = 400;
                 int startX = 40;
-                
+                int gutter = 20;
+                int rightW = 360;
+                int centerW = 360;
+                int leftW = this.ClientSize.Width - startX * 2 - rightW - centerW - gutter * 2;
+                if (leftW < 520) leftW = 520;
+
+                int leftX = startX;
+                int centerX = leftX + leftW + gutter;
+                int rightX = centerX + centerW + gutter;
+
                 // Left 3D Viewer Panel
-                g.FillRectangle(cardBsh_dynamic, startX, contentY, leftW, 500);
-                g.DrawRectangle(borderPen, startX, contentY, leftW, 500);
+                Rectangle viewerRect = new Rectangle(leftX, contentY, leftW, 320);
+                g.FillRectangle(cardBsh_dynamic, viewerRect);
+                g.DrawRectangle(borderPen, viewerRect);
+                g.DrawString("3D Artifact Viewer", new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, viewerRect.X + 12, viewerRect.Y + 10);
                 
                 string gifPath = Resolve3DModelGifPath(artifact.name);
                 if (gifPath != null)
@@ -1709,7 +1859,7 @@ public class TuioDemo : Form , TuioListener
                         artifact3DPictureBox.LoadAsync();
                     }
                     artifact3DPictureBox.BackColor = currentTheme.cardBackground;
-                    artifact3DPictureBox.Bounds = new Rectangle(startX + 20, contentY + 20, leftW - 40, 460);
+                    artifact3DPictureBox.Bounds = new Rectangle(viewerRect.X + 20, viewerRect.Y + 40, viewerRect.Width - 40, viewerRect.Height - 60);
                     if (!artifact3DPictureBox.Visible) artifact3DPictureBox.Visible = true;
                 }
                 else
@@ -1719,66 +1869,106 @@ public class TuioDemo : Form , TuioListener
                     if (File.Exists(imagePath))
                     {
                         Image artifactImage = Image.FromFile(imagePath);
-                        g.DrawImage(artifactImage, startX + 20, contentY + 20, leftW - 40, 460);
+                        g.DrawImage(artifactImage, viewerRect.X + 20, viewerRect.Y + 40, viewerRect.Width - 40, viewerRect.Height - 60);
                         artifactImage.Dispose();
                     }
                 }
+
+                // Viewer controls
+                Rectangle rotateBtn = new Rectangle(viewerRect.X + 20, viewerRect.Bottom + 10, 90, 26);
+                Rectangle zoomBtn = new Rectangle(viewerRect.X + 120, viewerRect.Bottom + 10, 80, 26);
+                Rectangle resetBtn = new Rectangle(viewerRect.X + 210, viewerRect.Bottom + 10, 80, 26);
+                g.DrawRectangle(borderPen, rotateBtn);
+                g.DrawRectangle(borderPen, zoomBtn);
+                g.DrawRectangle(borderPen, resetBtn);
+                g.DrawString("Rotate", new Font("Segoe UI", 8.5f), fntBrush, rotateBtn.X + 20, rotateBtn.Y + 6);
+                g.DrawString("Zoom", new Font("Segoe UI", 8.5f), fntBrush, zoomBtn.X + 20, zoomBtn.Y + 6);
+                g.DrawString("Reset", new Font("Segoe UI", 8.5f), fntBrush, resetBtn.X + 20, resetBtn.Y + 6);
+
+                // Artifact voice panel
+                Rectangle voiceRect = new Rectangle(leftX, viewerRect.Bottom + 46, leftW, 120);
+                g.FillRectangle(cardBsh_dynamic, voiceRect);
+                g.DrawRectangle(borderPen, voiceRect);
+                g.DrawString("Artifact Voice", new Font("Segoe UI", 11f, FontStyle.Bold), fntBrush, voiceRect.X + 12, voiceRect.Y + 10);
+                g.DrawString("Playback", new Font("Segoe UI", 9f), textLightBrush, voiceRect.X + 12, voiceRect.Y + 38);
+                g.DrawLine(borderPen, voiceRect.X + 90, voiceRect.Y + 60, voiceRect.Right - 20, voiceRect.Y + 60);
                 
-                // Right Metadata Panel
-                int rightX = startX + leftW + 30;
-                g.DrawString("Artifact Metadata", new Font("Segoe UI", 16f, FontStyle.Bold), fntBrush, rightX, contentY);
+                // Center Metadata Panel
+                Rectangle metaRect = new Rectangle(centerX, contentY, centerW, 440);
+                g.FillRectangle(cardBsh_dynamic, metaRect);
+                g.DrawRectangle(borderPen, metaRect);
+                g.DrawString("Artifact Metadata", new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, metaRect.X + 12, metaRect.Y + 10);
                 
                 Font keyFont = new Font("Segoe UI", 12f, FontStyle.Bold);
                 Font valFont = new Font("Segoe UI", 12f);
-                int lineY = contentY + 40;
+                int lineY = metaRect.Y + 42;
 
-                g.DrawString("Name:", keyFont, fntBrush, rightX, lineY);
-                g.DrawString(artifact.name, valFont, fntBrush, rightX + 120, lineY);
+                g.DrawString("Name:", keyFont, fntBrush, metaRect.X + 12, lineY);
+                g.DrawString(artifact.name, valFont, fntBrush, metaRect.X + 120, lineY);
                 lineY += 30;
 
-                g.DrawString("Era:", keyFont, fntBrush, rightX, lineY);
-                g.DrawString(artifact.era, valFont, fntBrush, rightX + 120, lineY);
+                g.DrawString("Era:", keyFont, fntBrush, metaRect.X + 12, lineY);
+                g.DrawString(artifact.era, valFont, fntBrush, metaRect.X + 120, lineY);
                 lineY += 30;
 
-                g.DrawString("Origin:", keyFont, fntBrush, rightX, lineY);
-                g.DrawString(artifact.origin, valFont, fntBrush, rightX + 120, lineY);
+                g.DrawString("Origin:", keyFont, fntBrush, metaRect.X + 12, lineY);
+                g.DrawString(artifact.origin, valFont, fntBrush, metaRect.X + 120, lineY);
                 lineY += 40;
                 
                 bool hasAudio = ResolveAudioPath(artifact.audioPath) != null;
                 bool has3D = Resolve3DModelPath(artifact.name) != null;
                 
-                g.DrawString("3D Model:", keyFont, fntBrush, rightX, lineY);
-                g.DrawString(has3D ? "Available (Zoom to View)" : "Coming soon", valFont, has3D ? accentBrush : textLightBrush, rightX + 120, lineY);
+                g.DrawString("3D Model:", keyFont, fntBrush, metaRect.X + 12, lineY);
+                g.DrawString(has3D ? "Available" : "Coming soon", valFont, has3D ? accentBrush : textLightBrush, metaRect.X + 120, lineY);
                 lineY += 30;
                 
-                g.DrawString("Audio:", keyFont, fntBrush, rightX, lineY);
-                g.DrawString(hasAudio ? "Playing now" : "Coming soon", valFont, hasAudio ? accentBrush : textLightBrush, rightX + 120, lineY);
+                g.DrawString("Audio:", keyFont, fntBrush, metaRect.X + 12, lineY);
+                g.DrawString(hasAudio ? "Playing now" : "Coming soon", valFont, hasAudio ? accentBrush : textLightBrush, metaRect.X + 120, lineY);
                 lineY += 40;
 
-                audioToggleButtonRect = new Rectangle(rightX, lineY, 190, 34);
+                audioToggleButtonRect = new Rectangle(metaRect.X + 12, lineY, 160, 30);
                 g.FillRectangle(blbBrush, audioToggleButtonRect);
                 g.DrawRectangle(borderPen, audioToggleButtonRect);
-                g.DrawString(audioMuted ? "Unmute narration" : "Mute narration", new Font("Segoe UI", 11f, FontStyle.Bold), accentBrush, audioToggleButtonRect.X + 18, audioToggleButtonRect.Y + 8);
+                g.DrawString(audioMuted ? "Unmute" : "Mute", new Font("Segoe UI", 9f, FontStyle.Bold), accentBrush, audioToggleButtonRect.X + 45, audioToggleButtonRect.Y + 6);
                 lineY += 54;
 
                 bool isFavorite = IsFavoriteArtifact(artifact.id);
-                favoriteToggleButtonRect = new Rectangle(rightX + 210, lineY - 54, 190, 34);
+                favoriteToggleButtonRect = new Rectangle(metaRect.X + 190, lineY - 54, 160, 30);
                 g.FillRectangle(blbBrush, favoriteToggleButtonRect);
                 g.DrawRectangle(borderPen, favoriteToggleButtonRect);
-                g.DrawString(isFavorite ? "Remove favourite" : "Add favourite", new Font("Segoe UI", 11f, FontStyle.Bold), accentBrush, favoriteToggleButtonRect.X + 20, favoriteToggleButtonRect.Y + 8);
+                g.DrawString(isFavorite ? "Remove" : "Add", new Font("Segoe UI", 9f, FontStyle.Bold), accentBrush, favoriteToggleButtonRect.X + 55, favoriteToggleButtonRect.Y + 6);
 
-                g.DrawString("Description:", keyFont, fntBrush, rightX, lineY);
-                RectangleF descRect = new RectangleF(rightX, lineY + 26, rightW, 200);
+                g.DrawString("Description:", keyFont, fntBrush, metaRect.X + 12, lineY);
+                RectangleF descRect = new RectangleF(metaRect.X + 12, lineY + 26, metaRect.Width - 24, 200);
                 g.DrawString(artifact.description, valFont, textLightBrush, descRect);
 
-                g.DrawString(artifactFavoriteHint, new Font("Segoe UI", 12f, FontStyle.Bold), accentBrush, rightX, contentY + 450);
+                // Right column - Live feed
+                Rectangle liveRect = new Rectangle(rightX, contentY, rightW, 260);
+                g.FillRectangle(cardBsh_dynamic, liveRect);
+                g.DrawRectangle(borderPen, liveRect);
+                g.DrawString("Live Feed", new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, liveRect.X + 12, liveRect.Y + 10);
+                Rectangle liveInner = new Rectangle(liveRect.X + 12, liveRect.Y + 40, liveRect.Width - 24, liveRect.Height - 60);
+                g.FillRectangle(bgrBrush, liveInner);
+                g.DrawRectangle(borderPen, liveInner);
+
+                // Right column - Gesture Recognition
+                Rectangle gestureRect = new Rectangle(rightX, liveRect.Bottom + 18, rightW, 180);
+                g.FillRectangle(cardBsh_dynamic, gestureRect);
+                g.DrawRectangle(borderPen, gestureRect);
+                g.DrawString("Gesture Recognition", new Font("Segoe UI", 12f, FontStyle.Bold), fntBrush, gestureRect.X + 12, gestureRect.Y + 10);
+                g.DrawString("Circle = Open/Select", new Font("Segoe UI", 9f), textLightBrush, gestureRect.X + 12, gestureRect.Y + 45);
+                g.DrawString("Swipe Left = Previous", new Font("Segoe UI", 9f), textLightBrush, gestureRect.X + 12, gestureRect.Y + 70);
+                g.DrawString("Swipe Right = Next", new Font("Segoe UI", 9f), textLightBrush, gestureRect.X + 12, gestureRect.Y + 95);
+                g.DrawString("MediaPipe: Tracking", new Font("Segoe UI", 9f, FontStyle.Bold), accentBrush, gestureRect.X + 12, gestureRect.Y + 125);
+
+                g.DrawString(artifactFavoriteHint, new Font("Segoe UI", 11f, FontStyle.Bold), accentBrush, centerX, contentY + 455);
             }
         }
         
 
 
         // Draw Navigation hint
-        g.DrawString("Swipe Left/Right to Navigate  |  Make a CIRCLE to select", new Font("Segoe UI", 11f, FontStyle.Italic), textLightBrush, 40, this.ClientSize.Height - 40);
+        g.DrawString("Circle gesture: Open Menu   |   Swipe Left/Right: Navigate", new Font("Segoe UI", 11f, FontStyle.Italic), textLightBrush, 40, this.ClientSize.Height - 40);
         
         // Removed TUIO debug drawing for objects, cursors, and blobs to keep UI clean.
 

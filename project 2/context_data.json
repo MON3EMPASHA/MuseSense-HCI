@@ -18,21 +18,23 @@
       "category_scores": {
         "sink": 0.2,
         "knife": 0.2,
-        "favorites": 1.0
+        "favorites": 1.0,
+        "suitcase": -0.6
       },
       "artifact_scores": {
         "sink": 0.2,
-        "knife": 0.2
+        "knife": 0.2,
+        "suitcase": -0.6
       },
       "context": {
-        "current_artifact": "suitcase",
-        "current_category": "suitcase",
-        "last_object": "suitcase",
+        "current_artifact": "giraffe",
+        "current_category": "giraffe",
+        "last_object": "giraffe",
         "last_gesture": "Circle",
         "last_emotion": "neutral",
         "last_gaze": "center"
       },
-      "updated_at": 1778263651
+      "updated_at": 1778277059
     },
     "Mohamed Ibrahim": {
       "profile": "objects/obj5.png",
