@@ -84,19 +84,19 @@
         "happy": 0.9
       },
       "context": {
-        "current_artifact": "person",
-        "current_category": "person",
-        "last_object": "person",
+        "current_artifact": "mouse",
+        "current_category": "mouse",
+        "last_object": "mouse",
         "last_gesture": "",
         "last_emotion": "happy",
         "last_gaze": "center"
       },
-      "updated_at": 1778252047
+      "updated_at": 1778252437
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778252047
+    "updated_at": 1778252437
   }
 }

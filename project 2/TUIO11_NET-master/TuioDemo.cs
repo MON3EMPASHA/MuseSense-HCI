@@ -148,7 +148,21 @@ public class TuioDemo : Form , TuioListener
                 public List<UserRecord> artifacts { get; set; } // Keep the same property name for JSON compatibility
         }
 
+        class ArtifactClickTarget
+        {
+                public Rectangle Bounds { get; set; }
+                public int ArtifactId { get; set; }
+        }
+
+        class PageClickTarget
+        {
+                public Rectangle Bounds { get; set; }
+                public int PageIndex { get; set; }
+        }
+
         List<ArtifactRecord> artifacts = new List<ArtifactRecord>();
+        List<ArtifactClickTarget> artifactClickTargets = new List<ArtifactClickTarget>();
+        List<PageClickTarget> pageClickTargets = new List<PageClickTarget>();
         int selectedArtifactId = -1;
         string artifactsJsonPath = "";
         Pen curPen = new Pen(new SolidBrush(Color.Blue), 1);
@@ -171,21 +185,24 @@ public class TuioDemo : Form , TuioListener
         SoundPlayer currentAudioPlayer = null;
         int playingArtifactId = -1;
         bool audioMuted = false;
+        Rectangle audioToggleButtonRect = Rectangle.Empty;
         
         PictureBox artifact3DPictureBox;
         
         System.Timers.Timer menuSelectTimer;
+        const int UI_REFRESH_MS = 100;
+        const int MENU_SELECT_DELAY_MS = 700;
 
 		public TuioDemo(int port) {
         System.Timers.Timer slideTimer = new System.Timers.Timer(3000);
         slideTimer.Elapsed += (s, e) => { slideIndex = (slideIndex + 1) % 5; ; Invoke((Action)Invalidate); };
         slideTimer.Start();
         
-        System.Timers.Timer uiTimer = new System.Timers.Timer(500);
+        System.Timers.Timer uiTimer = new System.Timers.Timer(UI_REFRESH_MS);
         uiTimer.Elapsed += (s, e) => { try { Invoke((Action)Invalidate); } catch { } };
         uiTimer.Start();
         
-        menuSelectTimer = new System.Timers.Timer(3000);
+        menuSelectTimer = new System.Timers.Timer(MENU_SELECT_DELAY_MS);
         menuSelectTimer.AutoReset = false;
         menuSelectTimer.Elapsed += (s, e) => {
             if (tuioMarker100Visible)
@@ -222,6 +239,7 @@ public class TuioDemo : Form , TuioListener
 
         this.Closing+=new CancelEventHandler(Form_Closing);
 			this.KeyDown+=new KeyEventHandler(Form_KeyDown);
+            this.MouseDown += new MouseEventHandler(Form_MouseDown);
 
 			this.SetStyle( ControlStyles.AllPaintingInWmPaint |
 							ControlStyles.UserPaint |
@@ -278,9 +296,44 @@ public class TuioDemo : Form , TuioListener
 
  			} else if ( e.KeyData == Keys.V ) {
  				verbose=!verbose;
+ 			} else if ( e.KeyData == Keys.Right ) {
+                NavigateNextPage();
+ 			} else if ( e.KeyData == Keys.Left ) {
+                NavigatePreviousPage();
  			}
 
  		}
+
+        private void Form_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+
+            for (int i = 0; i < pageClickTargets.Count; i++)
+            {
+                PageClickTarget target = pageClickTargets[i];
+                if (target.Bounds.Contains(e.Location))
+                {
+                    GoToPage(target.PageIndex);
+                    return;
+                }
+            }
+
+            if (audioToggleButtonRect.Contains(e.Location))
+            {
+                ToggleNarration();
+                return;
+            }
+
+            for (int i = 0; i < artifactClickTargets.Count; i++)
+            {
+                ArtifactClickTarget target = artifactClickTargets[i];
+                if (target.Bounds.Contains(e.Location))
+                {
+                    OpenArtifactDetails(target.ArtifactId);
+                    return;
+                }
+            }
+        }
 
 		private void Form_Closing(object sender, System.ComponentModel.CancelEventArgs e)
 		{
@@ -362,7 +415,7 @@ public class TuioDemo : Form , TuioListener
             
             if (o.SymbolID == 100 && o.SessionID == tuioMarker100SessionId)
             {
-                // When marker is lifted, keep the menu visible but start the 3-second selection timer
+                // When marker is lifted, keep the menu visible briefly and then commit the selected item.
                 if (menuSelectTimer != null) 
                 {
                     menuSelectTimer.Stop();
@@ -804,6 +857,23 @@ public class TuioDemo : Form , TuioListener
         } catch { }
     }
 
+    private void ToggleNarration()
+    {
+        audioMuted = !audioMuted;
+
+        if (audioMuted)
+        {
+            StopAudio();
+        }
+        else if (page == 5 && selectedArtifactId >= 0)
+        {
+            ArtifactRecord artifact = GetArtifactById(selectedArtifactId);
+            if (artifact != null) PlayAudio(artifact.audioPath);
+        }
+
+        Invalidate();
+    }
+
     // find the real image path from objPath field in json
     string ResolveArtifactAssetPath(string relativePath)
     {
@@ -899,6 +969,17 @@ public class TuioDemo : Form , TuioListener
         socketClient.sendMessage("TUIO:" + markerId);
     }
 
+    void OpenArtifactDetails(int artifactId)
+    {
+        ArtifactRecord artifact = GetArtifactById(artifactId);
+        if (artifact == null) return;
+
+        selectedArtifactId = artifact.id;
+        artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
+        page = 5;
+        Invalidate();
+    }
+
     void GoToPage(int pageIndex)
     {
         if (InvokeRequired)
@@ -915,6 +996,18 @@ public class TuioDemo : Form , TuioListener
         if (pageIndex == 3 || pageIndex == 6) { RefreshCurrentUserFromUsersFile(); favoritesPageIndex = 0; }
         page = pageIndex;
         Invalidate();
+    }
+
+    void NavigateNextPage()
+    {
+        if (page < 4) GoToPage(page + 1);
+        else if (page == 4) GoToPage(0);
+    }
+
+    void NavigatePreviousPage()
+    {
+        if (page > 0 && page <= 4) GoToPage(page - 1);
+        else if (page == 0) GoToPage(4);
     }
 
 
@@ -1074,16 +1167,8 @@ public class TuioDemo : Form , TuioListener
            
             else
             {
-                if (msg.Trim() == "SwipeRight")
-                {
-                    if (page < 4) page++;
-                    else if (page == 4) page = 0;
-                }
-                if (msg.Trim() == "SwipeLeft")
-                {
-                    if (page > 0 && page <= 4) page--;
-                    else if (page == 0) page = 4;
-                }
+                if (msg.Trim() == "SwipeRight") NavigateNextPage();
+                if (msg.Trim() == "SwipeLeft") NavigatePreviousPage();
                 if (msg.Trim() == "Circle" && page == 5 && selectedArtifactId >= 0)
                 {
                     if (AddArtifactToFavorites(selectedArtifactId))
@@ -1129,6 +1214,10 @@ public class TuioDemo : Form , TuioListener
             }
         }
 
+        artifactClickTargets.Clear();
+        pageClickTargets.Clear();
+        audioToggleButtonRect = Rectangle.Empty;
+
         // Getting the graphics object
         Graphics g = pevent.Graphics;
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
@@ -1140,6 +1229,36 @@ public class TuioDemo : Form , TuioListener
         // Draw Application Title
         Font titleFont = new Font("Segoe UI", 24f, FontStyle.Bold);
         g.DrawString("Smart Egyptian Museum", titleFont, fntBrush, 30, 20);
+        Font headerNavFont = new Font("Segoe UI", 10f, FontStyle.Bold);
+
+        string[] headerPages = { "Home", "Profile", "Artifacts", "Favourites", "Explore" };
+        int headerNavX = 310;
+        int headerNavY = 62;
+        int headerNavW = 98;
+        int headerNavH = 28;
+        int headerNavGap = 10;
+
+        for (int i = 0; i < headerPages.Length; i++)
+        {
+            Rectangle tabRect = new Rectangle(
+                headerNavX + i * (headerNavW + headerNavGap),
+                headerNavY,
+                headerNavW,
+                headerNavH
+            );
+            bool isActivePage = page == i;
+            g.FillRectangle(isActivePage ? blbBrush : cardBsh_dynamic, tabRect);
+            g.DrawRectangle(isActivePage ? new Pen(accentBrush.Color, 1) : borderPen, tabRect);
+            SizeF tabTextSize = g.MeasureString(headerPages[i], headerNavFont);
+            g.DrawString(
+                headerPages[i],
+                headerNavFont,
+                isActivePage ? accentBrush : fntBrush,
+                tabRect.X + (tabRect.Width - tabTextSize.Width) / 2,
+                tabRect.Y + 6
+            );
+            pageClickTargets.Add(new PageClickTarget { Bounds = tabRect, PageIndex = i });
+        }
 
         // Draw User Status in Center
         if (uname != "Visitor")
@@ -1220,9 +1339,11 @@ public class TuioDemo : Form , TuioListener
                     ArtifactRecord artifact = artifacts[i];
                     int x = startX + i * (cardW + gap);
                     int y = startY;
+                    Rectangle cardRect = new Rectangle(x, y, cardW, cardH);
 
-                    g.FillRectangle(cardBsh_dynamic, x, y, cardW, cardH);
-                    g.DrawRectangle(borderPen, x, y, cardW, cardH);
+                    g.FillRectangle(cardBsh_dynamic, cardRect);
+                    g.DrawRectangle(borderPen, cardRect);
+                    artifactClickTargets.Add(new ArtifactClickTarget { Bounds = cardRect, ArtifactId = artifact.id });
 
                     string imagePath = ResolveArtifactAssetPath(artifact.objPath);
                     if (File.Exists(imagePath))
@@ -1244,10 +1365,73 @@ public class TuioDemo : Form , TuioListener
         else if (page == 1) // Profile
         {
             g.DrawString("User Profile", new Font("Segoe UI", 28f, FontStyle.Bold), fntBrush, 50, contentY);
-            if (currentUser != null) {
-                g.DrawString("Age: " + currentUser.age, new Font("Segoe UI", 14f), fntBrush, 50, contentY + 60);
-                g.DrawString("Gender: " + currentUser.gender, new Font("Segoe UI", 14f), fntBrush, 50, contentY + 90);
+            int cardX = 50;
+            int cardY = contentY + 60;
+            int cardW = 920;
+            int cardH = 430;
+
+            g.FillRectangle(cardBsh_dynamic, cardX, cardY, cardW, cardH);
+            g.DrawRectangle(borderPen, cardX, cardY, cardW, cardH);
+
+            int avatarX = cardX + 35;
+            int avatarY = cardY + 35;
+            int avatarSize = 220;
+            g.FillEllipse(avatarBrush, avatarX, avatarY, avatarSize, avatarSize);
+
+            if (upic != null)
+            {
+                g.DrawImage(upic, avatarX, avatarY, avatarSize, avatarSize);
             }
+
+            Font labelFont = new Font("Segoe UI", 12f, FontStyle.Bold);
+            Font valueFont = new Font("Segoe UI", 15f, FontStyle.Regular);
+            Font sectionFont = new Font("Segoe UI", 18f, FontStyle.Bold);
+            int infoX = avatarX + avatarSize + 50;
+            int lineY = cardY + 45;
+
+            g.DrawString(uname, new Font("Segoe UI", 24f, FontStyle.Bold), fntBrush, infoX, lineY);
+            lineY += 55;
+            g.DrawString("Visitor Snapshot", sectionFont, accentBrush, infoX, lineY);
+            lineY += 45;
+
+            if (currentUser != null)
+            {
+                g.DrawString("Age", labelFont, textLightBrush, infoX, lineY);
+                g.DrawString(currentUser.age, valueFont, fntBrush, infoX + 150, lineY - 2);
+                lineY += 42;
+
+                g.DrawString("Gender", labelFont, textLightBrush, infoX, lineY);
+                g.DrawString(currentUser.gender, valueFont, fntBrush, infoX + 150, lineY - 2);
+                lineY += 42;
+
+                string favoriteCount = currentUser.favorites != null ? currentUser.favorites.Count.ToString() : "0";
+                g.DrawString("Favourites", labelFont, textLightBrush, infoX, lineY);
+                g.DrawString(favoriteCount, valueFont, fntBrush, infoX + 150, lineY - 2);
+                lineY += 42;
+            }
+            else
+            {
+                g.DrawString("No detailed user record loaded yet.", valueFont, textLightBrush, infoX, lineY);
+                lineY += 42;
+            }
+
+            Rectangle statBox1 = new Rectangle(infoX, cardY + 250, 180, 95);
+            Rectangle statBox2 = new Rectangle(infoX + 205, cardY + 250, 180, 95);
+            Rectangle statBox3 = new Rectangle(infoX + 410, cardY + 250, 180, 95);
+
+            g.FillRectangle(blbBrush, statBox1);
+            g.FillRectangle(blbBrush, statBox2);
+            g.FillRectangle(blbBrush, statBox3);
+            g.DrawRectangle(borderPen, statBox1);
+            g.DrawRectangle(borderPen, statBox2);
+            g.DrawRectangle(borderPen, statBox3);
+
+            g.DrawString("Profile", labelFont, textLightBrush, statBox1.X + 18, statBox1.Y + 18);
+            g.DrawString("Bluetooth matched", new Font("Segoe UI", 13f, FontStyle.Bold), fntBrush, statBox1.X + 18, statBox1.Y + 48);
+            g.DrawString("Theme", labelFont, textLightBrush, statBox2.X + 18, statBox2.Y + 18);
+            g.DrawString(currentThemeMode == "dark" ? "Dark mode" : "Light mode", new Font("Segoe UI", 13f, FontStyle.Bold), fntBrush, statBox2.X + 18, statBox2.Y + 48);
+            g.DrawString("Marker 102", labelFont, textLightBrush, statBox3.X + 18, statBox3.Y + 18);
+            g.DrawString("Toggle theme", new Font("Segoe UI", 13f, FontStyle.Bold), fntBrush, statBox3.X + 18, statBox3.Y + 48);
         }
         else if (page == 2) // Artifacts Grid
         {
@@ -1274,9 +1458,11 @@ public class TuioDemo : Form , TuioListener
                     int row = i / colsPerRow;
                     int x = startX + col * (cardW + gap);
                     int y = startY + row * (cardH + gap);
+                    Rectangle cardRect = new Rectangle(x, y, cardW, cardH);
 
-                    g.FillRectangle(cardBsh_dynamic, x, y, cardW, cardH);
-                    g.DrawRectangle(borderPen, x, y, cardW, cardH);
+                    g.FillRectangle(cardBsh_dynamic, cardRect);
+                    g.DrawRectangle(borderPen, cardRect);
+                    artifactClickTargets.Add(new ArtifactClickTarget { Bounds = cardRect, ArtifactId = artifact.id });
 
                     string imagePath = ResolveArtifactAssetPath(artifact.objPath);
                     if (File.Exists(imagePath))
@@ -1327,9 +1513,11 @@ public class TuioDemo : Form , TuioListener
                 {
                     ArtifactRecord artifact = favoriteArtifacts[i];
                     int y = startY + i * (itemH + 10);
+                    Rectangle itemRect = new Rectangle(startX, y, itemW, itemH);
 
-                    g.FillRectangle(cardBsh_dynamic, startX, y, itemW, itemH);
-                    g.DrawRectangle(borderPen, startX, y, itemW, itemH);
+                    g.FillRectangle(cardBsh_dynamic, itemRect);
+                    g.DrawRectangle(borderPen, itemRect);
+                    artifactClickTargets.Add(new ArtifactClickTarget { Bounds = itemRect, ArtifactId = artifact.id });
 
                     string imagePath = ResolveArtifactAssetPath(artifact.objPath);
                     if (File.Exists(imagePath))
@@ -1345,13 +1533,55 @@ public class TuioDemo : Form , TuioListener
 
                     g.DrawString(artifact.name, new Font("Segoe UI", 14f, FontStyle.Bold), fntBrush, startX + 110, y + 20);
                     g.DrawString(artifact.era, new Font("Segoe UI", 11f), textLightBrush, startX + 110, y + 50);
+                    g.DrawString("TUIO: " + artifact.tuioId, new Font("Segoe UI", 10f, FontStyle.Bold), accentBrush, startX + 650, y + 38);
                 }
             }
         }
         else if (page == 4) // Explore
         {
             g.DrawString("Explore the Museum Map", new Font("Segoe UI", 28f, FontStyle.Bold), fntBrush, 50, contentY);
-            g.DrawString("Interactive map coming soon...", new Font("Segoe UI", 14f), textLightBrush, 50, contentY + 60);
+            g.DrawString("Suggested zones and quick picks for the current visit.", new Font("Segoe UI", 14f), textLightBrush, 50, contentY + 60);
+
+            Rectangle overviewRect = new Rectangle(50, contentY + 110, 520, 420);
+            Rectangle picksRect = new Rectangle(600, contentY + 110, 380, 420);
+            g.FillRectangle(cardBsh_dynamic, overviewRect);
+            g.FillRectangle(cardBsh_dynamic, picksRect);
+            g.DrawRectangle(borderPen, overviewRect);
+            g.DrawRectangle(borderPen, picksRect);
+
+            g.DrawString("Museum Route", new Font("Segoe UI", 18f, FontStyle.Bold), fntBrush, overviewRect.X + 20, overviewRect.Y + 20);
+            g.DrawString("Ancient Egypt", new Font("Segoe UI", 14f, FontStyle.Bold), accentBrush, overviewRect.X + 35, overviewRect.Y + 80);
+            g.DrawString("Royal Collection", new Font("Segoe UI", 14f, FontStyle.Bold), accentBrush, overviewRect.X + 185, overviewRect.Y + 180);
+            g.DrawString("Sculpture Hall", new Font("Segoe UI", 14f, FontStyle.Bold), accentBrush, overviewRect.X + 330, overviewRect.Y + 300);
+
+            Pen routePen = new Pen(accentBrush.Color, 4);
+            g.DrawEllipse(routePen, overviewRect.X + 40, overviewRect.Y + 120, 18, 18);
+            g.DrawEllipse(routePen, overviewRect.X + 200, overviewRect.Y + 220, 18, 18);
+            g.DrawEllipse(routePen, overviewRect.X + 355, overviewRect.Y + 340, 18, 18);
+            g.DrawLine(routePen, overviewRect.X + 58, overviewRect.Y + 129, overviewRect.X + 200, overviewRect.Y + 229);
+            g.DrawLine(routePen, overviewRect.X + 218, overviewRect.Y + 229, overviewRect.X + 355, overviewRect.Y + 349);
+
+            g.DrawString("Use marker 100 to open the circular menu and jump between pages.", new Font("Segoe UI", 12f), textLightBrush, overviewRect.X + 20, overviewRect.Bottom - 75);
+            g.DrawString("Place any artifact marker to open its details instantly.", new Font("Segoe UI", 12f), textLightBrush, overviewRect.X + 20, overviewRect.Bottom - 45);
+
+            g.DrawString("Quick Picks", new Font("Segoe UI", 18f, FontStyle.Bold), fntBrush, picksRect.X + 20, picksRect.Y + 20);
+
+            for (int i = 0; i < artifacts.Count && i < 3; i++)
+            {
+                ArtifactRecord artifact = artifacts[i];
+                int cardX = picksRect.X + 20;
+                int cardY = picksRect.Y + 65 + i * 110;
+                Rectangle artifactRect = new Rectangle(cardX, cardY, picksRect.Width - 40, 90);
+                g.FillRectangle(blbBrush, artifactRect);
+                g.DrawRectangle(borderPen, artifactRect);
+                artifactClickTargets.Add(new ArtifactClickTarget { Bounds = artifactRect, ArtifactId = artifact.id });
+
+                g.DrawString(artifact.name, new Font("Segoe UI", 13f, FontStyle.Bold), fntBrush, artifactRect.X + 16, artifactRect.Y + 14);
+                g.DrawString(artifact.era, new Font("Segoe UI", 10f), textLightBrush, artifactRect.X + 16, artifactRect.Y + 42);
+                g.DrawString("Marker " + artifact.tuioId, new Font("Segoe UI", 10f, FontStyle.Bold), accentBrush, artifactRect.Right - 105, artifactRect.Y + 32);
+            }
+
+            g.DrawString("Swipe to continue exploring, or place a marker to focus on a single artifact.", new Font("Segoe UI", 12f), textLightBrush, picksRect.X + 20, picksRect.Bottom - 40);
         }
         else if (page == 5 && selectedArtifactId >= 0) // Details
         {
@@ -1427,6 +1657,12 @@ public class TuioDemo : Form , TuioListener
                 g.DrawString("Audio:", keyFont, fntBrush, rightX, lineY);
                 g.DrawString(hasAudio ? "Playing now" : "Coming soon", valFont, hasAudio ? accentBrush : textLightBrush, rightX + 120, lineY);
                 lineY += 40;
+
+                audioToggleButtonRect = new Rectangle(rightX, lineY, 190, 34);
+                g.FillRectangle(blbBrush, audioToggleButtonRect);
+                g.DrawRectangle(borderPen, audioToggleButtonRect);
+                g.DrawString(audioMuted ? "Unmute narration" : "Mute narration", new Font("Segoe UI", 11f, FontStyle.Bold), accentBrush, audioToggleButtonRect.X + 18, audioToggleButtonRect.Y + 8);
+                lineY += 54;
 
                 g.DrawString("Description:", keyFont, fntBrush, rightX, lineY);
                 RectangleF descRect = new RectangleF(rightX, lineY + 26, rightW, 200);

@@ -58,11 +58,26 @@ TUIO_PRIORITY_SECONDS = 3.0
 # user / bluetooth helpers moved to users.py
 
 
-def send_socket_message(connection: socket.socket, payload: str) -> None:
-    if not payload:
+def close_csharp_connection(connection: socket.socket | None) -> None:
+    if connection is None:
         return
 
-    connection.sendall(f"{payload}\n".encode("utf-8"))
+    try:
+        connection.close()
+    except OSError:
+        pass
+
+
+def send_socket_message(connection: socket.socket | None, payload: str) -> bool:
+    if connection is None or not payload:
+        return False
+
+    try:
+        connection.sendall(f"{payload}\n".encode("utf-8"))
+        return True
+    except OSError as exc:
+        print(f"[SOCKET] Send failed: {exc}")
+        return False
 
 
 def load_tuio_artifacts(path: Path) -> dict[int, dict]:
@@ -85,10 +100,19 @@ def load_tuio_artifacts(path: Path) -> dict[int, dict]:
         return {}
 
 
-def poll_socket_lines(connection: socket.socket, buffer: str) -> tuple[str, list[str]]:
+def poll_socket_lines(
+    connection: socket.socket | None, buffer: str
+) -> tuple[socket.socket | None, str, list[str], bool]:
     lines: list[str] = []
+    if connection is None:
+        return None, buffer, lines, False
+
     try:
         data = connection.recv(4096)
+        if not data:
+            print("[SOCKET] C# GUI disconnected. Waiting for another instance...")
+            close_csharp_connection(connection)
+            return None, "", lines, False
         if data:
             buffer += data.decode("utf-8", errors="ignore")
             while "\n" in buffer:
@@ -99,8 +123,10 @@ def poll_socket_lines(connection: socket.socket, buffer: str) -> tuple[str, list
     except BlockingIOError:
         pass
     except Exception as exc:
-        print(f"[SOCKET] Read failed: {exc}")
-    return buffer, lines
+        print(f"[SOCKET] C# GUI disconnected: {exc}")
+        close_csharp_connection(connection)
+        return None, "", lines, False
+    return connection, buffer, lines, True
 
 
 # gesture helper functions moved to gestures.py
@@ -109,12 +135,31 @@ def poll_socket_lines(connection: socket.socket, buffer: str) -> tuple[str, list
 soc = socket.socket()
 hostname = "localhost"
 port = 5000
+soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 soc.bind((hostname, port))
 soc.listen(5)
+soc.settimeout(1.0)
 Allpoints = []
 mp_pose = mp.solutions.pose
-conn, addr = soc.accept()
-print("Device Connected")
+
+
+def wait_for_csharp_client(server_socket: socket.socket) -> tuple[socket.socket, tuple]:
+    print(f"[SOCKET] Python socket server listening on {hostname}:{port}")
+    print("[SOCKET] Waiting for C# GUI to connect...")
+    last_wait_log = 0.0
+
+    while True:
+        try:
+            client_connection, client_address = server_socket.accept()
+            print(f"[SOCKET] C# GUI connected from {client_address[0]}:{client_address[1]}")
+            return client_connection, client_address
+        except socket.timeout:
+            if time.monotonic() - last_wait_log >= 5.0:
+                print("[SOCKET] Still waiting for C# GUI on port 5000...")
+                last_wait_log = time.monotonic()
+
+
+conn, addr = wait_for_csharp_client(soc)
 conn.setblocking(False)
 old_msg = ""
 mp_holistic = mp.solutions.holistic
@@ -160,13 +205,13 @@ class HCIServer:
     def scan_bluetooth(self) -> tuple[str | None, dict | None]:
         print("\n" + "=" * 60)
         print("[BT] ========== BLUETOOTH DISCOVERY START ==========")
-        print("[BT] Scanning for Bluetooth devices (8 seconds)…")
+        print("[BT] Scanning for Bluetooth devices (3 seconds)…")
         users_by_mac = load_users_by_mac(USERS_JSON_PATH)
         print(f"[BT] Known users in system: {len(users_by_mac)}")
 
         try:
             print("[BT] Calling bluetooth.discover_devices()...")
-            devices = bluetooth.discover_devices(lookup_names=True, duration=8)
+            devices = bluetooth.discover_devices(lookup_names=True, duration=3)
             print(f"[BT] Scan complete. Found {len(devices)} device(s)")
         except Exception as e:
             print(f"[BT] ERROR during scan: {type(e).__name__}")
@@ -262,7 +307,17 @@ while cap.isOpened():
         continue
     msg = ""
 
-    socket_buffer, incoming_lines = poll_socket_lines(conn, socket_buffer)
+    conn, socket_buffer, incoming_lines, connection_alive = poll_socket_lines(
+        conn, socket_buffer
+    )
+    if not connection_alive:
+        conn, addr = wait_for_csharp_client(soc)
+        conn.setblocking(False)
+        socket_buffer = ""
+        old_msg = ""
+        user_login = 0
+        continue
+
     for line in incoming_lines:
         if line.startswith("TUIO:"):
             parts = line.split(":", 1)
@@ -293,30 +348,30 @@ while cap.isOpened():
         if login_message is not None:
             message_payload = json.dumps(login_message)
             print("Sending login payload:", message_payload)
-            send_socket_message(conn, message_payload)
-            context_store.log_event(
-                build_event(
-                    "face_login",
-                    {
-                        "user": active_user_name,
-                        "source": "bluetooth_match",
-                    },
+            if send_socket_message(conn, message_payload):
+                context_store.log_event(
+                    build_event(
+                        "face_login",
+                        {
+                            "user": active_user_name,
+                            "source": "bluetooth_match",
+                        },
+                    )
                 )
-            )
-            user_login = 1
+                user_login = 1
         elif address is not None:
             print("Sending MAC:", address)
-            send_socket_message(conn, address)
-            context_store.log_event(
-                build_event(
-                    "guest_session",
-                    {
-                        "user": active_user_name,
-                        "mac": normalize_mac(address),
-                    },
+            if send_socket_message(conn, address):
+                context_store.log_event(
+                    build_event(
+                        "guest_session",
+                        {
+                            "user": active_user_name,
+                            "mac": normalize_mac(address),
+                        },
+                    )
                 )
-            )
-            user_login = 1
+                user_login = 1
     try:
 
         f_frame = cv2.resize(frame, (480, 320))
@@ -549,15 +604,15 @@ while cap.isOpened():
             context_store.log_event(context_event)
             print("[EVENT]", event_to_line(context_event))
 
-            send_socket_message(conn, msg)
-            if msg == "Circle":
-                feedback_message = "Circle detected: favorite request sent"
-                print(f"[GESTURE] {feedback_message}")
-                show_gesture_feedback(feedback_message)
-            elif action_result.get("action") != "none":
-                feedback_message = f"Action: {action_result.get('action')} ({action_result.get('result')})"
-                print(f"[CONTEXT] {feedback_message}")
-                show_gesture_feedback(feedback_message)
+            if send_socket_message(conn, msg):
+                if msg == "Circle":
+                    feedback_message = "Circle detected: favorite request sent"
+                    print(f"[GESTURE] {feedback_message}")
+                    show_gesture_feedback(feedback_message)
+                elif action_result.get("action") != "none":
+                    feedback_message = f"Action: {action_result.get('action')} ({action_result.get('result')})"
+                    print(f"[CONTEXT] {feedback_message}")
+                    show_gesture_feedback(feedback_message)
 
         old_msg = msg
 

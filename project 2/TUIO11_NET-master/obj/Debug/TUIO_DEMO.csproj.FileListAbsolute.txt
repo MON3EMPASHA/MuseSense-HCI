@@ -79,4 +79,9 @@ E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.resources
 E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.GenerateResource.cache
 E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.exe
 E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.pdb
-E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csprojResolveAssemblyReference.cache
+E:\Programming\HCI\project 2\TUIO11_NET-master\bin\Debug_verify\TuioDemo.exe.config
+E:\Programming\HCI\project 2\TUIO11_NET-master\bin\Debug_verify\TuioDemo.exe
+E:\Programming\HCI\project 2\TUIO11_NET-master\bin\Debug_verify\TuioDemo.pdb
+E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.AssemblyReference.cache
+E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.exe.config
+E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.CoreCompileInputs.cache

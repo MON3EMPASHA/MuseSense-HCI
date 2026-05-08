@@ -73,6 +73,7 @@ namespace TUIO
 
         private int currentFrame = 0;
         private TuioTime currentTime;
+        private const int FRAME_TIMEOUT_MS = 20;
 
         private List<TuioListener> listenerList = new List<TuioListener>();
 
@@ -275,7 +276,7 @@ namespace TUIO
                         if ((fseq >= currentFrame) || ((currentFrame - fseq) > 100)) currentFrame = fseq;
                         else lateFrame = true;
                     }
-                    else if ((TuioTime.SessionTime.TotalMilliseconds - currentTime.TotalMilliseconds) > 100)
+                    else if ((TuioTime.SessionTime.TotalMilliseconds - currentTime.TotalMilliseconds) > FRAME_TIMEOUT_MS)
                     {
                         currentTime = TuioTime.SessionTime;
                     }
@@ -422,7 +423,7 @@ namespace TUIO
                         if ((fseq >= currentFrame) || ((currentFrame - fseq) > 100)) currentFrame = fseq;
                         else lateFrame = true;
                     }
-                    else if ((TuioTime.SessionTime.TotalMilliseconds - currentTime.TotalMilliseconds) > 100)
+                    else if ((TuioTime.SessionTime.TotalMilliseconds - currentTime.TotalMilliseconds) > FRAME_TIMEOUT_MS)
                     {
                         currentTime = TuioTime.SessionTime;
                     }
@@ -618,7 +619,7 @@ namespace TUIO
 						if ((fseq >= currentFrame) || ((currentFrame - fseq) > 100)) currentFrame = fseq;
 						else lateFrame = true;
 					}
-					else if ((TuioTime.SessionTime.TotalMilliseconds - currentTime.TotalMilliseconds) > 100)
+					else if ((TuioTime.SessionTime.TotalMilliseconds - currentTime.TotalMilliseconds) > FRAME_TIMEOUT_MS)
 					{
 						currentTime = TuioTime.SessionTime;
 					}
