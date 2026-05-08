@@ -56,6 +56,7 @@ class ContextStore:
                     "good_to_see": [],
                 },
                 "category_scores": {},
+                "artifact_scores": {},
                 "context": {
                     "current_artifact": "",
                     "current_category": "",
@@ -76,6 +77,8 @@ class ContextStore:
         context.setdefault("last_gesture", "")
         context.setdefault("last_emotion", "")
         context.setdefault("last_gaze", "")
+
+        self.data["users"][user_name].setdefault("artifact_scores", {})
 
     def create_list_item(self, user_name: str, list_name: str, item: dict) -> bool:
         self.ensure_user(user_name)
@@ -116,6 +119,19 @@ class ContextStore:
         self.data["users"][user_name]["updated_at"] = int(time.time())
         self.save()
         return scores[category]
+
+    def update_artifact_score(self, user_name: str, artifact_name: str, delta: float) -> float:
+        self.ensure_user(user_name)
+        scores = self.data["users"][user_name].setdefault("artifact_scores", {})
+        key = str(artifact_name).strip()
+        if not key:
+            return 0.0
+        old_score = float(scores.get(key, 0.0))
+        new_score = old_score + float(delta)
+        scores[key] = round(new_score, 3)
+        self.data["users"][user_name]["updated_at"] = int(time.time())
+        self.save()
+        return scores[key]
 
     def delete_list_item(self, user_name: str, list_name: str, item_id: str) -> bool:
         self.ensure_user(user_name)

@@ -100,11 +100,18 @@ class ExpressionTracker:
         eye_center_x = (left_eye_center_x + right_eye_center_x) / 2.0
         iris_center_x = (left_iris[0] + right_iris[0]) / 2.0
 
-        gaze_delta = (iris_center_x - eye_center_x) / max(image_width, 1)
+        # IMPORTANT: normalize by eye width, not full image width. Normalizing by
+        # image width makes deltas tiny and often "stuck" in center.
+        left_eye_width = abs(left_eye_inner[0] - left_eye_outer[0])
+        right_eye_width = abs(right_eye_inner[0] - right_eye_outer[0])
+        eye_width = max((left_eye_width + right_eye_width) / 2.0, 1.0)
 
-        if gaze_delta < -0.02:
+        gaze_delta = (iris_center_x - eye_center_x) / eye_width
+
+        # Thresholds tuned for normalized-by-eye-width deltas.
+        if gaze_delta < -0.15:
             gaze_zone = "left"
-        elif gaze_delta > 0.02:
+        elif gaze_delta > 0.15:
             gaze_zone = "right"
         else:
             gaze_zone = "center"

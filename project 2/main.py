@@ -344,6 +344,53 @@ while cap.isOpened():
                     last_tuio_marker_id = marker_id
                     tuio_last_seen = time.monotonic()
                     print(f"[TUIO] Marker {marker_id} -> {artifact_name}")
+        else:
+            # Allow the C# client to update context when user opens a single-artifact page.
+            # Expected examples:
+            #   {"type":"artifact_focus","artifact":"Ramses II","category":"New Kingdom"}
+            #   {"type":"context_update","current_artifact":"Ramses II","current_category":"New Kingdom"}
+            if line.startswith("{") and line.endswith("}"):
+                try:
+                    msg_obj = json.loads(line)
+                except Exception:
+                    msg_obj = None
+                if isinstance(msg_obj, dict):
+                    msg_type = str(msg_obj.get("type", "")).strip().lower()
+                    if msg_type in {"artifact_focus", "single_artifact", "artifact_details"}:
+                        artifact_name = str(
+                            msg_obj.get("artifact")
+                            or msg_obj.get("artifact_name")
+                            or msg_obj.get("name")
+                            or ""
+                        ).strip()
+                        category = str(
+                            msg_obj.get("category")
+                            or msg_obj.get("artifact_category")
+                            or msg_obj.get("current_category")
+                            or ""
+                        ).strip()
+                        if artifact_name:
+                            context_store.update_context(
+                                active_user_name,
+                                current_artifact=artifact_name,
+                                current_category=category or "general",
+                                last_object=artifact_name,
+                            )
+                            print(f"[CONTEXT] Focus -> {artifact_name} ({category or 'general'})")
+                    elif msg_type in {"context_update"}:
+                        artifact_name = str(msg_obj.get("current_artifact", "")).strip()
+                        category = str(msg_obj.get("current_category", "")).strip()
+                        if artifact_name or category:
+                            context_store.update_context(
+                                active_user_name,
+                                current_artifact=artifact_name or None,
+                                current_category=category or None,
+                                last_object=artifact_name or None,
+                            )
+                            if artifact_name or category:
+                                print(
+                                    f"[CONTEXT] Update -> artifact={artifact_name or '-'} category={category or '-'}"
+                                )
     if user_login == 0:
         if login_message is not None:
             message_payload = json.dumps(login_message)
@@ -428,9 +475,41 @@ while cap.isOpened():
                     )
 
                     gaze_hit = gaze_tracker.register(expression["gaze_zone"])
-                    context_store.update_category_score(
-                        active_user_name, expression["emotion"], expression["valence"]
+
+                    # Score interest against the currently focused artifact/category (not emotion name).
+                    # This is used later for "bonus/enrich" summary reporting (PDF/QR).
+                    context_snapshot = context_store.get_context_snapshot(active_user_name)
+                    focused_artifact = (
+                        context_snapshot.get("current_artifact")
+                        or context_snapshot.get("last_object")
+                        or ""
                     )
+                    focused_category = (
+                        context_snapshot.get("current_category")
+                        or context_snapshot.get("last_object")
+                        or ""
+                    )
+
+                    emotion_key = str(expression.get("emotion", "")).strip().lower()
+                    if emotion_key == "happy":
+                        interest_delta = 1.0
+                    elif emotion_key == "surprised":
+                        interest_delta = 0.5
+                    elif emotion_key == "neutral":
+                        interest_delta = 0.2
+                    elif emotion_key == "sad":
+                        interest_delta = -0.5
+                    else:
+                        interest_delta = 0.0
+
+                    if focused_category:
+                        context_store.update_category_score(
+                            active_user_name, focused_category, interest_delta
+                        )
+                    if focused_artifact:
+                        context_store.update_artifact_score(
+                            active_user_name, focused_artifact, interest_delta
+                        )
 
                     adaptive_event = build_event(
                         "expression_gaze_update",

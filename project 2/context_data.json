@@ -91,22 +91,26 @@
         "sad": 2.5,
         "happy": 5.3,
         "neutral": 6.1,
-        "favorites": 1.0
+        "favorites": 1.0,
+        "person": 0.9
       },
       "context": {
-        "current_artifact": "person",
-        "current_category": "person",
-        "last_object": "person",
+        "current_artifact": "Ramses II Statue",
+        "current_category": "Egypt",
+        "last_object": "Ramses II Statue",
         "last_gesture": "Circle",
         "last_emotion": "neutral",
         "last_gaze": "center"
       },
-      "updated_at": 1778257348
+      "updated_at": 1778257948,
+      "artifact_scores": {
+        "person": 0.9
+      }
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778257348
+    "updated_at": 1778257948
   }
 }
