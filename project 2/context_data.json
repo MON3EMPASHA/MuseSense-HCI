@@ -44,12 +44,12 @@
         "good_to_see": []
       },
       "category_scores": {
-        "person": 1.9,
+        "person": 5.9,
         "Egypt": 5.3,
         "cell phone": -0.3
       },
       "artifact_scores": {
-        "person": 1.9,
+        "person": 5.9,
         "King Senwosret III": 3.2,
         "Mask of Tutankhamun": 2.1,
         "cell phone": -0.3
@@ -59,29 +59,10 @@
         "current_category": "person",
         "last_object": "person",
         "last_gesture": "",
-        "last_emotion": "neutral",
+        "last_emotion": "happy",
         "last_gaze": "center"
       },
-      "updated_at": 1778260639
-    },
-    "guest_3021CD213493": {
-      "profile": "",
-      "lists": {
-        "favorites": [],
-        "explore_later": [],
-        "good_to_see": []
-      },
-      "category_scores": {},
-      "artifact_scores": {},
-      "context": {
-        "current_artifact": "bird",
-        "current_category": "bird",
-        "last_object": "bird",
-        "last_gesture": "",
-        "last_emotion": "",
-        "last_gaze": ""
-      },
-      "updated_at": 1778276796
+      "updated_at": 1778276047
     }
   },
   "events": [],
