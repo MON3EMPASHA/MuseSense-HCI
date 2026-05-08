@@ -109,9 +109,9 @@ class ExpressionTracker:
         gaze_delta = (iris_center_x - eye_center_x) / eye_width
 
         # Thresholds tuned for normalized-by-eye-width deltas.
-        if gaze_delta < -0.15:
+        if gaze_delta < -0.08:
             gaze_zone = "left"
-        elif gaze_delta > 0.15:
+        elif gaze_delta > 0.08:
             gaze_zone = "right"
         else:
             gaze_zone = "center"
