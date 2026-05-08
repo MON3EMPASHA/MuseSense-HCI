@@ -70,7 +70,7 @@ class ExpressionTracker:
         mouth_open_ratio = mouth_open / face_height
         mouth_curve_ratio = mouth_curve / face_height
 
-        if mouth_width_ratio >= 0.35 and mouth_curve_ratio >= 0.012:
+        if mouth_width_ratio >= 0.33 and mouth_curve_ratio >= 0.008:
             emotion = "happy"
         elif (
             mouth_open_ratio >= 0.08
