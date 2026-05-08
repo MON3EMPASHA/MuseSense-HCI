@@ -186,6 +186,8 @@ public class TuioDemo : Form , TuioListener
         int playingArtifactId = -1;
         bool audioMuted = false;
         Rectangle audioToggleButtonRect = Rectangle.Empty;
+        Rectangle favoriteToggleButtonRect = Rectangle.Empty;
+        Rectangle themeToggleButtonRect = Rectangle.Empty;
         
         PictureBox artifact3DPictureBox;
         
@@ -321,6 +323,18 @@ public class TuioDemo : Form , TuioListener
             if (audioToggleButtonRect.Contains(e.Location))
             {
                 ToggleNarration();
+                return;
+            }
+
+            if (favoriteToggleButtonRect.Contains(e.Location))
+            {
+                ToggleFavoriteForSelectedArtifact();
+                return;
+            }
+
+            if (themeToggleButtonRect.Contains(e.Location))
+            {
+                ToggleThemeMode();
                 return;
             }
 
@@ -678,6 +692,12 @@ public class TuioDemo : Form , TuioListener
         SaveCurrentUser();
     }
 
+    bool IsFavoriteArtifact(int artifactId)
+    {
+        if (currentUser == null || currentUser.favorites == null) return false;
+        return currentUser.favorites.Contains(artifactId);
+    }
+
     // save user preferences back to users.json
     void SaveCurrentUser()
     {
@@ -869,6 +889,24 @@ public class TuioDemo : Form , TuioListener
         {
             ArtifactRecord artifact = GetArtifactById(selectedArtifactId);
             if (artifact != null) PlayAudio(artifact.audioPath);
+        }
+
+        Invalidate();
+    }
+
+    private void ToggleFavoriteForSelectedArtifact()
+    {
+        if (selectedArtifactId < 0 || currentUser == null) return;
+
+        if (IsFavoriteArtifact(selectedArtifactId))
+        {
+            RemoveArtifactFromFavorites(selectedArtifactId);
+            artifactFavoriteHint = "Artifact removed from favourites";
+        }
+        else
+        {
+            if (AddArtifactToFavorites(selectedArtifactId))
+                artifactFavoriteHint = "Artifact added to favourites";
         }
 
         Invalidate();
@@ -1217,6 +1255,8 @@ public class TuioDemo : Form , TuioListener
         artifactClickTargets.Clear();
         pageClickTargets.Clear();
         audioToggleButtonRect = Rectangle.Empty;
+        favoriteToggleButtonRect = Rectangle.Empty;
+        themeToggleButtonRect = Rectangle.Empty;
 
         // Getting the graphics object
         Graphics g = pevent.Graphics;
@@ -1294,6 +1334,7 @@ public class TuioDemo : Form , TuioListener
         SizeF themeSize = g.MeasureString(themeLabel + " mode", statusFont);
         int themeX = statusX - 145;
         Rectangle themeRect = new Rectangle(themeX, 20, (int)themeSize.Width + 30, 30);
+        themeToggleButtonRect = themeRect;
         g.FillRectangle(blbBrush, themeRect);
         g.DrawRectangle(borderPen, themeRect);
         g.DrawString(themeLabel + " mode", statusFont, accentBrush, themeX + 15, 27);
@@ -1663,6 +1704,12 @@ public class TuioDemo : Form , TuioListener
                 g.DrawRectangle(borderPen, audioToggleButtonRect);
                 g.DrawString(audioMuted ? "Unmute narration" : "Mute narration", new Font("Segoe UI", 11f, FontStyle.Bold), accentBrush, audioToggleButtonRect.X + 18, audioToggleButtonRect.Y + 8);
                 lineY += 54;
+
+                bool isFavorite = IsFavoriteArtifact(artifact.id);
+                favoriteToggleButtonRect = new Rectangle(rightX + 210, lineY - 54, 190, 34);
+                g.FillRectangle(blbBrush, favoriteToggleButtonRect);
+                g.DrawRectangle(borderPen, favoriteToggleButtonRect);
+                g.DrawString(isFavorite ? "Remove favourite" : "Add favourite", new Font("Segoe UI", 11f, FontStyle.Bold), accentBrush, favoriteToggleButtonRect.X + 20, favoriteToggleButtonRect.Y + 8);
 
                 g.DrawString("Description:", keyFont, fntBrush, rightX, lineY);
                 RectangleF descRect = new RectangleF(rightX, lineY + 26, rightW, 200);
