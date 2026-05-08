@@ -1,4 +1,3 @@
-    private int lastMarkerSent = -1;
 /*
 	TUIO C# Demo - part of the reacTIVision project
 	Copyright (c) 2005-2016 Martin Kaltenbrunner <martin@tuio.org>
@@ -31,7 +30,6 @@ using System.Text;
 using System.IO;
 using System.Web.Script.Serialization;
 using System.Runtime.Serialization.Json;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 using System.Media;
 using System.Diagnostics;
 
@@ -43,7 +41,7 @@ public class TuioDemo : Form , TuioListener
         string uname = "Visitor";
         Image upic = null;
         
-        // setting default colors and different gender colors
+        // setting default colors and light/dark modes
         private struct ColorTheme
         {
             public Color background;
@@ -56,31 +54,32 @@ public class TuioDemo : Form , TuioListener
             public Color border;
         }
         
-        private ColorTheme maleTheme = new ColorTheme
+        private ColorTheme lightTheme = new ColorTheme
         {
-            background = Color.FromArgb(245, 246, 248),
+            background = Color.FromArgb(246, 248, 252),
             cardBackground = Color.FromArgb(255, 255, 255),
-            textDark = Color.FromArgb(40, 40, 40),
-            textLight = Color.FromArgb(120, 120, 120),
-            accentLight = Color.FromArgb(0, 122, 255),
-            accentBubble = Color.FromArgb(200, 220, 255),
-            avatarBackground = Color.FromArgb(220, 230, 250),
-            border = Color.FromArgb(230, 230, 230)
+            textDark = Color.FromArgb(24, 31, 42),
+            textLight = Color.FromArgb(91, 103, 120),
+            accentLight = Color.FromArgb(18, 124, 255),
+            accentBubble = Color.FromArgb(218, 235, 255),
+            avatarBackground = Color.FromArgb(224, 235, 255),
+            border = Color.FromArgb(218, 226, 238)
         };
         
-        private ColorTheme femaleTheme = new ColorTheme
+        private ColorTheme darkTheme = new ColorTheme
         {
-            background = Color.FromArgb(245, 246, 248),
-            cardBackground = Color.FromArgb(255, 255, 255),
-            textDark = Color.FromArgb(40, 40, 40),
-            textLight = Color.FromArgb(120, 120, 120),
-            accentLight = Color.FromArgb(255, 105, 180),
-            accentBubble = Color.FromArgb(255, 220, 235),
-            avatarBackground = Color.FromArgb(250, 230, 240),
-            border = Color.FromArgb(230, 230, 230)
+            background = Color.FromArgb(14, 18, 27),
+            cardBackground = Color.FromArgb(25, 31, 44),
+            textDark = Color.FromArgb(238, 243, 250),
+            textLight = Color.FromArgb(160, 172, 190),
+            accentLight = Color.FromArgb(64, 196, 255),
+            accentBubble = Color.FromArgb(23, 71, 95),
+            avatarBackground = Color.FromArgb(33, 51, 76),
+            border = Color.FromArgb(52, 62, 80)
         };
 
         private ColorTheme currentTheme = new ColorTheme();
+        private string currentThemeMode = "light";
         
         private TuioClient client;
 		private Dictionary<long,TuioObject> objectList;
@@ -141,6 +140,7 @@ public class TuioDemo : Form , TuioListener
                 public string[] mac { get; set; }
                 public string Profile { get; set; }
                 public List<int> favorites { get; set; }
+                public string themeMode { get; set; }
         }
 
         class UserRoot
@@ -218,6 +218,7 @@ public class TuioDemo : Form , TuioListener
         artifact3DPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
         artifact3DPictureBox.Visible = false;
         this.Controls.Add(artifact3DPictureBox);
+        ApplyThemeMode("light");
 
         this.Closing+=new CancelEventHandler(Form_Closing);
 			this.KeyDown+=new KeyEventHandler(Form_KeyDown);
@@ -321,6 +322,10 @@ public class TuioDemo : Form , TuioListener
                     }
                 }
             }
+            else if (o.SymbolID == 102)
+            {
+                ToggleThemeMode();
+            }
             else
             {
                 NavigateToArtifactByMarker(o.SymbolID);
@@ -339,6 +344,10 @@ public class TuioDemo : Form , TuioListener
                 tuioMarker100SessionId = o.SessionID;
                 UpdateMenuSelectionFromRotation(o.Angle);
                 Invalidate();
+            }
+            else if (o.SymbolID == 101 || o.SymbolID == 102)
+            {
+                return;
             }
             else
             {
@@ -507,6 +516,10 @@ public class TuioDemo : Form , TuioListener
                 List<UserRecord> userList = serializer.Deserialize<List<UserRecord>>(json);
                 if (userList != null && userList.Count > 0)
                 {
+                    foreach (UserRecord user in userList)
+                    {
+                        user.themeMode = NormalizeThemeMode(user.themeMode);
+                    }
                     allUsers = userList;
                     usersJsonPath = Path.GetFullPath(path);
                     Console.WriteLine("Loaded users from: " + usersJsonPath + " (count=" + allUsers.Count + ")");
@@ -581,7 +594,7 @@ public class TuioDemo : Form , TuioListener
         if (!currentUser.favorites.Contains(artifactId))
         {
             currentUser.favorites.Add(artifactId);
-            SaveUserFavorites();
+            SaveCurrentUser();
             return true;
         }
 
@@ -609,11 +622,11 @@ public class TuioDemo : Form , TuioListener
         if (currentUser == null || currentUser.favorites == null) return;
         
         currentUser.favorites.Remove(artifactId);
-        SaveUserFavorites();
+        SaveCurrentUser();
     }
 
-    // save user favorites back to users.json
-    void SaveUserFavorites()
+    // save user preferences back to users.json
+    void SaveCurrentUser()
     {
         if (string.IsNullOrWhiteSpace(usersJsonPath) || currentUser == null) return;
 
@@ -622,11 +635,11 @@ public class TuioDemo : Form , TuioListener
             JavaScriptSerializer serializer = new JavaScriptSerializer();
             string json = serializer.Serialize(allUsers);
             File.WriteAllText(usersJsonPath, json);
-            Console.WriteLine("Saved user favorites for: " + currentUser.name);
+            Console.WriteLine("Saved user preferences for: " + currentUser.name);
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Failed to save user favorites: " + ex.Message);
+            Console.WriteLine("Failed to save user preferences: " + ex.Message);
         }
     }
 
@@ -651,23 +664,54 @@ public class TuioDemo : Form , TuioListener
     }
 
 
-    // gui color is blue if gender is male pink if female
-    private void SetThemeByGender(string gender)
+    private string NormalizeThemeMode(string mode)
     {
-        currentTheme = maleTheme;
+        if (!string.IsNullOrWhiteSpace(mode) && mode.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase))
+            return "dark";
+        return "light";
+    }
 
-        if (!string.IsNullOrEmpty(gender) && gender.ToLower() == "female")
-        {
-            currentTheme = femaleTheme;
-        }
+    private void ApplyThemeMode(string mode)
+    {
+        currentThemeMode = NormalizeThemeMode(mode);
+        currentTheme = currentThemeMode == "dark" ? darkTheme : lightTheme;
 
         bgrBrush.Color = currentTheme.background;
         cardBsh.Color = currentTheme.cardBackground;
+        cardBsh_dynamic.Color = currentTheme.cardBackground;
+        fntBrush.Color = currentTheme.textDark;
+        textLightBrush.Color = currentTheme.textLight;
         accentBrush.Color = currentTheme.accentLight;
         avatarBrush.Color = currentTheme.avatarBackground;
         blbBrush.Color = currentTheme.accentBubble;
+        borderPen.Color = currentTheme.border;
 
-        Console.WriteLine($"Theme applied: {gender ?? "male"} ({(gender?.ToLower() == "female" ? "PINK" : "BLUE")})");
+        if (artifact3DPictureBox != null)
+        {
+            artifact3DPictureBox.BackColor = currentTheme.cardBackground;
+        }
+
+        Console.WriteLine("Theme applied: " + currentThemeMode);
+    }
+
+    private void ApplyUserTheme(UserRecord user)
+    {
+        ApplyThemeMode(user != null ? user.themeMode : "light");
+    }
+
+    private void ToggleThemeMode()
+    {
+        string nextMode = currentThemeMode == "dark" ? "light" : "dark";
+        ApplyThemeMode(nextMode);
+
+        if (currentUser != null)
+        {
+            currentUser.themeMode = nextMode;
+            SaveCurrentUser();
+        }
+
+        Console.WriteLine("TUIO 102 toggled theme to " + nextMode);
+        Invalidate();
     }
 
     private string ResolveAudioPath(string path)
@@ -852,7 +896,7 @@ public class TuioDemo : Form , TuioListener
         if (socketClient == null) return;
         if (markerId == lastMarkerSent) return;
         lastMarkerSent = markerId;
-        socketClient.sendMessage($"TUIO:{markerId}");
+        socketClient.sendMessage("TUIO:" + markerId);
     }
 
     void GoToPage(int pageIndex)
@@ -882,6 +926,7 @@ public class TuioDemo : Form , TuioListener
         public string gender { get; set; }
         public string mac { get; set; }
         public string Profile { get; set; }
+        public string themeMode { get; set; }
         public string error { get; set; }
     }
 
@@ -934,14 +979,14 @@ public class TuioDemo : Form , TuioListener
                 btStatus = "Matched";
             }
             
-            // change theme by gender
+            // load the user's saved light/dark theme
             if (currentUser != null)
             {
-                SetThemeByGender(currentUser.gender);
+                ApplyUserTheme(currentUser);
             }
-            else if (!string.IsNullOrEmpty(payload.gender))
+            else
             {
-                SetThemeByGender(payload.gender);
+                ApplyThemeMode(payload.themeMode);
             }
             
             return true;
@@ -1013,10 +1058,10 @@ public class TuioDemo : Form , TuioListener
                     btStatus = "Matched";
                     currentUser = GetUserByName(uname);
                     
-                    // load different theme based on context
+                    // load the user's saved light/dark theme
                     if (currentUser != null)
                     {
-                        SetThemeByGender(currentUser.gender);
+                        ApplyUserTheme(currentUser);
                     }
                 }
                 else
@@ -1125,6 +1170,14 @@ public class TuioDemo : Form , TuioListener
 
         g.FillEllipse(new SolidBrush(audioMuted ? Color.Red : Color.Green), statusX, 80, 12, 12);
         g.DrawString("Audio: " + (audioMuted ? "Muted 🔇" : "Playing 🔊"), statusFont, fntBrush, statusX + 20, 78);
+
+        string themeLabel = currentThemeMode == "dark" ? "Dark" : "Light";
+        SizeF themeSize = g.MeasureString(themeLabel + " mode", statusFont);
+        int themeX = statusX - 145;
+        Rectangle themeRect = new Rectangle(themeX, 20, (int)themeSize.Width + 30, 30);
+        g.FillRectangle(blbBrush, themeRect);
+        g.DrawRectangle(borderPen, themeRect);
+        g.DrawString(themeLabel + " mode", statusFont, accentBrush, themeX + 15, 27);
 
         // Draw Page Content
         int contentY = 120;

@@ -45,6 +45,7 @@ def load_users_by_mac(json_path: Path) -> Dict[str, dict]:
                     "gender": str(user.get("gender", "")).strip(),
                     "mac": normalized_mac,
                     "Profile": str(user.get("Profile", "")).strip(),
+                    "themeMode": str(user.get("themeMode", "light")).strip() or "light",
                 }
 
     return users_by_mac

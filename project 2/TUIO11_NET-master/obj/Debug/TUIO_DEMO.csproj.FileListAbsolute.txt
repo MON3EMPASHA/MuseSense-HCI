@@ -75,10 +75,8 @@ D:\MSA\HCI\MuseSense-HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.pdb
 E:\Programming\HCI\project 2\TUIO11_NET-master\bin\Debug\TuioDemo.exe.config
 E:\Programming\HCI\project 2\TUIO11_NET-master\bin\Debug\TuioDemo.exe
 E:\Programming\HCI\project 2\TUIO11_NET-master\bin\Debug\TuioDemo.pdb
-E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.AssemblyReference.cache
-E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.exe.config
 E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.resources
 E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.GenerateResource.cache
-E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csproj.CoreCompileInputs.cache
 E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.exe
 E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TuioDemo.pdb
+E:\Programming\HCI\project 2\TUIO11_NET-master\obj\Debug\TUIO_DEMO.csprojResolveAssemblyReference.cache
