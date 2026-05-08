@@ -1007,26 +1007,6 @@ public class TuioDemo : Form , TuioListener
         socketClient.sendMessage("TUIO:" + markerId);
     }
 
-    void SendArtifactFocus(ArtifactRecord artifact)
-    {
-        if (socketClient == null || artifact == null) return;
-
-        string category = artifact.country;
-        if (string.IsNullOrWhiteSpace(category)) category = artifact.era;
-        if (string.IsNullOrWhiteSpace(category)) category = artifact.origin;
-        if (string.IsNullOrWhiteSpace(category)) category = "general";
-
-        var payload = new Dictionary<string, string>
-        {
-            { "type", "artifact_focus" },
-            { "artifact", artifact.name ?? "" },
-            { "category", category }
-        };
-
-        JavaScriptSerializer serializer = new JavaScriptSerializer();
-        socketClient.sendMessage(serializer.Serialize(payload));
-    }
-
     void OpenArtifactDetails(int artifactId)
     {
         ArtifactRecord artifact = GetArtifactById(artifactId);
@@ -1035,7 +1015,6 @@ public class TuioDemo : Form , TuioListener
         selectedArtifactId = artifact.id;
         artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
         page = 5;
-        SendArtifactFocus(artifact);
         Invalidate();
     }
 

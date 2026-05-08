@@ -142,7 +142,6 @@ def draw_context_debug(
     user_name: str,
     last_emotion: str,
     last_delta: float,
-    gaze_hits: dict | None,
 ) -> None:
     user_data = store.data.get("users", {}).get(user_name)
     if not isinstance(user_data, dict):
@@ -157,21 +156,15 @@ def draw_context_debug(
     category_score = float(category_scores.get(current_category, 0.0)) if current_category else 0.0
     artifact_score = float(artifact_scores.get(current_artifact, 0.0)) if current_artifact else 0.0
 
-    hits = gaze_hits or {}
     line1 = f"Artifact: {current_artifact or '-'}"
     line2 = f"Category: {current_category or '-'}"
     line3 = f"CatScore: {category_score:.2f} | ArtScore: {artifact_score:.2f}"
     line4 = f"LastEmotion: {last_emotion or '-'} | Delta: {last_delta:+.2f}"
-    line5 = (
-        "GazeHits L/C/R: "
-        f"{hits.get('left', 0)}/{hits.get('center', 0)}/{hits.get('right', 0)}"
-    )
 
     cv2.putText(frame, line1, (20, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
     cv2.putText(frame, line2, (20, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
     cv2.putText(frame, line3, (20, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
     cv2.putText(frame, line4, (20, 235), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
-    cv2.putText(frame, line5, (20, 260), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
 
 
 # gesture helper functions moved to gestures.py
@@ -228,7 +221,6 @@ expression_log_until = 0.0
 last_expression_signature = ""
 last_interest_emotion = ""
 last_interest_delta = 0.0
-last_gaze_hits = {"left": 0, "center": 0, "right": 0}
 
 
 all_macs = []
@@ -532,7 +524,6 @@ while cap.isOpened():
                     )
 
                     gaze_hit = gaze_tracker.register(expression["gaze_zone"])
-                    last_gaze_hits = gaze_hit.get("hit_counts", last_gaze_hits)
 
                     # Score interest against the currently focused artifact/category (not emotion name).
                     # This is used later for "bonus/enrich" summary reporting (PDF/QR).
@@ -712,7 +703,6 @@ while cap.isOpened():
             active_user_name,
             last_interest_emotion,
             last_interest_delta,
-            last_gaze_hits,
         )
         cv2.imshow("Output", display_image)
         # logic to send msg to unity

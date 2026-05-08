@@ -3,21 +3,36 @@
     "Mohamed Taha": {
       "profile": "objects/obj3.png",
       "lists": {
-        "favorites": [],
+        "favorites": [
+          {
+            "item_id": "knife",
+            "category": "knife",
+            "source": "gesture",
+            "gesture": "Circle",
+            "timestamp": 1778263638
+          }
+        ],
         "explore_later": [],
         "good_to_see": []
       },
-      "category_scores": {},
-      "artifact_scores": {},
-      "context": {
-        "current_artifact": "",
-        "current_category": "",
-        "last_object": "",
-        "last_gesture": "",
-        "last_emotion": "",
-        "last_gaze": ""
+      "category_scores": {
+        "sink": 0.2,
+        "knife": 0.2,
+        "favorites": 1.0
       },
-      "updated_at": 0
+      "artifact_scores": {
+        "sink": 0.2,
+        "knife": 0.2
+      },
+      "context": {
+        "current_artifact": "suitcase",
+        "current_category": "suitcase",
+        "last_object": "suitcase",
+        "last_gesture": "Circle",
+        "last_emotion": "neutral",
+        "last_gaze": "center"
+      },
+      "updated_at": 1778263651
     },
     "Mohamed Ibrahim": {
       "profile": "objects/obj5.png",
@@ -51,6 +66,6 @@
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778260639
+    "updated_at": 1778263651
   }
 }
