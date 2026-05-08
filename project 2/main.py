@@ -54,6 +54,7 @@ PHONE_BT_NAME = "Phone"
 USERS_JSON_PATH = Path("TUIO11_NET-master") / "bin" / "Debug" / "users.json"
 ARTIFACTS_JSON_PATH = Path("TUIO11_NET-master") / "artifacts.json"
 TUIO_PRIORITY_SECONDS = 3.0
+SKIP_CONTEXT_LABELS = {"person"}
 
 
 # user / bluetooth helpers moved to users.py
@@ -128,6 +129,12 @@ def poll_socket_lines(
         close_csharp_connection(connection)
         return None, "", lines, False
     return connection, buffer, lines, True
+
+
+def is_valid_context_label(label: str | None) -> bool:
+    if not label:
+        return False
+    return label.strip().lower() not in SKIP_CONTEXT_LABELS
 
 
 def draw_context_debug(
@@ -612,12 +619,13 @@ while cap.isOpened():
 
                 if label != last_object_label:
                     last_object_label = label
-                    context_store.update_context(
-                        active_user_name,
-                        current_artifact=label,
-                        current_category=label,
-                        last_object=label,
-                    )
+                    if is_valid_context_label(label):
+                        context_store.update_context(
+                            active_user_name,
+                            current_artifact=label,
+                            current_category=label,
+                            last_object=label,
+                        )
                     object_event = build_event(
                         "object_tracking",
                         {
