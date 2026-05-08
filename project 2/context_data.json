@@ -18,21 +18,23 @@
       "category_scores": {
         "sink": 0.2,
         "knife": 0.2,
-        "favorites": 1.0
+        "favorites": 1.0,
+        "suitcase": -0.6
       },
       "artifact_scores": {
         "sink": 0.2,
-        "knife": 0.2
+        "knife": 0.2,
+        "suitcase": -0.6
       },
       "context": {
-        "current_artifact": "suitcase",
-        "current_category": "suitcase",
-        "last_object": "suitcase",
+        "current_artifact": "giraffe",
+        "current_category": "giraffe",
+        "last_object": "giraffe",
         "last_gesture": "Circle",
         "last_emotion": "neutral",
         "last_gaze": "center"
       },
-      "updated_at": 1778263651
+      "updated_at": 1778277059
     },
     "Mohamed Ibrahim": {
       "profile": "objects/obj5.png",
@@ -61,11 +63,30 @@
         "last_gaze": "center"
       },
       "updated_at": 1778260639
+    },
+    "guest_3021CD213493": {
+      "profile": "",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "context": {
+        "current_artifact": "bird",
+        "current_category": "bird",
+        "last_object": "bird",
+        "last_gesture": "",
+        "last_emotion": "",
+        "last_gaze": ""
+      },
+      "updated_at": 1778276796
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778263651
+    "updated_at": 1778277059
   }
 }
