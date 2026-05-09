@@ -464,6 +464,9 @@ while cap.isOpened():
                         current_category=category,
                         last_object=artifact_name,
                     )
+                    context_store.record_artifact_opened(
+                        active_user_name, artifact_name
+                    )
                     last_tuio_marker_id = marker_id
                     tuio_last_seen = time.monotonic()
                     print(f"[TUIO] Marker {marker_id} -> {artifact_name}")
@@ -504,6 +507,9 @@ while cap.isOpened():
                                 current_category=category or "general",
                                 last_object=artifact_name,
                             )
+                            context_store.record_artifact_opened(
+                                active_user_name, artifact_name
+                            )
                             print(
                                 f"[CONTEXT] Focus -> {artifact_name} ({category or 'general'})"
                             )
@@ -526,6 +532,10 @@ while cap.isOpened():
                                 current_category=category or None,
                                 last_object=artifact_name or None,
                             )
+                            if artifact_name:
+                                context_store.record_artifact_opened(
+                                    active_user_name, artifact_name
+                                )
                             if artifact_name or category:
                                 print(
                                     f"[CONTEXT] Update -> artifact={artifact_name or '-'} category={category or '-'}"

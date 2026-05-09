@@ -1,0 +1,251 @@
+{
+  "type": "artifact_session_report",
+  "user": "Mohamed Ibrahim",
+  "total_artifacts": 17,
+  "opened_count": 2,
+  "opened_artifacts": [
+    {
+      "name": "King Senwosret III",
+      "score": 8.1,
+      "opened": true,
+      "country": "Egypt",
+      "era": "Middle Kingdom"
+    },
+    {
+      "name": "Ramses II Statue",
+      "score": -2.6,
+      "opened": true,
+      "country": "Egypt",
+      "era": "New Kingdom"
+    }
+  ],
+  "unopened_artifacts": [
+    {
+      "name": "Mask of Tutankhamun",
+      "score": 13.8,
+      "opened": false,
+      "country": "Egypt",
+      "era": "New Kingdom"
+    },
+    {
+      "name": "Bust of Nefertiti",
+      "score": 0.7,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Amarna Period"
+    },
+    {
+      "name": "Sacred Scarab Beetle",
+      "score": 0.4,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Old Kingdom onwards"
+    },
+    {
+      "name": "Horus",
+      "score": 0.2,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Ancient Egypt (all periods)"
+    },
+    {
+      "name": "Chinese Pottery",
+      "score": 0.0,
+      "opened": false,
+      "country": "China",
+      "era": "Ancient China"
+    },
+    {
+      "name": "Ming Dynasty Porcelain",
+      "score": 0.0,
+      "opened": false,
+      "country": "China",
+      "era": "Ming Dynasty"
+    },
+    {
+      "name": "Great Wall Heritage",
+      "score": 0.0,
+      "opened": false,
+      "country": "China",
+      "era": "Multiple Dynasties"
+    },
+    {
+      "name": "Chinese Silk Trade",
+      "score": 0.0,
+      "opened": false,
+      "country": "China",
+      "era": "Various Periods"
+    },
+    {
+      "name": "Medieval European Armor",
+      "score": 0.0,
+      "opened": false,
+      "country": "Europe",
+      "era": "Medieval Europe"
+    },
+    {
+      "name": "Renaissance Art",
+      "score": 0.0,
+      "opened": false,
+      "country": "Europe",
+      "era": "Renaissance"
+    },
+    {
+      "name": "Gothic Architecture",
+      "score": 0.0,
+      "opened": false,
+      "country": "Europe",
+      "era": "Medieval Europe"
+    },
+    {
+      "name": "European Royalty Artifacts",
+      "score": 0.0,
+      "opened": false,
+      "country": "Europe",
+      "era": "Early Modern Europe"
+    },
+    {
+      "name": "European Industrial Era",
+      "score": 0.0,
+      "opened": false,
+      "country": "Europe",
+      "era": "Industrial Revolution"
+    },
+    {
+      "name": "Great Sphinx of Abu al-Hol",
+      "score": -0.5,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Old Kingdom"
+    },
+    {
+      "name": "Ancient China Dynasty",
+      "score": -1.0,
+      "opened": false,
+      "country": "China",
+      "era": "Ancient China"
+    }
+  ],
+  "ranked_artifacts": [
+    {
+      "name": "Mask of Tutankhamun",
+      "score": 13.8,
+      "opened": false,
+      "country": "Egypt",
+      "era": "New Kingdom"
+    },
+    {
+      "name": "King Senwosret III",
+      "score": 8.1,
+      "opened": true,
+      "country": "Egypt",
+      "era": "Middle Kingdom"
+    },
+    {
+      "name": "Bust of Nefertiti",
+      "score": 0.7,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Amarna Period"
+    },
+    {
+      "name": "Sacred Scarab Beetle",
+      "score": 0.4,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Old Kingdom onwards"
+    },
+    {
+      "name": "Horus",
+      "score": 0.2,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Ancient Egypt (all periods)"
+    },
+    {
+      "name": "Chinese Pottery",
+      "score": 0.0,
+      "opened": false,
+      "country": "China",
+      "era": "Ancient China"
+    },
+    {
+      "name": "Ming Dynasty Porcelain",
+      "score": 0.0,
+      "opened": false,
+      "country": "China",
+      "era": "Ming Dynasty"
+    },
+    {
+      "name": "Great Wall Heritage",
+      "score": 0.0,
+      "opened": false,
+      "country": "China",
+      "era": "Multiple Dynasties"
+    },
+    {
+      "name": "Chinese Silk Trade",
+      "score": 0.0,
+      "opened": false,
+      "country": "China",
+      "era": "Various Periods"
+    },
+    {
+      "name": "Medieval European Armor",
+      "score": 0.0,
+      "opened": false,
+      "country": "Europe",
+      "era": "Medieval Europe"
+    },
+    {
+      "name": "Renaissance Art",
+      "score": 0.0,
+      "opened": false,
+      "country": "Europe",
+      "era": "Renaissance"
+    },
+    {
+      "name": "Gothic Architecture",
+      "score": 0.0,
+      "opened": false,
+      "country": "Europe",
+      "era": "Medieval Europe"
+    },
+    {
+      "name": "European Royalty Artifacts",
+      "score": 0.0,
+      "opened": false,
+      "country": "Europe",
+      "era": "Early Modern Europe"
+    },
+    {
+      "name": "European Industrial Era",
+      "score": 0.0,
+      "opened": false,
+      "country": "Europe",
+      "era": "Industrial Revolution"
+    },
+    {
+      "name": "Great Sphinx of Abu al-Hol",
+      "score": -0.5,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Old Kingdom"
+    },
+    {
+      "name": "Ancient China Dynasty",
+      "score": -1.0,
+      "opened": false,
+      "country": "China",
+      "era": "Ancient China"
+    },
+    {
+      "name": "Ramses II Statue",
+      "score": -2.6,
+      "opened": true,
+      "country": "Egypt",
+      "era": "New Kingdom"
+    }
+  ],
+  "generated_at": "2026-05-09 21:33:31"
+}

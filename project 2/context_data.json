@@ -59,13 +59,13 @@
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 19.0,
+        "Egypt": 20.1,
         "favorites": 2.0,
         "China": -1.0
       },
       "artifact_scores": {
         "King Senwosret III": 8.1,
-        "Mask of Tutankhamun": 12.7,
+        "Mask of Tutankhamun": 13.8,
         "Bust of Nefertiti": 0.7,
         "Ramses II Statue": -2.6,
         "Sacred Scarab Beetle": 0.4,
@@ -74,19 +74,23 @@
         "Great Sphinx of Abu al-Hol": -0.5
       },
       "context": {
-        "current_artifact": "Mask of Tutankhamun",
+        "current_artifact": "Ramses II Statue",
         "current_category": "Egypt",
-        "last_object": "Mask of Tutankhamun",
+        "last_object": "Ramses II Statue",
         "last_gesture": "Circle",
-        "last_emotion": "sad",
+        "last_emotion": "neutral",
         "last_gaze": "center"
       },
-      "updated_at": 1778350650
+      "updated_at": 1778351607,
+      "opened_artifacts": {
+        "king senwosret iii": 1778351589.5096385,
+        "ramses ii statue": 1778351607.5045404
+      }
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778350650
+    "updated_at": 1778351607
   }
 }

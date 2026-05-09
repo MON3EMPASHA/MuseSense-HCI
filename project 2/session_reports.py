@@ -133,9 +133,11 @@ def _build_artifact_report(
     user_name: str,
     store: ContextStore,
     artifacts: list[dict],
+    session_started_at: float,
 ) -> dict:
     user_data = store.data.get("users", {}).get(user_name, {})
     artifact_scores = user_data.get("artifact_scores", {})
+    opened_artifacts = user_data.get("opened_artifacts", {})
 
     artifacts_by_name: dict[str, dict] = {}
     for artifact in artifacts:
@@ -144,14 +146,24 @@ def _build_artifact_report(
             artifacts_by_name[name] = artifact
 
     all_names = list(artifacts_by_name.keys())
-    opened_names = {str(name).strip() for name in artifact_scores.keys()}
+    opened_names: set[str] = set()
+    if isinstance(opened_artifacts, dict):
+        for name, opened_at in opened_artifacts.items():
+            if not name:
+                continue
+            try:
+                opened_time = float(opened_at)
+            except (TypeError, ValueError):
+                continue
+            if opened_time >= session_started_at:
+                opened_names.add(str(name).strip().lower())
 
     def to_item(name: str) -> dict:
         meta = artifacts_by_name.get(name, {})
         return {
             "name": name,
             "score": float(artifact_scores.get(name, 0.0)),
-            "opened": name in opened_names,
+            "opened": name.strip().lower() in opened_names,
             "country": meta.get("country") or meta.get("origin") or "",
             "era": meta.get("era", ""),
         }
@@ -224,7 +236,11 @@ def save_session_reports(
     gaze_result = gaze_session.save_report(session_dir)
     emotion_result = gaze_session.save_emotion_report(session_dir)
     artifact_result = _build_artifact_report(
-        session_dir, user_name, context_store, list(tuio_artifacts.values())
+        session_dir,
+        user_name,
+        context_store,
+        list(tuio_artifacts.values()),
+        gaze_session.session_started_at,
     )
 
     combined_pdf = _build_combined_pdf(session_dir)

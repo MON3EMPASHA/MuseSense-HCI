@@ -56,6 +56,7 @@ class ContextStore:
                 },
                 "category_scores": {},
                 "artifact_scores": {},
+                "opened_artifacts": {},
                 "context": {
                     "current_artifact": "",
                     "current_category": "",
@@ -78,6 +79,7 @@ class ContextStore:
         context.setdefault("last_gaze", "")
 
         self.data["users"][user_name].setdefault("artifact_scores", {})
+        self.data["users"][user_name].setdefault("opened_artifacts", {})
 
     def create_list_item(self, user_name: str, list_name: str, item: dict) -> bool:
         self.ensure_user(user_name)
@@ -135,6 +137,20 @@ class ContextStore:
         self.data["users"][user_name]["updated_at"] = int(time.time())
         self.save()
         return scores[key]
+
+    def record_artifact_opened(
+        self, user_name: str, artifact_name: str, opened_at: float | None = None
+    ) -> float:
+        self.ensure_user(user_name)
+        key = str(artifact_name).strip().lower()
+        if not key:
+            return 0.0
+        timestamps = self.data["users"][user_name].setdefault("opened_artifacts", {})
+        opened_time = float(opened_at if opened_at is not None else time.time())
+        timestamps[key] = opened_time
+        self.data["users"][user_name]["updated_at"] = int(time.time())
+        self.save()
+        return opened_time
 
     def delete_list_item(self, user_name: str, list_name: str, item_id: str) -> bool:
         self.ensure_user(user_name)
