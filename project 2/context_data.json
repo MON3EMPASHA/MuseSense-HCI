@@ -74,19 +74,19 @@
         "Great Sphinx of Abu al-Hol": -0.5
       },
       "context": {
-        "current_artifact": "",
-        "current_category": "",
-        "last_object": "Sacred Scarab Beetle",
+        "current_artifact": "Mask of Tutankhamun",
+        "current_category": "Egypt",
+        "last_object": "Mask of Tutankhamun",
         "last_gesture": "Circle",
         "last_emotion": "sad",
         "last_gaze": "center"
       },
-      "updated_at": 1778335384
+      "updated_at": 1778350650
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778335384
+    "updated_at": 1778350650
   }
 }
