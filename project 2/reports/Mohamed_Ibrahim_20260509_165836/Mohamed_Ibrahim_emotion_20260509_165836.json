@@ -1,0 +1,15 @@
+{
+  "type": "emotion_session_report",
+  "user": "Mohamed Ibrahim",
+  "started_at": "2026-05-09 16:58:36",
+  "sample_count": 64,
+  "emotion_counts": {
+    "neutral": 25,
+    "sad": 39
+  },
+  "emotion_percent": {
+    "neutral": 39.1,
+    "sad": 60.9
+  },
+  "dominant_emotion": "sad"
+}

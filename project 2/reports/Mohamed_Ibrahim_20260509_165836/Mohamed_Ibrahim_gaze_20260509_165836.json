@@ -1,0 +1,24 @@
+{
+  "type": "gaze_session_report",
+  "user": "Mohamed Ibrahim",
+  "started_at": "2026-05-09 16:58:36",
+  "sample_count": 64,
+  "zone_counts": {
+    "left": 0,
+    "center": 64,
+    "right": 0
+  },
+  "zone_percent": {
+    "left": 0.0,
+    "center": 100.0,
+    "right": 0.0
+  },
+  "mean_gaze_delta": 0.0061,
+  "max_abs_gaze_delta": 0.045,
+  "artifacts": {
+    "png": "Mohamed_Ibrahim_gaze_20260509_165836.png",
+    "json": "Mohamed_Ibrahim_gaze_20260509_165836.json",
+    "heatmap": "Mohamed_Ibrahim_gaze_20260509_165836_heatmap.png",
+    "combo": "Mohamed_Ibrahim_gaze_20260509_165836_combo.png"
+  }
+}

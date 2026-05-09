@@ -7,6 +7,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from PIL import Image
 
 from context_store import ContextStore
 from gaze_report import GazeSessionLogger
@@ -38,6 +39,8 @@ def _render_artifact_png(
     text_muted = (95, 95, 95)
     border = (220, 220, 220)
     bar_color = (80, 140, 210)
+    opened_color = (80, 170, 90)
+    unopened_color = (60, 60, 200)
 
     cv2.rectangle(img, (24, 24), (width - 24, 130), (255, 255, 255), -1)
     cv2.rectangle(img, (24, 24), (width - 24, 130), border, 2)
@@ -88,6 +91,7 @@ def _render_artifact_png(
     for idx, item in enumerate(top_items):
         name = item["name"]
         score = float(item["score"])
+        opened = bool(item.get("opened"))
         y0 = chart_y + idx * row_h
         y_mid = y0 + row_h // 2
         bar_len = int((abs(score) / max_abs) * (chart_w * 0.55))
@@ -103,15 +107,23 @@ def _render_artifact_png(
             2,
         )
         cv2.rectangle(img, (bar_x0, y_mid - 10), (bar_x1, y_mid + 10), bar_color, -1)
+        score_text = f"{score:.2f}"
         cv2.putText(
             img,
-            f"{score:.2f}",
+            score_text,
             (bar_x1 + 12, y_mid + 6),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.55,
             text_muted,
             2,
         )
+        (text_w, text_h), _ = cv2.getTextSize(
+            score_text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2
+        )
+        circle_x = bar_x1 + 12 + text_w + 16
+        circle_y = y_mid
+        circle_color = opened_color if opened else unopened_color
+        cv2.circle(img, (circle_x, circle_y), 6, circle_color, -1)
 
     cv2.imwrite(str(path), img)
 
@@ -176,6 +188,28 @@ def _build_artifact_report(
     }
 
 
+def _build_combined_pdf(out_dir: Path) -> str | None:
+    image_paths = sorted(out_dir.glob("*.png"))
+    if not image_paths:
+        return None
+
+    pages: list[Image.Image] = []
+    for path in image_paths:
+        try:
+            with Image.open(path) as img:
+                pages.append(img.convert("RGB"))
+        except Exception:
+            continue
+
+    if not pages:
+        return None
+
+    pdf_path = out_dir / "session_reports.pdf"
+    first, rest = pages[0], pages[1:]
+    first.save(pdf_path, "PDF", save_all=True, append_images=rest)
+    return pdf_path.name
+
+
 def save_session_reports(
     reports_root: Path,
     user_name: str,
@@ -193,6 +227,8 @@ def save_session_reports(
         session_dir, user_name, context_store, list(tuio_artifacts.values())
     )
 
+    combined_pdf = _build_combined_pdf(session_dir)
+
     summary_path = session_dir / "session_summary.json"
     summary = {
         "type": "session_summary",
@@ -205,6 +241,7 @@ def save_session_reports(
             "gaze": gaze_result,
             "emotion": emotion_result,
             "artifacts": artifact_result,
+            "combined_pdf": combined_pdf,
         },
     }
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")

@@ -59,31 +59,34 @@
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 21.2,
-        "favorites": 2.0
+        "Egypt": 19.0,
+        "favorites": 2.0,
+        "China": -1.0
       },
       "artifact_scores": {
         "King Senwosret III": 8.1,
         "Mask of Tutankhamun": 12.7,
-        "Bust of Nefertiti": 1.2,
-        "Ramses II Statue": -0.8,
+        "Bust of Nefertiti": 0.7,
+        "Ramses II Statue": -2.6,
         "Sacred Scarab Beetle": 0.4,
-        "Horus": -0.4
+        "Horus": 0.2,
+        "Ancient China Dynasty": -1.0,
+        "Great Sphinx of Abu al-Hol": -0.5
       },
       "context": {
-        "current_artifact": "Horus",
-        "current_category": "Egypt",
-        "last_object": "Horus",
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "Sacred Scarab Beetle",
         "last_gesture": "Circle",
-        "last_emotion": "neutral",
+        "last_emotion": "sad",
         "last_gaze": "center"
       },
-      "updated_at": 1778334351
+      "updated_at": 1778335384
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778334351
+    "updated_at": 1778335384
   }
 }

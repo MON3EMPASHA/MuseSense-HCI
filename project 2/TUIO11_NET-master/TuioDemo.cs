@@ -1069,10 +1069,10 @@ public class TuioDemo : Form , TuioListener
             {
                 if (pageIndex == 3 || pageIndex == 6) { RefreshCurrentUserFromUsersFile(); favoritesPageIndex = 0; }
                 page = pageIndex;
-                if (pageIndex == 0)
+                if (pageIndex != 5)
                 {
                     selectedArtifactId = -1;
-                    SendContextClear("page_home");
+                    SendContextClear($"page_{pageIndex}");
                 }
                 Invalidate();
             });
@@ -1081,10 +1081,10 @@ public class TuioDemo : Form , TuioListener
 
         if (pageIndex == 3 || pageIndex == 6) { RefreshCurrentUserFromUsersFile(); favoritesPageIndex = 0; }
         page = pageIndex;
-        if (pageIndex == 0)
+        if (pageIndex != 5)
         {
             selectedArtifactId = -1;
-            SendContextClear("page_home");
+            SendContextClear($"page_{pageIndex}");
         }
         Invalidate();
     }

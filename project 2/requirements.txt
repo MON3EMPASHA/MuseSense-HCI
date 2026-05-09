@@ -5,3 +5,4 @@ bleak>=0.22.3
 pybluez-updated==0.31
 dollarpy>=0.1.1
 ultralytics>=8.2.0
+pillow>=12.1.1
