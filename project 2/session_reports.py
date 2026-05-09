@@ -32,7 +32,12 @@ def _build_session_dir(reports_root: Path, user_name: str, started_at: float) ->
 def _render_artifact_png(
     path: Path, title: str, items: list[dict], opened_count: int, total_count: int
 ) -> None:
-    width, height = 1280, 720
+    width = 1280
+    header_h = 130
+    chart_y = 160
+    row_h = 32
+    chart_h = max(row_h * max(len(items), 1) + 20, 260)
+    height = chart_y + chart_h + 40
     img = np.full((height, width, 3), 250, dtype=np.uint8)
 
     text_primary = (30, 30, 30)
@@ -42,8 +47,8 @@ def _render_artifact_png(
     opened_color = (80, 170, 90)
     unopened_color = (60, 60, 200)
 
-    cv2.rectangle(img, (24, 24), (width - 24, 130), (255, 255, 255), -1)
-    cv2.rectangle(img, (24, 24), (width - 24, 130), border, 2)
+    cv2.rectangle(img, (24, 24), (width - 24, header_h), (255, 255, 255), -1)
+    cv2.rectangle(img, (24, 24), (width - 24, header_h), border, 2)
     cv2.putText(img, title, (44, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.95, text_primary, 2)
     cv2.putText(
         img,
@@ -55,8 +60,8 @@ def _render_artifact_png(
         2,
     )
 
-    chart_x, chart_y = 40, 160
-    chart_w, chart_h = width - 80, height - 210
+    chart_x = 40
+    chart_w = width - 80
     cv2.rectangle(
         img,
         (chart_x, chart_y),
@@ -85,10 +90,8 @@ def _render_artifact_png(
         cv2.imwrite(str(path), img)
         return
 
-    top_items = items[:10]
-    max_abs = max(abs(item["score"]) for item in top_items) or 1.0
-    row_h = int(chart_h / max(len(top_items), 1))
-    for idx, item in enumerate(top_items):
+    max_abs = max(abs(item["score"]) for item in items) or 1.0
+    for idx, item in enumerate(items):
         name = item["name"]
         score = float(item["score"])
         opened = bool(item.get("opened"))
