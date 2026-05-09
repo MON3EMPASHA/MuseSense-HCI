@@ -172,7 +172,7 @@ public class TuioDemo : Form , TuioListener
         List<UserRecord> allUsers = new List<UserRecord>();
         string usersJsonPath = "";
         int favoritesPageIndex = 0;
-        string artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
+        string artifactFavoriteHint = "Make a CIRCLE to toggle favorites!";
 
         // Circular menu control
         bool tuioMarker100Visible = false;
@@ -181,6 +181,7 @@ public class TuioDemo : Form , TuioListener
         TuioClient tuioClient;
         Client socketClient;
         int lastMarkerSent = -1;
+        const int TUIO_FAVORITE_TOGGLE_ID = 103;
         
         SoundPlayer currentAudioPlayer = null;
         int playingArtifactId = -1;
@@ -393,6 +394,14 @@ public class TuioDemo : Form , TuioListener
             {
                 ToggleThemeMode();
             }
+            else if (o.SymbolID == TUIO_FAVORITE_TOGGLE_ID)
+            {
+                if (page == 5 && selectedArtifactId >= 0)
+                {
+                    ToggleFavoriteForSelectedArtifact();
+                    Console.WriteLine("Favorite toggled by Marker 103");
+                }
+            }
             else
             {
                 NavigateToArtifactByMarker(o.SymbolID);
@@ -413,6 +422,10 @@ public class TuioDemo : Form , TuioListener
                 Invalidate();
             }
             else if (o.SymbolID == 101 || o.SymbolID == 102)
+            {
+                return;
+            }
+            else if (o.SymbolID == TUIO_FAVORITE_TOGGLE_ID)
             {
                 return;
             }
@@ -984,7 +997,7 @@ public class TuioDemo : Form , TuioListener
             BeginInvoke((MethodInvoker)delegate
             {
                 selectedArtifactId = artifact.id;
-                artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
+                artifactFavoriteHint = "Make a CIRCLE to toggle favorites!";
                 page = 5;
                 SendMarkerUpdate(markerId);
                 SendArtifactFocus(artifact, "tuio");
@@ -994,7 +1007,7 @@ public class TuioDemo : Form , TuioListener
         }
 
         selectedArtifactId = artifact.id;
-        artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
+        artifactFavoriteHint = "Make a CIRCLE to toggle favorites!";
         page = 5;
         SendMarkerUpdate(markerId);
         SendArtifactFocus(artifact, "tuio");
@@ -1015,7 +1028,7 @@ public class TuioDemo : Form , TuioListener
         if (artifact == null) return;
 
         selectedArtifactId = artifact.id;
-        artifactFavoriteHint = "Make a CIRCLE to add to favorites!";
+        artifactFavoriteHint = "Make a CIRCLE to toggle favorites!";
         page = 5;
         SendArtifactFocus(artifact, "mouse");
         Invalidate();
@@ -1265,11 +1278,7 @@ public class TuioDemo : Form , TuioListener
                 if (msg.Trim() == "SwipeLeft") NavigatePreviousPage();
                 if (msg.Trim() == "Circle" && page == 5 && selectedArtifactId >= 0)
                 {
-                    if (AddArtifactToFavorites(selectedArtifactId))
-                    {
-                        artifactFavoriteHint = "Artifact added to favourites";
-                        Console.WriteLine("Artifact added to favourites");
-                    }
+                    ToggleFavoriteForSelectedArtifact();
                 }
                 if ((msg.Trim() == "ZoomIn" || msg.Trim() == "ZoomOut") && page == 5 && selectedArtifactId >= 0)
                 {

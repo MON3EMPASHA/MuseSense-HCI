@@ -2,7 +2,6 @@ import json
 import time
 from pathlib import Path
 
-
 CONTEXT_STORE_PATH = Path("context_data.json")
 
 
@@ -110,7 +109,9 @@ class ContextStore:
         self.ensure_user(user_name)
         return dict(self.data["users"][user_name].get("context", {}))
 
-    def update_category_score(self, user_name: str, category: str, delta: float) -> float:
+    def update_category_score(
+        self, user_name: str, category: str, delta: float
+    ) -> float:
         self.ensure_user(user_name)
         scores = self.data["users"][user_name].setdefault("category_scores", {})
         old_score = float(scores.get(category, 0.0))
@@ -120,7 +121,9 @@ class ContextStore:
         self.save()
         return scores[category]
 
-    def update_artifact_score(self, user_name: str, artifact_name: str, delta: float) -> float:
+    def update_artifact_score(
+        self, user_name: str, artifact_name: str, delta: float
+    ) -> float:
         self.ensure_user(user_name)
         scores = self.data["users"][user_name].setdefault("artifact_scores", {})
         key = str(artifact_name).strip()
@@ -137,7 +140,9 @@ class ContextStore:
         self.ensure_user(user_name)
         target_list = self.data["users"][user_name]["lists"].setdefault(list_name, [])
         before = len(target_list)
-        target_list[:] = [item for item in target_list if str(item.get("item_id", "")) != str(item_id)]
+        target_list[:] = [
+            item for item in target_list if str(item.get("item_id", "")) != str(item_id)
+        ]
         changed = len(target_list) != before
         if changed:
             self.data["users"][user_name]["updated_at"] = int(time.time())
@@ -192,32 +197,14 @@ def apply_gesture_action(
 
     # Keep action mapping procedural and explicit to match lab style.
     if gesture_key in {"circle"}:
-        added = store.create_list_item(
+        return toggle_favorite(
+            store,
             user_name,
-            "favorites",
-            {
-                "item_id": resolved_item_id,
-                "category": resolved_category,
-                "source": "gesture",
-                "gesture": gesture_name,
-                "timestamp": int(time.time()),
-            },
+            resolved_item_id,
+            resolved_category,
+            source="gesture",
+            gesture=gesture_name,
         )
-        if added:
-            score = store.update_category_score(user_name, "favorites", 1.0)
-            return {
-                "action": "add_favorite",
-                "result": "created",
-                "item_id": resolved_item_id,
-                "category": resolved_category,
-                "category_score": score,
-            }
-        return {
-            "action": "add_favorite",
-            "result": "already_exists",
-            "item_id": resolved_item_id,
-            "category": resolved_category,
-        }
 
     if gesture_key == "swipeup":
         added = store.create_list_item(
@@ -274,6 +261,72 @@ def apply_gesture_action(
             "item_id": resolved_item_id,
             "category": resolved_category,
         }
+
+
+def toggle_favorite(
+    store: ContextStore,
+    user_name: str,
+    item_id: str | None,
+    category: str | None,
+    source: str,
+    gesture: str | None = None,
+) -> dict:
+    resolved_item_id = str(item_id or "").strip()
+    resolved_category = str(category or "general").strip() or "general"
+    if not resolved_item_id:
+        return {
+            "action": "toggle_favorite",
+            "result": "missing_item",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
+        }
+
+    store.ensure_user(user_name)
+    target_list = store.data["users"][user_name]["lists"].setdefault("favorites", [])
+    existing = any(
+        str(item.get("item_id", "")).strip() == resolved_item_id for item in target_list
+    )
+    if existing:
+        removed = store.delete_list_item(user_name, "favorites", resolved_item_id)
+        if removed:
+            return {
+                "action": "remove_favorite",
+                "result": "removed",
+                "item_id": resolved_item_id,
+                "category": resolved_category,
+            }
+        return {
+            "action": "remove_favorite",
+            "result": "not_found",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
+        }
+
+    payload = {
+        "item_id": resolved_item_id,
+        "category": resolved_category,
+        "source": source,
+        "timestamp": int(time.time()),
+    }
+    if gesture:
+        payload["gesture"] = gesture
+
+    added = store.create_list_item(user_name, "favorites", payload)
+    if added:
+        score = store.update_category_score(user_name, "favorites", 1.0)
+        return {
+            "action": "add_favorite",
+            "result": "created",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
+            "category_score": score,
+        }
+    return {
+        "action": "add_favorite",
+        "result": "already_exists",
+        "item_id": resolved_item_id,
+        "category": resolved_category,
+    }
 
     return {
         "action": "none",
