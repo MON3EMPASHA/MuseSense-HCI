@@ -116,12 +116,14 @@ class GazeSessionLogger:
         png_path = out_dir / f"{user_slug}_gaze_{stamp}.png"
         json_path = out_dir / f"{user_slug}_gaze_{stamp}.json"
         heatmap_path = out_dir / f"{user_slug}_gaze_{stamp}_heatmap.png"
+        combo_path = out_dir / f"{user_slug}_gaze_{stamp}_combo.png"
 
         payload = self._build_summary_payload(
-            png_path.name, json_path.name, heatmap_path.name
+            png_path.name, json_path.name, heatmap_path.name, combo_path.name
         )
         self._render_png(png_path)
         self._render_heatmap(heatmap_path)
+        self._render_combo(png_path, heatmap_path, combo_path)
         json_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
         )
@@ -129,11 +131,53 @@ class GazeSessionLogger:
             "png": str(png_path),
             "json": str(json_path),
             "heatmap": str(heatmap_path),
+            "combo": str(combo_path),
+            "summary": payload,
+        }
+
+    def save_emotion_report(self, out_dir: Path) -> dict:
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        ts = time.localtime(self.session_started_at)
+        stamp = time.strftime("%Y%m%d_%H%M%S", ts)
+        user_slug = _safe_filename(self.user_name)
+
+        png_path = out_dir / f"{user_slug}_emotion_{stamp}.png"
+        json_path = out_dir / f"{user_slug}_emotion_{stamp}.json"
+
+        counts: dict[str, int] = {}
+        for sample in self.samples:
+            emotion = sample.emotion or "unknown"
+            counts[emotion] = counts.get(emotion, 0) + 1
+
+        total = max(sum(counts.values()), 1)
+        perc = {k: round((v / total) * 100.0, 1) for k, v in counts.items()}
+        dominant = max(counts, key=counts.get) if counts else "unknown"
+
+        payload = {
+            "type": "emotion_session_report",
+            "user": self.user_name,
+            "started_at": time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(self.session_started_at)
+            ),
+            "sample_count": len(self.samples),
+            "emotion_counts": counts,
+            "emotion_percent": perc,
+            "dominant_emotion": dominant,
+        }
+
+        json_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        self._render_emotion_png(png_path, counts, perc)
+        return {
+            "png": str(png_path),
+            "json": str(json_path),
             "summary": payload,
         }
 
     def _build_summary_payload(
-        self, png_name: str, json_name: str, heatmap_name: str
+        self, png_name: str, json_name: str, heatmap_name: str, combo_name: str
     ) -> dict:
         counts = self._zone_counts()
         total = max(sum(counts.values()), 1)
@@ -156,8 +200,56 @@ class GazeSessionLogger:
             "zone_percent": perc,
             "mean_gaze_delta": round(mean_delta, 4),
             "max_abs_gaze_delta": round(max_abs_delta, 4),
-            "artifacts": {"png": png_name, "json": json_name, "heatmap": heatmap_name},
+            "artifacts": {
+                "png": png_name,
+                "json": json_name,
+                "heatmap": heatmap_name,
+                "combo": combo_name,
+            },
         }
+
+    def _find_user_profile_path(self) -> Path | None:
+        base = Path(__file__).resolve().parent
+        candidates = [
+            base / "users.json",
+            base / "TUIO11_NET-master" / "bin" / "Debug" / "users.json",
+            base.parent / "project 1" / "users.json",
+        ]
+        target_name = self.user_name.strip().lower()
+        for candidate in candidates:
+            if not candidate.exists():
+                continue
+            try:
+                users = json.loads(candidate.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(users, list):
+                continue
+            for user in users:
+                if not isinstance(user, dict):
+                    continue
+                name = str(user.get("name", "")).strip().lower()
+                if not name or name != target_name:
+                    continue
+                profile = str(user.get("Profile", "")).strip()
+                if not profile:
+                    continue
+                profile_path = (candidate.parent / profile).resolve()
+                if profile_path.exists():
+                    return profile_path
+                alt_path = (base / profile).resolve()
+                if alt_path.exists():
+                    return alt_path
+        return None
+
+    def _load_user_photo(self) -> np.ndarray | None:
+        profile_path = self._find_user_profile_path()
+        if profile_path is None:
+            return None
+        photo = cv2.imread(str(profile_path), cv2.IMREAD_COLOR)
+        if photo is None:
+            return None
+        return photo
 
     def _render_png(self, path: Path) -> None:
         width, height = 1280, 720
@@ -203,13 +295,38 @@ class GazeSessionLogger:
             2,
         )
 
-        user_lines = _wrap_text(f"User: {self.user_name}", max_chars=40)
+        user_photo = self._load_user_photo()
+        photo_size = 84
+        photo_x = header_x + header_w - 20 - photo_size
+        photo_y = header_y + 18
+        if user_photo is not None:
+            h, w = user_photo.shape[:2]
+            side = max(1, min(h, w))
+            y0 = (h - side) // 2
+            x0 = (w - side) // 2
+            cropped = user_photo[y0 : y0 + side, x0 : x0 + side]
+            resized = cv2.resize(
+                cropped, (photo_size, photo_size), interpolation=cv2.INTER_AREA
+            )
+            cv2.rectangle(
+                img,
+                (photo_x - 2, photo_y - 2),
+                (photo_x + photo_size + 2, photo_y + photo_size + 2),
+                border,
+                2,
+            )
+            img[photo_y : photo_y + photo_size, photo_x : photo_x + photo_size] = (
+                resized
+            )
+
+        user_lines = _wrap_text(f"User: {self.user_name}", max_chars=32)
         uy = header_y + 42
+        user_text_x = header_x + 620
         for idx, line in enumerate(user_lines[:2]):
             cv2.putText(
                 img,
                 line,
-                (header_x + 720, uy + idx * 34),
+                (user_text_x, uy + idx * 34),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.78,
                 text_primary,
@@ -292,7 +409,7 @@ class GazeSessionLogger:
         max_abs_delta = float(max((abs(d) for d in deltas), default=0.0))
 
         mx0 = left_x + 20
-        my0 = left_y + 370
+        my0 = left_y + 400
         cv2.putText(
             img, "Summary", (mx0, my0), cv2.FONT_HERSHEY_SIMPLEX, 0.9, text_primary, 2
         )
@@ -372,7 +489,7 @@ class GazeSessionLogger:
             # Tiny legend
             cv2.putText(
                 img,
-                f"Scale: ±{max_abs:.2f}",
+                f"Scale: +/-{max_abs:.2f}",
                 (ts_x0 + 12, ts_y0 + ts_h - 12),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.55,
@@ -390,16 +507,138 @@ class GazeSessionLogger:
                 2,
             )
 
-        # Footer (kept short so it never overlaps)
+        cv2.imwrite(str(path), img)
+
+    def _render_combo(
+        self, report_path: Path, heatmap_path: Path, out_path: Path
+    ) -> None:
+        report = cv2.imread(str(report_path), cv2.IMREAD_COLOR)
+        heatmap = cv2.imread(str(heatmap_path), cv2.IMREAD_COLOR)
+        if report is None or heatmap is None:
+            return
+
+        gap = 24
+        width = max(report.shape[1], heatmap.shape[1])
+        height = report.shape[0] + heatmap.shape[0] + gap
+        canvas = np.full((height, width, 3), 245, dtype=np.uint8)
+
+        canvas[0 : report.shape[0], 0 : report.shape[1]] = report
+        y2 = report.shape[0] + gap
+        canvas[y2 : y2 + heatmap.shape[0], 0 : heatmap.shape[1]] = heatmap
+
+        cv2.imwrite(str(out_path), canvas)
+
+    def _render_emotion_png(
+        self, path: Path, counts: dict[str, int], perc: dict[str, float]
+    ) -> None:
+        width, height = 1280, 720
+        img = np.full((height, width, 3), 252, dtype=np.uint8)
+
+        text_primary = (25, 25, 25)
+        text_muted = (95, 95, 95)
+        border = (220, 220, 220)
+        card_bg = (255, 255, 255)
+        colors = {
+            "happy": (70, 170, 110),
+            "surprised": (210, 140, 60),
+            "neutral": (120, 120, 120),
+            "sad": (70, 110, 180),
+            "unknown": (160, 160, 160),
+        }
+
+        def card(x: int, y: int, w: int, h: int) -> None:
+            cv2.rectangle(img, (x, y), (x + w, y + h), card_bg, -1)
+            cv2.rectangle(img, (x, y), (x + w, y + h), border, 2)
+
+        card(30, 24, width - 60, 110)
         cv2.putText(
             img,
-            "Generated by HCI Vision Engine",
-            (30, height - 20),
+            "Emotion Session Report",
+            (50, 70),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.62,
+            1.0,
+            text_primary,
+            2,
+        )
+        cv2.putText(
+            img,
+            f"User: {self.user_name}",
+            (50, 104),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.72,
             text_muted,
             2,
         )
+
+        card_x, card_y, card_w, card_h = 30, 160, width - 60, 520
+        card(card_x, card_y, card_w, card_h)
+
+        if not counts:
+            cv2.putText(
+                img,
+                "No emotion samples captured.",
+                (card_x + 30, card_y + 70),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                text_muted,
+                2,
+            )
+            cv2.imwrite(str(path), img)
+            return
+
+        order = ["happy", "surprised", "neutral", "sad", "unknown"]
+        labels = [e for e in order if e in counts]
+        labels += [e for e in counts.keys() if e not in labels]
+
+        bar_x0, bar_y0 = card_x + 30, card_y + 40
+        bar_w, bar_h = card_w - 60, 360
+        cv2.rectangle(
+            img,
+            (bar_x0, bar_y0),
+            (bar_x0 + bar_w, bar_y0 + bar_h),
+            (248, 248, 248),
+            -1,
+        )
+        cv2.rectangle(
+            img,
+            (bar_x0, bar_y0),
+            (bar_x0 + bar_w, bar_y0 + bar_h),
+            border,
+            1,
+        )
+
+        max_count = max(counts.values()) if counts else 1
+        slot_w = int(bar_w / max(len(labels), 1))
+        inner_pad = 16
+        for i, emotion in enumerate(labels):
+            cx0 = bar_x0 + i * slot_w + inner_pad
+            cx1 = cx0 + slot_w - 2 * inner_pad
+            base_y = bar_y0 + bar_h - 20
+            h = int((counts.get(emotion, 0) / max_count) * (bar_h - 50))
+            color = colors.get(emotion, colors["unknown"])
+            cv2.rectangle(img, (cx0, base_y - h), (cx1, base_y), color, -1)
+            cv2.rectangle(img, (cx0, base_y - h), (cx1, base_y), (60, 60, 60), 1)
+
+            label = f"{emotion.upper()} {perc.get(emotion, 0.0):.1f}%"
+            sub = f"{counts.get(emotion, 0)} samples"
+            cv2.putText(
+                img,
+                label,
+                (cx0, base_y + 28),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                text_primary,
+                2,
+            )
+            cv2.putText(
+                img,
+                sub,
+                (cx0, base_y + 50),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                text_muted,
+                2,
+            )
 
         cv2.imwrite(str(path), img)
 

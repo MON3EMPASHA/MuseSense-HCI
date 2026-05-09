@@ -45,6 +45,7 @@ from object_tracking import YoloTracker
 from expression_tracker import ExpressionTracker
 from gaze_tracker import GazeTracker
 from gaze_report import GazeSessionLogger
+from session_reports import save_session_reports
 
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 5001
@@ -149,24 +150,48 @@ def draw_context_debug(
     if not isinstance(user_data, dict):
         return
 
-    context = user_data.get("context", {}) if isinstance(user_data.get("context"), dict) else {}
+    context = (
+        user_data.get("context", {})
+        if isinstance(user_data.get("context"), dict)
+        else {}
+    )
     current_artifact = str(context.get("current_artifact") or "")
     current_category = str(context.get("current_category") or "")
-    category_scores = user_data.get("category_scores", {}) if isinstance(user_data.get("category_scores"), dict) else {}
-    artifact_scores = user_data.get("artifact_scores", {}) if isinstance(user_data.get("artifact_scores"), dict) else {}
+    category_scores = (
+        user_data.get("category_scores", {})
+        if isinstance(user_data.get("category_scores"), dict)
+        else {}
+    )
+    artifact_scores = (
+        user_data.get("artifact_scores", {})
+        if isinstance(user_data.get("artifact_scores"), dict)
+        else {}
+    )
 
-    category_score = float(category_scores.get(current_category, 0.0)) if current_category else 0.0
-    artifact_score = float(artifact_scores.get(current_artifact, 0.0)) if current_artifact else 0.0
+    category_score = (
+        float(category_scores.get(current_category, 0.0)) if current_category else 0.0
+    )
+    artifact_score = (
+        float(artifact_scores.get(current_artifact, 0.0)) if current_artifact else 0.0
+    )
 
     line1 = f"Artifact: {current_artifact or '-'}"
     line2 = f"Category: {current_category or '-'}"
     line3 = f"CatScore: {category_score:.2f} | ArtScore: {artifact_score:.2f}"
     line4 = f"LastEmotion: {last_emotion or '-'} | Delta: {last_delta:+.2f}"
 
-    cv2.putText(frame, line1, (20, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
-    cv2.putText(frame, line2, (20, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
-    cv2.putText(frame, line3, (20, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
-    cv2.putText(frame, line4, (20, 235), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+    cv2.putText(
+        frame, line1, (20, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2
+    )
+    cv2.putText(
+        frame, line2, (20, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2
+    )
+    cv2.putText(
+        frame, line3, (20, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2
+    )
+    cv2.putText(
+        frame, line4, (20, 235), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2
+    )
 
 
 # gesture helper functions moved to gestures.py
@@ -191,7 +216,9 @@ def wait_for_csharp_client(server_socket: socket.socket) -> tuple[socket.socket,
     while True:
         try:
             client_connection, client_address = server_socket.accept()
-            print(f"[SOCKET] C# GUI connected from {client_address[0]}:{client_address[1]}")
+            print(
+                f"[SOCKET] C# GUI connected from {client_address[0]}:{client_address[1]}"
+            )
             return client_connection, client_address
         except socket.timeout:
             if time.monotonic() - last_wait_log >= 5.0:
@@ -342,7 +369,9 @@ try:
     snapshot = context_store.get_context_snapshot(active_user_name)
     current_artifact = str(snapshot.get("current_artifact") or "").strip().lower()
     if current_artifact in SKIP_CONTEXT_LABELS:
-        context_store.update_context(active_user_name, current_artifact="", current_category="")
+        context_store.update_context(
+            active_user_name, current_artifact="", current_category=""
+        )
 
     user_data = context_store.data.get("users", {}).get(active_user_name, {})
     if isinstance(user_data, dict):
@@ -387,10 +416,16 @@ while cap.isOpened():
     )
     if not connection_alive:
         try:
-            result = gaze_session.save_report(reports_dir)
-            print(f"[GAZE] Saved session report: {result.get('png')}")
+            result = save_session_reports(
+                reports_dir,
+                active_user_name,
+                gaze_session,
+                context_store,
+                tuio_artifacts,
+            )
+            print(f"[GAZE] Saved session reports: {result.get('session_dir')}")
         except Exception as exc:
-            print(f"[GAZE] Failed to save report: {exc}")
+            print(f"[GAZE] Failed to save reports: {exc}")
 
         gaze_session.reset(active_user_name)
         gaze_tracker = GazeTracker()
@@ -444,7 +479,11 @@ while cap.isOpened():
                     msg_obj = None
                 if isinstance(msg_obj, dict):
                     msg_type = str(msg_obj.get("type", "")).strip().lower()
-                    if msg_type in {"artifact_focus", "single_artifact", "artifact_details"}:
+                    if msg_type in {
+                        "artifact_focus",
+                        "single_artifact",
+                        "artifact_details",
+                    }:
                         artifact_name = str(
                             msg_obj.get("artifact")
                             or msg_obj.get("artifact_name")
@@ -465,7 +504,9 @@ while cap.isOpened():
                                 current_category=category or "general",
                                 last_object=artifact_name,
                             )
-                            print(f"[CONTEXT] Focus -> {artifact_name} ({category or 'general'})")
+                            print(
+                                f"[CONTEXT] Focus -> {artifact_name} ({category or 'general'})"
+                            )
                     elif msg_type in {"context_update"}:
                         artifact_name = str(msg_obj.get("current_artifact", "")).strip()
                         category = str(msg_obj.get("current_category", "")).strip()
@@ -586,15 +627,11 @@ while cap.isOpened():
 
                     # Score interest against the currently focused artifact/category (not emotion name).
                     # This is used later for "bonus/enrich" summary reporting (PDF/QR).
-                    context_snapshot = context_store.get_context_snapshot(active_user_name)
-                    focused_artifact = (
-                        context_snapshot.get("current_artifact")
-                        or ""
+                    context_snapshot = context_store.get_context_snapshot(
+                        active_user_name
                     )
-                    focused_category = (
-                        context_snapshot.get("current_category")
-                        or ""
-                    )
+                    focused_artifact = context_snapshot.get("current_artifact") or ""
+                    focused_category = context_snapshot.get("current_category") or ""
 
                     emotion_key = str(expression.get("emotion", "")).strip().lower()
                     if emotion_key == "happy":
@@ -641,7 +678,10 @@ while cap.isOpened():
             if detection is not None:
                 if time.monotonic() - tuio_last_seen <= TUIO_PRIORITY_SECONDS:
                     detection = None
-                elif time.monotonic() - csharp_context_last_seen <= CSHARP_CONTEXT_PRIORITY_SECONDS:
+                elif (
+                    time.monotonic() - csharp_context_last_seen
+                    <= CSHARP_CONTEXT_PRIORITY_SECONDS
+                ):
                     detection = None
             if detection is not None:
                 x1, y1, x2, y2 = detection["bbox"]
@@ -769,13 +809,9 @@ while cap.isOpened():
         if msg != "" and msg != old_msg:  # only send when there's actually something
             context_snapshot = context_store.get_context_snapshot(active_user_name)
             current_item_id = (
-                context_snapshot.get("current_artifact")
-                or "current_artifact"
+                context_snapshot.get("current_artifact") or "current_artifact"
             )
-            current_category = (
-                context_snapshot.get("current_category")
-                or "general"
-            )
+            current_category = context_snapshot.get("current_category") or "general"
             action_result = apply_gesture_action(
                 context_store,
                 active_user_name,
@@ -821,10 +857,12 @@ while cap.isOpened():
         break
 
 try:
-    result = gaze_session.save_report(reports_dir)
-    print(f"[GAZE] Saved session report: {result.get('png')}")
+    result = save_session_reports(
+        reports_dir, active_user_name, gaze_session, context_store, tuio_artifacts
+    )
+    print(f"[GAZE] Saved session reports: {result.get('session_dir')}")
 except Exception as exc:
-    print(f"[GAZE] Failed to save report on exit: {exc}")
+    print(f"[GAZE] Failed to save reports on exit: {exc}")
 
 cap.release()
 cv2.destroyAllWindows()
