@@ -1,7 +1,7 @@
 {
   "users": {
     "Mohamed Taha": {
-      "profile": "objects/obj3.png",
+      "profile": "objects/Taha.png",
       "lists": {
         "favorites": [
           {
@@ -37,7 +37,7 @@
       "updated_at": 1778277059
     },
     "Mohamed Ibrahim": {
-      "profile": "objects/obj5.png",
+      "profile": "objects/Soltan.png",
       "lists": {
         "favorites": [
           {
@@ -59,13 +59,13 @@
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 21.7,
+        "Egypt": 23.7,
         "favorites": 2.0,
         "China": -1.0
       },
       "artifact_scores": {
         "King Senwosret III": 8.1,
-        "Mask of Tutankhamun": 13.8,
+        "Mask of Tutankhamun": 15.8,
         "Bust of Nefertiti": 0.7,
         "Ramses II Statue": -2.4,
         "Sacred Scarab Beetle": 1.8,
@@ -81,7 +81,7 @@
         "last_emotion": "neutral",
         "last_gaze": "center"
       },
-      "updated_at": 1778418000,
+      "updated_at": 1778420353,
       "opened_artifacts": {
         "king senwosret iii": 1778417990.7348936,
         "ramses ii statue": 1778351607.5045404,
@@ -93,6 +93,6 @@
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778418000
+    "updated_at": 1778420353
   }
 }

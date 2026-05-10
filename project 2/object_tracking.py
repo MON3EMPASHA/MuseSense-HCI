@@ -57,3 +57,39 @@ class YoloTracker:
         except Exception as error:
             print(f"[YOLO] Detection error: {error}")
             return None
+
+    def detect_persons(self, frame) -> list[dict]:
+        """Return all detections whose label is 'person'."""
+        if not self.enabled or self.model is None:
+            return []
+
+        try:
+            results = self.model(frame, verbose=False)
+            if not results:
+                return []
+
+            boxes = results[0].boxes
+            if boxes is None or len(boxes) == 0:
+                return []
+
+            persons = []
+            for box in boxes:
+                conf = float(box.conf[0])
+                if conf < self.conf_threshold:
+                    continue
+                class_id = int(box.cls[0])
+                label = str(results[0].names.get(class_id, class_id))
+                if label.strip().lower() != "person":
+                    continue
+                x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
+                persons.append(
+                    {
+                        "label": label,
+                        "confidence": round(conf, 3),
+                        "bbox": [x1, y1, x2, y2],
+                    }
+                )
+            return persons
+        except Exception as error:
+            print(f"[YOLO] detect_persons error: {error}")
+            return []

@@ -46,6 +46,7 @@ from expression_tracker import ExpressionTracker
 from gaze_tracker import GazeTracker
 from gaze_report import GazeSessionLogger
 from session_reports import save_session_reports
+from face_recognizer import FaceRecognizer
 
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 5001
@@ -57,6 +58,7 @@ ARTIFACTS_JSON_PATH = Path("TUIO11_NET-master") / "artifacts.json"
 TUIO_PRIORITY_SECONDS = 3.0
 CSHARP_CONTEXT_PRIORITY_SECONDS = 10.0
 SKIP_CONTEXT_LABELS = {"person", "cell phone", "mobile phone"}
+OBJECTS_DIR = Path("TUIO11_NET-master") / "bin" / "Debug" / "objects"
 
 
 # user / bluetooth helpers moved to users.py
@@ -250,6 +252,8 @@ expression_log_until = 0.0
 last_expression_signature = ""
 last_interest_emotion = ""
 last_interest_delta = 0.0
+person_frame_counter = 0
+last_person_faces: list[dict] = []
 
 
 all_macs = []
@@ -350,6 +354,7 @@ context_store = ContextStore()
 yolo_tracker = YoloTracker()
 expression_tracker = ExpressionTracker()
 gaze_tracker = GazeTracker()
+face_recognizer = FaceRecognizer(OBJECTS_DIR)
 tuio_artifacts = load_tuio_artifacts(ARTIFACTS_JSON_PATH)
 active_user_name = "guest"
 
@@ -727,6 +732,36 @@ while cap.isOpened():
                     )
                     context_store.log_event(object_event)
                     print(event_to_console(object_event))
+
+        # ── Person detection + face recognition ──────────────────────────
+        person_frame_counter += 1
+        if person_frame_counter % 18 == 0:
+            person_frame_counter = 0
+            persons = yolo_tracker.detect_persons(f_frame)
+            if persons:
+                # Run face recognition on the full (small) frame once.
+                face_results = face_recognizer.identify_faces(frame_rgb)
+                last_person_faces = face_results
+            else:
+                last_person_faces = []
+
+        # Draw person bounding boxes with identified names every frame.
+        for person_face in last_person_faces:
+            px1, py1, px2, py2 = person_face["bbox"]
+            name = person_face["name"]
+            color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
+            cv2.rectangle(annotated_image, (px1, py1), (px2, py2), color, 2)
+            label_bg_y = max(py1 - 10, 14)
+            cv2.putText(
+                annotated_image,
+                name,
+                (px1, label_bg_y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                color,
+                2,
+            )
+        # ─────────────────────────────────────────────────────────────────
 
         if results.pose_landmarks is not None:
             right_wrist = results.pose_landmarks.landmark[
