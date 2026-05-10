@@ -59,7 +59,7 @@
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 21.5,
+        "Egypt": 21.7,
         "favorites": 2.0,
         "China": -1.0
       },
@@ -68,30 +68,31 @@
         "Mask of Tutankhamun": 13.8,
         "Bust of Nefertiti": 0.7,
         "Ramses II Statue": -2.4,
-        "Sacred Scarab Beetle": 1.6,
+        "Sacred Scarab Beetle": 1.8,
         "Horus": 0.2,
         "Ancient China Dynasty": -1.0,
         "Great Sphinx of Abu al-Hol": -0.5
       },
       "context": {
-        "current_artifact": "Sacred Scarab Beetle",
+        "current_artifact": "Mask of Tutankhamun",
         "current_category": "Egypt",
-        "last_object": "Sacred Scarab Beetle",
+        "last_object": "Mask of Tutankhamun",
         "last_gesture": "Circle",
         "last_emotion": "neutral",
         "last_gaze": "center"
       },
-      "updated_at": 1778351852,
+      "updated_at": 1778418000,
       "opened_artifacts": {
-        "king senwosret iii": 1778351826.573207,
+        "king senwosret iii": 1778417990.7348936,
         "ramses ii statue": 1778351607.5045404,
-        "sacred scarab beetle": 1778351835.6402104
+        "sacred scarab beetle": 1778351835.6402104,
+        "mask of tutankhamun": 1778418000.1804113
       }
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778351852
+    "updated_at": 1778418000
   }
 }
