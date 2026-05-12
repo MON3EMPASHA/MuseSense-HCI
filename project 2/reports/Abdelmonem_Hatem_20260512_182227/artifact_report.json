@@ -1,0 +1,111 @@
+{
+  "type": "artifact_session_report",
+  "user": "Abdelmonem Hatem",
+  "total_artifacts": 7,
+  "opened_count": 5,
+  "opened_artifacts": [
+    {
+      "name": "Mask of Tutankhamun",
+      "score": 13.2,
+      "opened": true,
+      "country": "Egypt",
+      "era": "New Kingdom"
+    },
+    {
+      "name": "Horus",
+      "score": 2.6,
+      "opened": true,
+      "country": "Egypt",
+      "era": "Ancient Egypt (all periods)"
+    },
+    {
+      "name": "Ramses II Statue",
+      "score": 1.0,
+      "opened": true,
+      "country": "Egypt",
+      "era": "New Kingdom"
+    },
+    {
+      "name": "Bust of Nefertiti",
+      "score": 0.2,
+      "opened": true,
+      "country": "Egypt",
+      "era": "Amarna Period"
+    },
+    {
+      "name": "Sacred Scarab Beetle",
+      "score": 0.0,
+      "opened": true,
+      "country": "Egypt",
+      "era": "Old Kingdom onwards"
+    }
+  ],
+  "unopened_artifacts": [
+    {
+      "name": "King Senwosret III",
+      "score": 0.0,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Middle Kingdom"
+    },
+    {
+      "name": "Great Sphinx of Abu al-Hol",
+      "score": 0.0,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Old Kingdom"
+    }
+  ],
+  "ranked_artifacts": [
+    {
+      "name": "Mask of Tutankhamun",
+      "score": 13.2,
+      "opened": true,
+      "country": "Egypt",
+      "era": "New Kingdom"
+    },
+    {
+      "name": "Horus",
+      "score": 2.6,
+      "opened": true,
+      "country": "Egypt",
+      "era": "Ancient Egypt (all periods)"
+    },
+    {
+      "name": "Ramses II Statue",
+      "score": 1.0,
+      "opened": true,
+      "country": "Egypt",
+      "era": "New Kingdom"
+    },
+    {
+      "name": "Bust of Nefertiti",
+      "score": 0.2,
+      "opened": true,
+      "country": "Egypt",
+      "era": "Amarna Period"
+    },
+    {
+      "name": "King Senwosret III",
+      "score": 0.0,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Middle Kingdom"
+    },
+    {
+      "name": "Sacred Scarab Beetle",
+      "score": 0.0,
+      "opened": true,
+      "country": "Egypt",
+      "era": "Old Kingdom onwards"
+    },
+    {
+      "name": "Great Sphinx of Abu al-Hol",
+      "score": 0.0,
+      "opened": false,
+      "country": "Egypt",
+      "era": "Old Kingdom"
+    }
+  ],
+  "generated_at": "2026-05-12 18:27:25"
+}
