@@ -2,9 +2,19 @@ import logging
 import os
 import warnings
 
-# Configure TensorFlow logging before importing libraries that may initialize it.
+# Suppress MediaPipe / absl C++ stderr noise before any imports load the libs.
+os.environ.setdefault("GLOG_minloglevel", "3")          # suppress glog INFO/WARNING/ERROR
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+os.environ.setdefault("MEDIAPIPE_DISABLE_GPU", "1")
+
+# Redirect stderr to devnull for the duration of the import phase so that
+# MediaPipe's C++ backend "inference_feedback_manager" warnings are swallowed.
+import sys
+import io
+
+_real_stderr = sys.stderr
+sys.stderr = open(os.devnull, "w")
 
 logging.getLogger("tensorflow").setLevel(logging.ERROR)
 logging.getLogger("absl").setLevel(logging.ERROR)
@@ -19,7 +29,6 @@ warnings.filterwarnings(
     "ignore",
     message=r".*tf\.losses\.sparse_softmax_cross_entropy is deprecated.*",
 )
-
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -41,12 +50,17 @@ from users import normalize_mac, load_users_by_mac
 from movements import recognizer
 from context_store import ContextStore, apply_gesture_action
 from event_protocol import build_event, event_to_console, to_pretty_json
-from object_tracking import YoloTracker
+
 from expression_tracker import ExpressionTracker
 from gaze_tracker import GazeTracker
 from gaze_report import GazeSessionLogger
 from session_reports import save_session_reports
 from face_recognizer import FaceRecognizer
+from face_signup import FaceSignupFlow
+
+# Restore stderr now that all noisy imports are done.
+sys.stderr.close()
+sys.stderr = _real_stderr
 
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 5001
@@ -240,8 +254,6 @@ holistic = mp_holistic.Holistic(
 
 face_ids = {}
 frame_count = 0
-object_frame_counter = 0
-last_object_label = ""
 analysis_frame_counter = 0
 last_emotion = ""
 last_gaze_zone = ""
@@ -283,8 +295,16 @@ class HCIServer:
         print(f"[BT] Known users in system: {len(users_by_mac)}")
 
         try:
-            print("[BT] Calling bluetooth.discover_devices()...")
-            devices = bluetooth.discover_devices(lookup_names=True, duration=3)
+            print("[BT] Scanning for devices...")
+            # Suppress MediaPipe/absl C++ stderr noise that fires during BT scan
+            _bt_stderr = open(os.devnull, "w")
+            _saved = sys.stderr
+            sys.stderr = _bt_stderr
+            try:
+                devices = bluetooth.discover_devices(lookup_names=True, duration=3)
+            finally:
+                sys.stderr = _saved
+                _bt_stderr.close()
             print(f"[BT] Scan complete. Found {len(devices)} device(s)")
         except Exception as e:
             print(f"[BT] ERROR during scan: {type(e).__name__}")
@@ -351,12 +371,14 @@ address = None
 login_message = None
 address, login_message = server.scan_bluetooth()
 context_store = ContextStore()
-yolo_tracker = YoloTracker()
 expression_tracker = ExpressionTracker()
 gaze_tracker = GazeTracker()
-face_recognizer = FaceRecognizer(OBJECTS_DIR)
+face_recognizer = FaceRecognizer(OBJECTS_DIR, users_json=USERS_JSON_PATH)
 tuio_artifacts = load_tuio_artifacts(ARTIFACTS_JSON_PATH)
 active_user_name = "guest"
+
+# signup_flow is non-None only when BT found no known user
+signup_flow: FaceSignupFlow | None = None
 
 if login_message is not None:
     active_user_name = str(login_message.get("name", "guest")).strip() or "guest"
@@ -364,12 +386,16 @@ if login_message is not None:
         active_user_name, str(login_message.get("Profile", "")).strip()
     )
 elif address is not None:
+    # BT device found but not in users.json — try face login / signup
+    signup_flow = FaceSignupFlow(face_recognizer, OBJECTS_DIR, USERS_JSON_PATH)
     active_user_name = f"guest_{normalize_mac(address).replace(':', '')}"
     context_store.ensure_user(active_user_name)
 else:
+    # No BT at all — try face login / signup
+    signup_flow = FaceSignupFlow(face_recognizer, OBJECTS_DIR, USERS_JSON_PATH)
     context_store.ensure_user(active_user_name)
 
-# Clean up any previously persisted invalid artifacts (e.g. YOLO "person").
+# Clean up any previously persisted invalid artifacts (e.g. "person").
 try:
     snapshot = context_store.get_context_snapshot(active_user_name)
     current_artifact = str(snapshot.get("current_artifact") or "").strip().lower()
@@ -557,7 +583,7 @@ while cap.isOpened():
                 login_payload["mac"] = normalize_mac(address)
 
             message_payload = json.dumps(login_payload)
-            print("[SOCKET] Sending login payload\n" + to_pretty_json(login_payload))
+            print(f"[LOGIN] BT match → {active_user_name}")
             if send_socket_message(conn, message_payload):
                 context_store.log_event(
                     build_event(
@@ -569,7 +595,8 @@ while cap.isOpened():
                     )
                 )
                 user_login = 1
-        elif address is not None:
+        elif address is not None and signup_flow is None:
+            # Unknown MAC and no face flow — send raw MAC as guest
             print("Sending MAC:", address)
             if send_socket_message(conn, address):
                 context_store.log_event(
@@ -582,6 +609,77 @@ while cap.isOpened():
                     )
                 )
                 user_login = 1
+
+    # ── Face login / signup flow (runs when BT found no known user) ───────────
+    if signup_flow is not None and not signup_flow.done:
+        f_frame_signup = cv2.resize(frame, (480, 320))
+        frame_rgb_signup = cv2.cvtColor(f_frame_signup, cv2.COLOR_BGR2RGB)
+        results_signup = holistic.process(frame_rgb_signup)
+        annotated_signup = f_frame_signup.copy()
+        h_s, w_s = f_frame_signup.shape[:2]
+
+        signup_flow.process(
+            frame_rgb_signup,
+            annotated_signup,
+            results_signup,
+            w_s,
+            h_s,
+        )
+
+        display_signup = cv2.resize(
+            annotated_signup, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_LINEAR
+        )
+        cv2.imshow("Output", display_signup)
+        if cv2.waitKey(1) == ord("q"):
+            break
+
+        # Handle completion immediately — don't wait for next iteration
+        if not signup_flow.done:
+            continue
+
+    if signup_flow is not None and signup_flow.done:
+        result_s = signup_flow.result
+        status   = result_s.get("status", "guest")
+        name     = result_s.get("name", "guest") or "guest"
+        print(f"[SIGNUP] Flow done — status={status} name={name}")
+
+        if status in ("login", "signup"):
+            active_user_name = name
+            context_store.ensure_user(active_user_name, "visitor")
+
+            # Look up the full user record from users.json so C# gets the same
+            # payload shape as a Bluetooth login (name, age, gender, Profile,
+            # themeMode, favorites, etc.)
+            full_record: dict = {}
+            try:
+                with USERS_JSON_PATH.open("r", encoding="utf-8") as _f:
+                    _all_users: list = json.load(_f)
+                for _u in _all_users:
+                    if str(_u.get("name", "")).strip().lower() == name.strip().lower():
+                        full_record = dict(_u)
+                        break
+            except Exception as _exc:
+                print(f"[SIGNUP] Could not read users.json for payload: {_exc}")
+
+            login_payload = full_record if full_record else {"name": name}
+            login_payload["type"] = "user_login"
+            login_payload["source"] = "face_signup" if status == "signup" else "face_login"
+
+            payload_str = json.dumps(login_payload)
+            print(f"[LOGIN] Face {status} → {active_user_name}")
+            ok = send_socket_message(conn, payload_str)
+            if not ok:
+                print(f"[LOGIN] Send failed for {active_user_name}")
+            if ok:
+                context_store.log_event(
+                    build_event("face_login", {"user": active_user_name, "source": status})
+                )
+        else:
+            print("[SIGNUP] User cancelled — continuing as guest")
+
+        signup_flow = None
+        user_login  = 1
+    # ─────────────────────────────────────────────────────────────────────────
     try:
 
         f_frame = cv2.resize(frame, (480, 320))
@@ -686,64 +784,11 @@ while cap.isOpened():
                     context_store.log_event(adaptive_event)
                     print(event_to_console(adaptive_event))
 
-        object_frame_counter += 1
-        if object_frame_counter % 18 == 0:
-            object_frame_counter = 0
-            detection = yolo_tracker.detect_primary(f_frame)
-            if detection is not None:
-                if time.monotonic() - tuio_last_seen <= TUIO_PRIORITY_SECONDS:
-                    detection = None
-                elif (
-                    time.monotonic() - csharp_context_last_seen
-                    <= CSHARP_CONTEXT_PRIORITY_SECONDS
-                ):
-                    detection = None
-            if detection is not None:
-                x1, y1, x2, y2 = detection["bbox"]
-                label = str(detection["label"])
-                confidence = detection["confidence"]
-
-                # Camera often detects the visitor as "person", which is not a museum artifact.
-                # Never overwrite the currently focused artifact with "person".
-                if label.strip().lower() == "person":
-                    detection = None
-
-            if detection is not None:
-                cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 180, 255), 2)
-                cv2.putText(
-                    annotated_image,
-                    f"YOLO: {label} {confidence}",
-                    (x1, max(y1 - 10, 20)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 180, 255),
-                    2,
-                )
-
-                if label != last_object_label:
-                    last_object_label = label
-                    # Keep YOLO as a visual/debug signal only; do not persist it into user context.
-                    object_event = build_event(
-                        "object_tracking",
-                        {
-                            "user": active_user_name,
-                            "object": detection,
-                        },
-                    )
-                    context_store.log_event(object_event)
-                    print(event_to_console(object_event))
-
-        # ── Person detection + face recognition ──────────────────────────
+        # ── Face detection + recognition (DeepFace, no YOLO) ─────────────
         person_frame_counter += 1
         if person_frame_counter % 18 == 0:
             person_frame_counter = 0
-            persons = yolo_tracker.detect_persons(f_frame)
-            if persons:
-                # Run face recognition on the full (small) frame once.
-                face_results = face_recognizer.identify_faces(frame_rgb)
-                last_person_faces = face_results
-            else:
-                last_person_faces = []
+            last_person_faces = face_recognizer.identify_faces(frame_rgb)
 
         # Draw person bounding boxes with identified names every frame.
         for person_face in last_person_faces:

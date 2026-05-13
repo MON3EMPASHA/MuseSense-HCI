@@ -59,4 +59,4 @@ def event_to_console(event: dict) -> str:
                 summary_bits.append(f"conf={obj.get('confidence')}")
 
     summary = "[EVENT] " + " ".join(summary_bits)
-    return summary + "\n" + to_pretty_json(event)
+    return summary
