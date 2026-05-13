@@ -3,7 +3,9 @@
     "name": "Ayad Zewail",
     "age": "999",
     "gender": "non-binary",
-    "mac": ["43:6F:AB:C8:FA:F6"],
+    "mac": [
+      "43:6F:AB:C8:FA:F6"
+    ],
     "Profile": "",
     "favorites": [],
     "themeMode": "light"
@@ -12,7 +14,9 @@
     "name": "Youssef Abdulghany",
     "age": "12",
     "gender": "female",
-    "mac": ["54:C4:E5:20:E2:C8"],
+    "mac": [
+      "54:C4:E5:20:E2:C8"
+    ],
     "Profile": "",
     "favorites": [],
     "themeMode": "light"
@@ -21,7 +25,9 @@
     "name": "Mohamed Taha",
     "age": "21",
     "gender": "male",
-    "mac": ["9C:6B:72:01:A3:DA"],
+    "mac": [
+      "9C:6B:72:01:A3:DA"
+    ],
     "Profile": "objects/Taha.png",
     "favorites": [],
     "themeMode": "light"
@@ -38,22 +44,20 @@
       "10:5B:AD:2C:59:6C"
     ],
     "Profile": "objects/Monem.png",
-    "favorites": [3],
+    "favorites": [
+      3
+    ],
     "themeMode": "light"
   },
   {
-    "name": "Mohamed Ibrahim",
-    "age": "21",
-    "gender": "male",
-    "Profile": "objects/Soltan.png",
+    "name": "KM",
+    "age": "",
+    "gender": "",
+    "mac": [],
+    "Profile": "objects/KM.jpg",
     "images": [
-      "objects/Soltan.png",
-      "objects/soltan1.jpeg",
-      "objects/soltan2.jpeg",
-      "objects/soltan3.jpeg",
-      "objects/soltan4.jpeg"
+      "objects/KM.jpg"
     ],
-    "favorites": [4, 1],
-    "themeMode": "dark"
+    "themeMode": "light"
   }
 ]

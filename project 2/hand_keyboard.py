@@ -18,11 +18,17 @@ ROWS: list[list[str]] = [
     ["Z","X","C","V","B","N","M"," ","✓","✗"],
 ]
 
-KEY_W = 44          # key width  (px, on the 480-wide frame)
-KEY_H = 40          # key height
-KEY_PAD = 4         # gap between keys
-KEYBOARD_TOP = 160  # y offset from top of frame
-KEYBOARD_LEFT = 4   # x offset
+KEY_W = 22          # key width  (px, on the 480-wide frame)
+KEY_H = 20          # key height
+KEY_PAD = 2         # gap between keys
+
+# Centre the keyboard on a 480×320 frame
+_KB_COLS = 10
+_KB_ROWS = 4
+_KB_TOTAL_W = _KB_COLS * (KEY_W + KEY_PAD)   # 240 px
+_KB_TOTAL_H = _KB_ROWS * (KEY_H + KEY_PAD)   # 88 px
+KEYBOARD_LEFT = (480 - _KB_TOTAL_W) // 2     # 120
+KEYBOARD_TOP  = (320 - _KB_TOTAL_H) // 2     # 116
 
 # colours
 COL_BG      = (40,  40,  40)
@@ -130,7 +136,7 @@ class HandKeyboard:
                 cv2.rectangle(frame, (x1, y1), (x2, y2), bg, -1)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (100, 100, 100), 1)
 
-                font_scale = 0.45 if key == " " else 0.5
+                font_scale = 0.25 if key == " " else 0.28
                 label = "SPC" if key == " " else key
                 (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)
                 tx = x1 + (KEY_W - tw) // 2
@@ -139,16 +145,16 @@ class HandKeyboard:
                             cv2.FONT_HERSHEY_SIMPLEX, font_scale, COL_TEXT, 1, cv2.LINE_AA)
 
         # ── text preview bar ──────────────────────────────────────────────
-        bar_y = KEYBOARD_TOP - 30
-        cv2.rectangle(frame, (KEYBOARD_LEFT, bar_y - 22),
-                      (KEYBOARD_LEFT + len(ROWS[0]) * (KEY_W + KEY_PAD), bar_y + 4),
+        bar_y = KEYBOARD_TOP - 14
+        cv2.rectangle(frame, (KEYBOARD_LEFT, bar_y - 12),
+                      (KEYBOARD_LEFT + len(ROWS[0]) * (KEY_W + KEY_PAD), bar_y + 2),
                       (20, 20, 20), -1)
         display_text = self.text[-28:] if len(self.text) > 28 else self.text
         cv2.putText(frame, display_text + "|",
-                    (KEYBOARD_LEFT + 4, bar_y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 180), 1, cv2.LINE_AA)
+                    (KEYBOARD_LEFT + 2, bar_y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.30, (0, 255, 180), 1, cv2.LINE_AA)
 
         # ── instruction hint ──────────────────────────────────────────────
         cv2.putText(frame, "1 finger=hover  2 fingers=select",
-                    (KEYBOARD_LEFT, KEYBOARD_TOP - 38),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.38, (180, 180, 180), 1, cv2.LINE_AA)
+                    (KEYBOARD_LEFT, KEYBOARD_TOP - 18),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.25, (180, 180, 180), 1, cv2.LINE_AA)

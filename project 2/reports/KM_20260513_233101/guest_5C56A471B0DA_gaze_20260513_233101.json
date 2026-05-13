@@ -1,0 +1,24 @@
+{
+  "type": "gaze_session_report",
+  "user": "guest_5C56A471B0DA",
+  "started_at": "2026-05-13 23:31:01",
+  "sample_count": 43,
+  "zone_counts": {
+    "left": 0,
+    "center": 26,
+    "right": 17
+  },
+  "zone_percent": {
+    "left": 0.0,
+    "center": 60.5,
+    "right": 39.5
+  },
+  "mean_gaze_delta": 0.0516,
+  "max_abs_gaze_delta": 0.132,
+  "artifacts": {
+    "png": "guest_5C56A471B0DA_gaze_20260513_233101.png",
+    "json": "guest_5C56A471B0DA_gaze_20260513_233101.json",
+    "heatmap": "guest_5C56A471B0DA_gaze_20260513_233101_heatmap.png",
+    "combo": "guest_5C56A471B0DA_gaze_20260513_233101_combo.png"
+  }
+}

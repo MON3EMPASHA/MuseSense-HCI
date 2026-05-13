@@ -1,0 +1,9 @@
+{
+  "type": "emotion_session_report",
+  "user": "guest_5C56A471B0DA",
+  "started_at": "2026-05-13 23:22:11",
+  "sample_count": 0,
+  "emotion_counts": {},
+  "emotion_percent": {},
+  "dominant_emotion": "unknown"
+}
