@@ -89,30 +89,59 @@
         "mask of tutankhamun": 1778418000.1804113
       }
     },
-    "guest_189C2C3E8DDE": {
-      "profile": "",
+    "Abdelmonem Hatem": {
+      "profile": "objects/Monem.png",
       "lists": {
-        "favorites": [],
+        "favorites": [
+          {
+            "item_id": "current_artifact",
+            "category": "general",
+            "source": "gesture",
+            "timestamp": 1778633860,
+            "gesture": "Circle"
+          },
+          {
+            "item_id": "Ramses II Statue",
+            "category": "Egypt",
+            "source": "gesture",
+            "timestamp": 1778634881,
+            "gesture": "Circle"
+          }
+        ],
         "explore_later": [],
         "good_to_see": []
       },
-      "category_scores": {},
-      "artifact_scores": {},
-      "opened_artifacts": {},
+      "category_scores": {
+        "Egypt": 39.6,
+        "favorites": 5.0
+      },
+      "artifact_scores": {
+        "Mask of Tutankhamun": 19.0,
+        "Ramses II Statue": 8.4,
+        "Sacred Scarab Beetle": 12.2
+      },
+      "opened_artifacts": {
+        "mask of tutankhamun": 1778634896.466681,
+        "ramses ii statue": 1778634913.3271995,
+        "king senwosret iii": 1778634458.1357987,
+        "bust of nefertiti": 1778634462.7229955,
+        "horus": 1778634471.7910998,
+        "sacred scarab beetle": 1778634478.8173847
+      },
       "context": {
-        "current_artifact": "",
-        "current_category": "",
-        "last_object": "",
-        "last_gesture": "",
-        "last_emotion": "sad",
+        "current_artifact": "Ramses II Statue",
+        "current_category": "Egypt",
+        "last_object": "Ramses II Statue",
+        "last_gesture": "DarkMode",
+        "last_emotion": "happy",
         "last_gaze": "center"
       },
-      "updated_at": 1778699768
+      "updated_at": 1778634960
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778700545
+    "updated_at": 1778634960
   }
 }
