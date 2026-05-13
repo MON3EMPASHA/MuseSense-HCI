@@ -60,24 +60,24 @@
     "name": "Mohamed Ibrahim",
     "age": "21",
     "gender": "male",
+    "mac": null,
     "Profile": "objects/Soltan.png",
-    "images": [
-      "objects/Soltan.png",
-      "objects/soltan1.jpeg",
-      "objects/soltan2.jpeg",
-      "objects/soltan3.jpeg",
-      "objects/soltan4.jpeg"
-    ],
     "favorites": [4, 1],
     "themeMode": "dark"
   },
   {
     "name": "Andrew Talaat",
-    "age": "22",
-    "gender": "male",
-    "mac": ["4E:2F:0E:9E:E2:88", "5C:6B:16:79:91:66"],
+    "age": "30",
+    "gender": "female",
+    "mac": [
+      "4E:2F:0E:9E:E2:88",
+      "5C:6B:16:79:91:66",
+      "A4:15:66:55:2F:34",
+      "08:EB:ED:0C:FB:11",
+      "64:D0:D6:3B:C3:F5"
+    ],
     "Profile": "",
-    "favorites": [],
-    "themeMode": "dark"
+    "favorites": [2, 1, 0],
+    "themeMode": ""
   }
 ]
