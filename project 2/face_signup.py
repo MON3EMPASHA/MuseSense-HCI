@@ -3,17 +3,16 @@ Face-based login / signup pipeline.
 
 States
 ------
-SCANNING   – DeepFace scans the frame every N frames looking for a known face.
-             If found  → emit LOGIN result and done.
-             If no BT and no face match after SCAN_TIMEOUT → move to SIGNUP_PROMPT.
-SIGNUP_PROMPT – Show "Welcome! Let's register you." overlay for a moment, then
-                send C# a signup_start message, then move to KEYBOARD.
-KEYBOARD   – Virtual keyboard is active; user types their name with hand gestures.
-             On confirm → move to CAPTURE.
-             On cancel  → move to DONE (guest).
-CAPTURE    – Countdown 3-2-1, capture face photo, save to objects_dir, enroll in
-             FaceRecognizer, save user to users.json, send C# user_login, → DONE.
-DONE       – Terminal state; result available via .result property.
+SCANNING      – DeepFace scans the frame every N frames looking for a known face.
+                If found  → emit LOGIN result and done.
+                If no face match after SCAN_TIMEOUT → move to SIGNUP_PROMPT.
+SIGNUP_PROMPT – Show "Welcome! Let's register you." overlay, then move to KEYBOARD.
+KEYBOARD      – Virtual keyboard active; user types their name with hand gestures.
+                On confirm → move to CAPTURE.
+                On cancel  → move to DONE (guest).
+CAPTURE       – Countdown 3-2-1, capture 3 cropped face photos at different moments,
+                enroll all in FaceRecognizer, save user to users.json → DONE.
+DONE          – Terminal state; result available via .result property.
 """
 from __future__ import annotations
 
@@ -32,7 +31,10 @@ from face_recognizer import FaceRecognizer
 SCAN_TIMEOUT      = 8.0    # seconds to try face recognition before giving up
 SCAN_INTERVAL_FR  = 20     # run DeepFace every N frames during scanning
 PROMPT_DURATION   = 2.5    # seconds to show the "let's register" message
-CAPTURE_COUNTDOWN = 3      # seconds countdown before photo snap
+CAPTURE_COUNTDOWN = 4      # total seconds for capture phase
+# Snap 3 images at these elapsed-second marks within the capture phase
+CAPTURE_SNAP_TIMES = [1.0, 2.0, 3.0]
+FACE_CROP_PAD     = 0.30   # fractional padding around detected face bbox
 MIN_NAME_LEN      = 2
 
 
@@ -45,10 +47,34 @@ def _finger_tip(hand_landmarks, lm_id: int, w: int, h: int) -> tuple[int, int] |
     return int(lm.x * w), int(lm.y * h)
 
 
-def _save_user_to_json(users_json: Path, name: str, img_rel_path: str) -> None:
+def _crop_face(frame_bgr: np.ndarray) -> np.ndarray | None:
     """
-    If user already exists → append img_rel_path to their images array.
-    If user is new → create a minimal record with the image.
+    Detect the largest face in frame_bgr using OpenCV Haar cascade and return
+    a padded crop.  Returns None if no face is found (caller saves full frame).
+    """
+    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    cascade = cv2.CascadeClassifier(cascade_path)
+    faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
+    if len(faces) == 0:
+        return None
+
+    # pick largest face
+    x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+    ih, iw = frame_bgr.shape[:2]
+    pad_x = int(w * FACE_CROP_PAD)
+    pad_y = int(h * FACE_CROP_PAD)
+    x1 = max(0, x - pad_x)
+    y1 = max(0, y - pad_y)
+    x2 = min(iw, x + w + pad_x)
+    y2 = min(ih, y + h + pad_y)
+    return frame_bgr[y1:y2, x1:x2]
+
+
+def _save_user_to_json(users_json: Path, name: str, img_rel_paths: list[str]) -> None:
+    """
+    If user already exists → append new image paths to their images array.
+    If user is new → create a minimal record.
     """
     users: list[dict] = []
     if users_json.exists():
@@ -61,8 +87,11 @@ def _save_user_to_json(users_json: Path, name: str, img_rel_path: str) -> None:
     for user in users:
         if str(user.get("name", "")).strip().lower() == name.strip().lower():
             imgs = user.setdefault("images", [])
-            if img_rel_path not in imgs:
-                imgs.append(img_rel_path)
+            for p in img_rel_paths:
+                if p not in imgs:
+                    imgs.append(p)
+            if img_rel_paths and not user.get("Profile"):
+                user["Profile"] = img_rel_paths[0]
             users_json.parent.mkdir(parents=True, exist_ok=True)
             with users_json.open("w", encoding="utf-8") as f:
                 json.dump(users, f, indent=2, ensure_ascii=False)
@@ -74,8 +103,8 @@ def _save_user_to_json(users_json: Path, name: str, img_rel_path: str) -> None:
         "age": "",
         "gender": "",
         "mac": [],
-        "Profile": img_rel_path,
-        "images": [img_rel_path],
+        "Profile": img_rel_paths[0] if img_rel_paths else "",
+        "images": img_rel_paths,
         "themeMode": "light",
     })
     users_json.parent.mkdir(parents=True, exist_ok=True)
@@ -97,7 +126,6 @@ class FaceSignupFlow:
         {"status": "guest"}                   – user cancelled
     """
 
-    # mediapipe landmark indices
     _IDX_TIP = 8    # index finger tip
     _MID_TIP = 12   # middle finger tip
 
@@ -116,7 +144,12 @@ class FaceSignupFlow:
         self._scan_counter = 0
         self._keyboard     = HandKeyboard()
         self._countdown_start: float | None = None
-        self._captured_frame: np.ndarray | None = None
+        self._pending_name: str = ""
+
+        # multi-capture state
+        self._snap_done: list[bool] = [False] * len(CAPTURE_SNAP_TIMES)
+        self._captured_frames: list[np.ndarray] = []
+        self._saving: bool = False   # guard: prevent _save_and_enroll being called twice
 
         self.done   = False
         self.result: dict = {}
@@ -131,7 +164,6 @@ class FaceSignupFlow:
         frame_w: int,
         frame_h: int,
     ) -> None:
-        """Mutates `annotated` with overlays. Sets self.done / self.result when finished."""
         if self.done:
             return
 
@@ -147,10 +179,9 @@ class FaceSignupFlow:
     # ── state handlers ────────────────────────────────────────────────────────
 
     def _do_scanning(self, frame_rgb: np.ndarray, annotated: np.ndarray) -> None:
-        elapsed = time.monotonic() - self._state_start
+        elapsed   = time.monotonic() - self._state_start
         remaining = max(0.0, SCAN_TIMEOUT - elapsed)
 
-        # overlay
         cv2.putText(annotated, "Looking for your face...",
                     (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 220, 255), 2)
         cv2.putText(annotated, f"({remaining:.1f}s)",
@@ -192,27 +223,25 @@ class FaceSignupFlow:
         frame_w: int,
         frame_h: int,
     ) -> None:
-        import mediapipe as mp
-        mp_hands = mp.solutions.hands
-
-        # prefer right hand, fall back to left
         hand = (holistic_results.right_hand_landmarks
                 or holistic_results.left_hand_landmarks)
 
         index_tip  = _finger_tip(hand, self._IDX_TIP, frame_w, frame_h)
         middle_tip = _finger_tip(hand, self._MID_TIP, frame_w, frame_h)
 
-        # draw cursor dot
+        # draw cursor dots with outline for visibility on any background
         if index_tip is not None:
-            cv2.circle(annotated, index_tip, 6, (0, 255, 255), -1)
+            cv2.circle(annotated, index_tip, 5, (0, 255, 255), -1)
+            cv2.circle(annotated, index_tip, 6, (0, 0, 0), 1)
         if middle_tip is not None:
-            cv2.circle(annotated, middle_tip, 5, (255, 100, 0), -1)
+            cv2.circle(annotated, middle_tip, 4, (255, 120, 0), -1)
+            cv2.circle(annotated, middle_tip, 5, (0, 0, 0), 1)
 
-        self._keyboard.update(annotated, index_tip, middle_tip)
+        self._keyboard.update(annotated, index_tip, middle_tip,
+                              left_hand_landmarks=holistic_results.left_hand_landmarks)
 
-        # header
-        cv2.putText(annotated, "Type your name:",
-                    (4, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 220, 255), 1)
+        cv2.putText(annotated, "Type your name  (open left hand=confirm  X=cancel)",
+                    (4, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (0, 220, 255), 1)
 
         if self._keyboard.cancelled:
             self.done   = True
@@ -225,7 +254,6 @@ class FaceSignupFlow:
                 self._pending_name = name
                 self._transition("CAPTURE")
             else:
-                # reset confirm flag, keep typing
                 self._keyboard.confirmed = False
 
     def _do_capture(self, frame_rgb: np.ndarray, annotated: np.ndarray) -> None:
@@ -235,58 +263,96 @@ class FaceSignupFlow:
         elapsed   = time.monotonic() - self._countdown_start
         remaining = CAPTURE_COUNTDOWN - elapsed
 
+        # snap frames at scheduled times
+        for i, snap_t in enumerate(CAPTURE_SNAP_TIMES):
+            if not self._snap_done[i] and elapsed >= snap_t:
+                self._captured_frames.append(frame_rgb.copy())
+                self._snap_done[i] = True
+                print(f"[SIGNUP] Snap {i+1}/{len(CAPTURE_SNAP_TIMES)} at {elapsed:.1f}s")
+
         if remaining > 0:
-            # countdown overlay
             overlay = annotated.copy()
             cv2.rectangle(overlay, (0, 0), (annotated.shape[1], annotated.shape[0]),
                           (0, 0, 0), -1)
             cv2.addWeighted(overlay, 0.4, annotated, 0.6, 0, annotated)
+
+            snaps_taken = sum(self._snap_done)
             _center_text(annotated, f"Hold still... {int(remaining) + 1}",
-                         annotated.shape[0] // 2, 1.0, (0, 220, 255), 2)
+                         annotated.shape[0] // 2 - 15, 0.9, (0, 220, 255), 2)
             _center_text(annotated, f"Registering as: {self._pending_name}",
-                         annotated.shape[0] // 2 + 40, 0.55, (200, 200, 200), 1)
+                         annotated.shape[0] // 2 + 20, 0.5, (200, 200, 200), 1)
+            _center_text(annotated, f"Photos: {snaps_taken}/{len(CAPTURE_SNAP_TIMES)}",
+                         annotated.shape[0] // 2 + 40, 0.45, (0, 200, 120), 1)
         else:
-            # snap
-            self._captured_frame = frame_rgb.copy()
-            self._save_and_enroll()
+            # Only call once — _saving guard prevents re-entry on subsequent frames
+            if not self._saving:
+                self._saving = True
+                if not self._captured_frames:
+                    self._captured_frames.append(frame_rgb.copy())
+                self._save_and_enroll()
 
     def _save_and_enroll(self) -> None:
         name = self._pending_name
-        img_bgr = cv2.cvtColor(self._captured_frame, cv2.COLOR_RGB2BGR)
 
-        # save image to objects_dir
-        self._objects_dir.mkdir(parents=True, exist_ok=True)
-        img_filename = f"{name}.jpg"
-        img_path = self._objects_dir / img_filename
-        idx = 1
-        while img_path.exists():
-            img_filename = f"{name}{idx}.jpg"
-            img_path = self._objects_dir / img_filename
-            idx += 1
-        cv2.imwrite(str(img_path), img_bgr)
-        print(f"[SIGNUP] Saved face image: {img_path}")
-
-        # enroll in live recognizer using the full display name
-        try:
-            self._recognizer.enroll_image(str(img_path), name)
-            print(f"[SIGNUP] Enrolled '{name}' in face recognizer")
-        except Exception as exc:
-            print(f"[SIGNUP] Enroll warning: {exc}")
-
-        # relative path stored in users.json (relative to bin/Debug/)
-        img_rel = f"objects/{img_filename}"
-        _save_user_to_json(self._users_json, name, img_rel)
-        print(f"[SIGNUP] Saved '{name}' to users.json")
-
+        # Set done + result FIRST so main.py always picks up the result,
+        # even if the file I/O below partially fails.
         self.done   = True
         self.result = {"status": "signup", "name": name}
+        print(f"[SIGNUP] Registration complete for '{name}' — sending login payload")
+
+        try:
+            self._objects_dir.mkdir(parents=True, exist_ok=True)
+
+            saved_paths: list[str] = []
+            saved_rel: list[str]   = []
+
+            for idx, frame_rgb in enumerate(self._captured_frames):
+                try:
+                    img_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+
+                    # try to crop face; fall back to full frame
+                    cropped = _crop_face(img_bgr)
+                    save_img = cropped if cropped is not None else img_bgr
+                    if cropped is None:
+                        print(f"[SIGNUP] Snap {idx+1}: no face detected, saving full frame")
+
+                    # unique filename
+                    suffix = f"_{idx+1}" if idx > 0 else ""
+                    img_filename = f"{name}{suffix}.jpg"
+                    img_path = self._objects_dir / img_filename
+                    counter = 1
+                    while img_path.exists():
+                        img_filename = f"{name}{suffix}_{counter}.jpg"
+                        img_path = self._objects_dir / img_filename
+                        counter += 1
+
+                    cv2.imwrite(str(img_path), save_img)
+                    print(f"[SIGNUP] Saved face image: {img_path}")
+                    saved_paths.append(str(img_path))
+                    saved_rel.append(f"objects/{img_filename}")
+                except Exception as exc:
+                    print(f"[SIGNUP] Failed to save snap {idx+1}: {exc}")
+
+            # enroll all captured images
+            for img_path in saved_paths:
+                try:
+                    self._recognizer.enroll_image(img_path, name)
+                except Exception as exc:
+                    print(f"[SIGNUP] Enroll warning: {exc}")
+            print(f"[SIGNUP] Enrolled '{name}' with {len(saved_paths)} image(s)")
+
+            _save_user_to_json(self._users_json, name, saved_rel)
+            print(f"[SIGNUP] Saved '{name}' to users.json")
+
+        except Exception as exc:
+            print(f"[SIGNUP] Error during save/enroll (login payload still sent): {exc}")
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
     def _transition(self, new_state: str) -> None:
         self._state       = new_state
         self._state_start = time.monotonic()
-        print(f"[SIGNUP] → {new_state}")
+        print(f"[SIGNUP] -> {new_state}")
 
 
 # ── drawing util ──────────────────────────────────────────────────────────────
