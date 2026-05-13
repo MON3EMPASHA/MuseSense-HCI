@@ -59,13 +59,13 @@
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 23.4,
+        "Egypt": 21.6,
         "favorites": 2.0,
         "China": -1.0
       },
       "artifact_scores": {
         "King Senwosret III": 8.1,
-        "Mask of Tutankhamun": 15.5,
+        "Mask of Tutankhamun": 13.7,
         "Bust of Nefertiti": 0.7,
         "Ramses II Statue": -2.4,
         "Sacred Scarab Beetle": 1.8,
@@ -81,7 +81,7 @@
         "last_emotion": "sad",
         "last_gaze": "center"
       },
-      "updated_at": 1778703601,
+      "updated_at": 1778710908,
       "opened_artifacts": {
         "king senwosret iii": 1778417990.7348936,
         "ramses ii statue": 1778351607.5045404,
@@ -153,10 +153,10 @@
         "current_category": "",
         "last_object": "",
         "last_gesture": "",
-        "last_emotion": "",
-        "last_gaze": ""
+        "last_emotion": "neutral",
+        "last_gaze": "center"
       },
-      "updated_at": 0
+      "updated_at": 1778713430
     },
     "KM": {
       "profile": "visitor",
@@ -177,11 +177,151 @@
         "last_gaze": "center"
       },
       "updated_at": 1778704389
+    },
+    "IOB": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "opened_artifacts": {},
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "",
+        "last_emotion": "sad",
+        "last_gaze": "center"
+      },
+      "updated_at": 1778711521
+    },
+    "TUIO": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "opened_artifacts": {},
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "",
+        "last_emotion": "neutral",
+        "last_gaze": "center"
+      },
+      "updated_at": 1778712718
+    },
+    "HBBBBBBBYT": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "opened_artifacts": {},
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "",
+        "last_emotion": "neutral",
+        "last_gaze": "center"
+      },
+      "updated_at": 1778713004
+    },
+    "NBB": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "opened_artifacts": {},
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "",
+        "last_emotion": "neutral",
+        "last_gaze": "center"
+      },
+      "updated_at": 1778713803
+    },
+    "UJHNBLKKKK": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "opened_artifacts": {},
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "",
+        "last_emotion": "neutral",
+        "last_gaze": "center"
+      },
+      "updated_at": 1778713902
+    },
+    "TYIOIIIK": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "opened_artifacts": {},
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "",
+        "last_emotion": "neutral",
+        "last_gaze": "center"
+      },
+      "updated_at": 1778714084
+    },
+    "TY": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "opened_artifacts": {},
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "",
+        "last_emotion": "sad",
+        "last_gaze": "center"
+      },
+      "updated_at": 1778714408
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778704389
+    "updated_at": 1778714408
   }
 }

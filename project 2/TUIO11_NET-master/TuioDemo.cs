@@ -523,16 +523,20 @@ public class TuioDemo : Form , TuioListener
             {
                 if (reader == null) return null;
                 string data = reader.ReadLine();
-                if (string.IsNullOrWhiteSpace(data)) return null;
+                if (data == null) return null; // stream closed
+                if (string.IsNullOrWhiteSpace(data)) return ""; // empty line — don't treat as disconnect
                 Console.WriteLine(data);
                 return data;
             }
-            catch (System.Exception)
+            catch (System.IO.IOException)
             {
-
+                return null; // genuine connection drop
             }
-
-            return null;
+            catch (System.Exception ex)
+            {
+                Console.WriteLine("recieveMessage error: " + ex.Message);
+                return null;
+            }
         }
 
         public void sendMessage(string message)
@@ -1139,16 +1143,20 @@ public class TuioDemo : Form , TuioListener
         public string name { get; set; }
         public string age { get; set; }
         public string gender { get; set; }
-        public string mac { get; set; }
+        public object mac { get; set; }   // can be string or array
         public string Profile { get; set; }
         public string themeMode { get; set; }
         public string error { get; set; }
+        public string source { get; set; }
+        public List<string> images { get; set; }
+        public List<int> favorites { get; set; }
     }
 
     private bool TryHandleLoginPayload(string rawMessage)
     {
         if (string.IsNullOrWhiteSpace(rawMessage) || !rawMessage.TrimStart().StartsWith("{"))
         {
+            Console.WriteLine("[LOGIN] TryHandleLoginPayload: not a JSON object, skipping");
             return false;
         }
 
@@ -1159,15 +1167,22 @@ public class TuioDemo : Form , TuioListener
 
             if (payload == null || !string.Equals(payload.type, "user_login", StringComparison.OrdinalIgnoreCase))
             {
+                Console.WriteLine("[LOGIN] TryHandleLoginPayload: type='" + (payload?.type ?? "null") + "' — not user_login");
                 return false;
             }
+
+            Console.WriteLine("[LOGIN] TryHandleLoginPayload: matched user_login, name=" + payload.name);
 
             uname = string.IsNullOrWhiteSpace(payload.name) ? "Visitor" : payload.name.Trim();
 
             // Set current user
             currentUser = GetUserByName(uname);
-            if (currentUser == null)
-                currentUser = GetUserByMac(payload.mac);
+            if (currentUser == null && payload.mac != null)
+            {
+                string macStr = payload.mac is string s ? s : null;
+                if (!string.IsNullOrWhiteSpace(macStr))
+                    currentUser = GetUserByMac(macStr);
+            }
 
             string profilePath = string.IsNullOrWhiteSpace(payload.Profile) ? null : payload.Profile.Trim();
             if (!string.IsNullOrWhiteSpace(profilePath))
@@ -1233,12 +1248,14 @@ public class TuioDemo : Form , TuioListener
 
         // Ensure the vision engine starts with no selected artifact until the user opens one.
         SendContextClear("startup");
+        Console.WriteLine("[STREAM] Entering receive loop, login=" + login);
         
         while (true)
         {
             msg = c.recieveMessage();
             if (msg == null) // Connection dropped
             {
+                Console.WriteLine("[STREAM] recieveMessage returned null — connection dropped");
                 cameraStatusStr = "Offline";
                 btStatus = "Vision Engine Offline";
                 Invoke((Action)(Invalidate));
@@ -1248,9 +1265,10 @@ public class TuioDemo : Form , TuioListener
             {
                 continue;
             }
+
+            Console.WriteLine("[STREAM] Received msg (login=" + login + "): " + msg.Substring(0, Math.Min(120, msg.Length)));
             
             lastGestureTime = DateTime.Now;
-            //MessageBox.Show(msg);
             if (msg == "q")
             {
                 c.stream.Close();
@@ -1260,11 +1278,14 @@ public class TuioDemo : Form , TuioListener
             }
             if(login==0)
             {
+                Console.WriteLine("[STREAM] Attempting TryHandleLoginPayload...");
                 if (TryHandleLoginPayload(msg))
                 {
+                    Console.WriteLine("[STREAM] Login payload handled successfully, uname=" + uname);
                     Invoke((Action)(Invalidate));
                     continue;
                 }
+                Console.WriteLine("[STREAM] TryHandleLoginPayload returned false");
 
                 string loginSuffix = "is logged in";
                 int loginSuffixIndex = msg.IndexOf(loginSuffix, StringComparison.OrdinalIgnoreCase);

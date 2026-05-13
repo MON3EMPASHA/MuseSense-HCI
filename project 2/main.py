@@ -95,10 +95,17 @@ def send_socket_message(connection: socket.socket | None, payload: str) -> bool:
         return False
 
     try:
+        # Temporarily switch to blocking so sendall doesn't raise BlockingIOError
+        connection.setblocking(True)
         connection.sendall(f"{payload}\n".encode("utf-8"))
+        connection.setblocking(False)
         return True
     except OSError as exc:
         print(f"[SOCKET] Send failed: {exc}")
+        try:
+            connection.setblocking(False)
+        except OSError:
+            pass
         return False
 
 
@@ -387,6 +394,8 @@ active_user_name = "guest"
 
 # signup_flow is non-None only when BT found no known user
 signup_flow: FaceSignupFlow | None = None
+# cached login payload — re-sent on reconnect if C# dropped during signup
+pending_login_payload: str | None = None
 
 if login_message is not None:
     active_user_name = str(login_message.get("name", "guest")).strip() or "guest"
@@ -478,6 +487,14 @@ while cap.isOpened():
         socket_buffer = ""
         old_msg = ""
         user_login = 0
+        # Re-send login payload if we already completed login/signup before the disconnect
+        if pending_login_payload is not None:
+            print(f"[LOGIN] C# reconnected — re-sending cached login payload")
+            if send_socket_message(conn, pending_login_payload):
+                user_login = 1
+                print(f"[LOGIN] Re-sent login payload successfully")
+            else:
+                print(f"[LOGIN] Re-send failed, will retry next iteration")
         continue
 
     for line in incoming_lines:
@@ -593,6 +610,7 @@ while cap.isOpened():
             message_payload = json.dumps(login_payload)
             print(f"[LOGIN] BT match → {active_user_name}")
             if send_socket_message(conn, message_payload):
+                pending_login_payload = message_payload
                 context_store.log_event(
                     build_event(
                         "face_login",
@@ -675,13 +693,27 @@ while cap.isOpened():
 
             payload_str = json.dumps(login_payload)
             print(f"[LOGIN] Face {status} → {active_user_name}")
+
+            # If conn dropped during the capture phase, wait for C# to reconnect
+            if conn is None:
+                print("[LOGIN] Socket disconnected during signup — waiting for C# to reconnect...")
+                conn, addr = wait_for_csharp_client(soc)
+                conn.setblocking(False)
+                socket_buffer = ""
+
             ok = send_socket_message(conn, payload_str)
             if not ok:
-                print(f"[LOGIN] Send failed for {active_user_name}")
+                print(f"[LOGIN] Send failed for {active_user_name}, retrying once...")
+                import time as _t; _t.sleep(0.2)
+                ok = send_socket_message(conn, payload_str)
             if ok:
+                pending_login_payload = payload_str
+                print(f"[LOGIN] Payload sent successfully for {active_user_name}")
                 context_store.log_event(
                     build_event("face_login", {"user": active_user_name, "source": status})
                 )
+            else:
+                print(f"[LOGIN] Send failed for {active_user_name} after retry")
         else:
             print("[SIGNUP] User cancelled — continuing as guest")
 
