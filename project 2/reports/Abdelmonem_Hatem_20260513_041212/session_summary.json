@@ -1,0 +1,173 @@
+{
+  "type": "session_summary",
+  "user": "Abdelmonem Hatem",
+  "started_at": "2026-05-13 04:12:12",
+  "ended_at": "2026-05-13 04:16:07",
+  "reports": {
+    "gaze": {
+      "png": "reports\\Abdelmonem_Hatem_20260513_041212\\Abdelmonem_Hatem_gaze_20260513_041212.png",
+      "json": "reports\\Abdelmonem_Hatem_20260513_041212\\Abdelmonem_Hatem_gaze_20260513_041212.json",
+      "heatmap": "reports\\Abdelmonem_Hatem_20260513_041212\\Abdelmonem_Hatem_gaze_20260513_041212_heatmap.png",
+      "combo": "reports\\Abdelmonem_Hatem_20260513_041212\\Abdelmonem_Hatem_gaze_20260513_041212_combo.png",
+      "summary": {
+        "type": "gaze_session_report",
+        "user": "Abdelmonem Hatem",
+        "started_at": "2026-05-13 04:12:12",
+        "sample_count": 468,
+        "zone_counts": {
+          "left": 0,
+          "center": 468,
+          "right": 0
+        },
+        "zone_percent": {
+          "left": 0.0,
+          "center": 100.0,
+          "right": 0.0
+        },
+        "mean_gaze_delta": 0.0023,
+        "max_abs_gaze_delta": 0.081,
+        "artifacts": {
+          "png": "Abdelmonem_Hatem_gaze_20260513_041212.png",
+          "json": "Abdelmonem_Hatem_gaze_20260513_041212.json",
+          "heatmap": "Abdelmonem_Hatem_gaze_20260513_041212_heatmap.png",
+          "combo": "Abdelmonem_Hatem_gaze_20260513_041212_combo.png"
+        }
+      }
+    },
+    "emotion": {
+      "png": "reports\\Abdelmonem_Hatem_20260513_041212\\Abdelmonem_Hatem_emotion_20260513_041212.png",
+      "json": "reports\\Abdelmonem_Hatem_20260513_041212\\Abdelmonem_Hatem_emotion_20260513_041212.json",
+      "summary": {
+        "type": "emotion_session_report",
+        "user": "Abdelmonem Hatem",
+        "started_at": "2026-05-13 04:12:12",
+        "sample_count": 468,
+        "emotion_counts": {
+          "happy": 306,
+          "neutral": 162
+        },
+        "emotion_percent": {
+          "happy": 65.4,
+          "neutral": 34.6
+        },
+        "dominant_emotion": "happy"
+      }
+    },
+    "artifacts": {
+      "png": "artifact_report.png",
+      "json": "artifact_report.json",
+      "summary": {
+        "type": "artifact_session_report",
+        "user": "Abdelmonem Hatem",
+        "total_artifacts": 7,
+        "opened_count": 2,
+        "opened_artifacts": [
+          {
+            "name": "Mask of Tutankhamun",
+            "score": 19.0,
+            "opened": true,
+            "country": "Egypt",
+            "era": "New Kingdom"
+          },
+          {
+            "name": "Ramses II Statue",
+            "score": 8.4,
+            "opened": true,
+            "country": "Egypt",
+            "era": "New Kingdom"
+          }
+        ],
+        "unopened_artifacts": [
+          {
+            "name": "Sacred Scarab Beetle",
+            "score": 12.2,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Old Kingdom onwards"
+          },
+          {
+            "name": "King Senwosret III",
+            "score": 0.0,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Middle Kingdom"
+          },
+          {
+            "name": "Bust of Nefertiti",
+            "score": 0.0,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Amarna Period"
+          },
+          {
+            "name": "Horus",
+            "score": 0.0,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Ancient Egypt (all periods)"
+          },
+          {
+            "name": "Great Sphinx of Abu al-Hol",
+            "score": 0.0,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Old Kingdom"
+          }
+        ],
+        "ranked_artifacts": [
+          {
+            "name": "Mask of Tutankhamun",
+            "score": 19.0,
+            "opened": true,
+            "country": "Egypt",
+            "era": "New Kingdom"
+          },
+          {
+            "name": "Sacred Scarab Beetle",
+            "score": 12.2,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Old Kingdom onwards"
+          },
+          {
+            "name": "Ramses II Statue",
+            "score": 8.4,
+            "opened": true,
+            "country": "Egypt",
+            "era": "New Kingdom"
+          },
+          {
+            "name": "King Senwosret III",
+            "score": 0.0,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Middle Kingdom"
+          },
+          {
+            "name": "Bust of Nefertiti",
+            "score": 0.0,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Amarna Period"
+          },
+          {
+            "name": "Horus",
+            "score": 0.0,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Ancient Egypt (all periods)"
+          },
+          {
+            "name": "Great Sphinx of Abu al-Hol",
+            "score": 0.0,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Old Kingdom"
+          }
+        ],
+        "generated_at": "2026-05-13 04:16:07"
+      }
+    },
+    "combined_pdf": "session_reports.pdf"
+  }
+}

@@ -38,7 +38,9 @@ from gestures import (
 )
 from pathlib import Path
 from users import normalize_mac, load_users_by_mac
-from movements import recognizer
+from movements import recognizer as _movements_recognizer  # kept for fallback
+from test_movements import recognizer
+from hand_shape_recognizer import normalize_landmarks, load_hand_shapes, recognize_hand_shape
 from context_store import ContextStore, apply_gesture_action
 from event_protocol import build_event, event_to_console, to_pretty_json
 from object_tracking import YoloTracker
@@ -254,6 +256,12 @@ last_interest_emotion = ""
 last_interest_delta = 0.0
 person_frame_counter = 0
 last_person_faces: list[dict] = []
+shape_cooldown_time = 0.0
+
+# Load custom static hand shapes for Mute / DarkMode
+_BASE_DIR = Path(__file__).parent
+hand_shapes = load_hand_shapes(str(_BASE_DIR / "hand_shapes.json"))
+print(f"[GESTURE] Loaded {len(hand_shapes)} static hand shapes: {list(hand_shapes.keys())}")
 
 
 all_macs = []
@@ -763,32 +771,51 @@ while cap.isOpened():
             )
         # ─────────────────────────────────────────────────────────────────
 
-        if results.pose_landmarks is not None:
-            right_wrist = results.pose_landmarks.landmark[
-                mp_pose.PoseLandmark.RIGHT_WRIST
-            ]
-            left_wrist = results.pose_landmarks.landmark[
-                mp_pose.PoseLandmark.LEFT_WRIST
-            ]
-            use_right = right_wrist.visibility >= left_wrist.visibility
-            wrist = right_wrist if use_right else left_wrist
+        # ── Static hand-shape detection (Mute / DarkMode) ─────────────────
+        active_hand = None
+        if results.right_hand_landmarks:
+            active_hand = results.right_hand_landmarks
+        elif results.left_hand_landmarks:
+            active_hand = results.left_hand_landmarks
 
-            if wrist.visibility >= 0.4:
-                wrist_x = int(wrist.x * image_width)
-                wrist_y = int(wrist.y * image_height)
-                gesture_points.append(Point(wrist_x, wrist_y, 1))
-                circle_points.append(Point(wrist_x, wrist_y, 1))
+        if active_hand and hand_shapes and time.monotonic() > shape_cooldown_time:
+            norm = normalize_landmarks(active_hand)
+            shape_name, shape_score = recognize_hand_shape(norm, hand_shapes, threshold=0.45)
+            if shape_name and shape_score > 0.55:
+                msg = shape_name
+                shape_cooldown_time = time.monotonic() + 1.5
+                print(f"[GESTURE] Shape detected: {shape_name} (score={shape_score:.2f})")
+
+        # ── Dynamic trajectory (Index Finger) ──────────────────────────────
+        if results.pose_landmarks is not None:
+            right_index = results.pose_landmarks.landmark[
+                mp_pose.PoseLandmark.RIGHT_INDEX
+            ]
+            left_index = results.pose_landmarks.landmark[
+                mp_pose.PoseLandmark.LEFT_INDEX
+            ]
+            use_right = right_index.visibility >= left_index.visibility
+            finger = right_index if use_right else left_index
+
+            if finger.visibility >= 0.4:
+                finger_x = int(finger.x * image_width)
+                finger_y = int(finger.y * image_height)
+                # Only append if finger has actually moved (3px jitter filter)
+                if not gesture_points or abs(finger_x - gesture_points[-1].x) > 3 or abs(finger_y - gesture_points[-1].y) > 3:
+                    gesture_points.append(Point(finger_x, finger_y, 1))
+                    circle_points.append(Point(finger_x, finger_y, 1))
 
         if frame_count % 30 == 0:
             frame_count = 0
+
             if gesture_points and is_gesture_significant(gesture_points):
                 result = recognizer.recognize(gesture_points)
                 if result[0] is not None:
                     recognized_gesture = str(result[0]).strip()
                     recognized_score = float(result[1])
-                    print(result)
+                    print(f"[GESTURE] {recognized_gesture} score={recognized_score:.2f}")
 
-                    if recognized_score < 0.72:
+                    if recognized_score < 0.5:
                         print(
                             f"[GESTURE] Low score {recognized_score:.2f} for {recognized_gesture}, ignored"
                         )
@@ -806,6 +833,10 @@ while cap.isOpened():
 
             gesture_points.clear()
             circle_points.clear()
+
+            # Update top-right feedback label for any gesture that fired
+            if msg:
+                show_gesture_feedback(msg, duration=3.0)
         # x=int(results.pose.landmark[mp_pose.PoseLandmark.RIGHT_WRIST].x * image_width)
         # y=int(results.pose.landmark[mp_pose.PoseLandmark.RIGHT_WRIST].y * image_height)
         for face_id_key, name in face_ids.items():

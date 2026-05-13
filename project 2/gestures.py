@@ -15,20 +15,24 @@ def show_gesture_feedback(message: str, duration: float = 2.0) -> None:
 
 
 def draw_gesture_feedback(frame: np.ndarray) -> None:
-    if time.monotonic() >= gesture_feedback_until or not gesture_feedback_text:
-        return
-
     import cv2
 
-    cv2.putText(
-        frame,
-        gesture_feedback_text,
-        (20, 60),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.8,
-        (0, 255, 255),
-        2,
-    )
+    h, w = frame.shape[:2]
+
+    # Persistent last-gesture label (top-right)
+    if gesture_feedback_text:
+        still_active = time.monotonic() < gesture_feedback_until
+        label = gesture_feedback_text
+        color = (0, 255, 128) if still_active else (120, 120, 120)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        scale = 0.75
+        thickness = 2
+        (tw, th), _ = cv2.getTextSize(label, font, scale, thickness)
+        x = w - tw - 16
+        y = 36
+        # semi-transparent background
+        cv2.rectangle(frame, (x - 8, y - th - 6), (x + tw + 8, y + 8), (0, 0, 0), -1)
+        cv2.putText(frame, label, (x, y), font, scale, color, thickness)
 
 
 def gesture_path_stats(points: List[Point]) -> dict[str, float]:
@@ -104,3 +108,43 @@ def is_gesture_significant(points: List[Point]) -> bool:
 
     stats = gesture_path_stats(points)
     return stats["width"] >= 80 or stats["height"] >= 80 or stats["path_length"] >= 160
+
+
+def detect_swipe(points: List[Point]) -> str | None:
+    """
+    Geometry-based swipe detector — does NOT rely on $1 templates.
+    Returns 'SwipeLeft', 'SwipeRight', or None.
+
+    Criteria:
+    - At least 8 points
+    - Net horizontal displacement >= 60px  (strong directional movement)
+    - Width / Height ratio >= 1.8          (gesture is wider than it is tall)
+    - Net X displacement covers >= 40% of total path length (not too squiggly)
+    """
+    if len(points) < 8:
+        return None
+
+    stats = gesture_path_stats(points)
+    width = stats["width"]
+    height = stats["height"]
+    path_length = stats["path_length"]
+
+    if height == 0 or path_length == 0:
+        return None
+
+    # Must be predominantly horizontal
+    if width / height < 1.8:
+        return None
+
+    # Net X displacement (start → end)
+    net_x = points[-1].x - points[0].x
+
+    # Net displacement must be significant fraction of path (not back-and-forth)
+    if abs(net_x) / path_length < 0.40:
+        return None
+
+    # Minimum absolute displacement
+    if abs(net_x) < 60:
+        return None
+
+    return "SwipeLeft" if net_x < 0 else "SwipeRight"

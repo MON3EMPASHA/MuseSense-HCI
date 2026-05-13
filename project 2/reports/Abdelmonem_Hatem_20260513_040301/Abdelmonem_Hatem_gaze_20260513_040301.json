@@ -1,0 +1,24 @@
+{
+  "type": "gaze_session_report",
+  "user": "Abdelmonem Hatem",
+  "started_at": "2026-05-13 04:03:01",
+  "sample_count": 253,
+  "zone_counts": {
+    "left": 0,
+    "center": 253,
+    "right": 0
+  },
+  "zone_percent": {
+    "left": 0.0,
+    "center": 100.0,
+    "right": 0.0
+  },
+  "mean_gaze_delta": -0.0276,
+  "max_abs_gaze_delta": 0.115,
+  "artifacts": {
+    "png": "Abdelmonem_Hatem_gaze_20260513_040301.png",
+    "json": "Abdelmonem_Hatem_gaze_20260513_040301.json",
+    "heatmap": "Abdelmonem_Hatem_gaze_20260513_040301_heatmap.png",
+    "combo": "Abdelmonem_Hatem_gaze_20260513_040301_combo.png"
+  }
+}

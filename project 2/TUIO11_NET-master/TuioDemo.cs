@@ -1114,6 +1114,24 @@ public class TuioDemo : Form , TuioListener
         else if (page == 0) GoToPage(4);
     }
 
+    // Navigate to next artifact while on the artifact detail page (page 5)
+    void NavigateNextArtifact()
+    {
+        if (artifacts == null || artifacts.Count == 0) return;
+        int currentIndex = artifacts.FindIndex(a => a.id == selectedArtifactId);
+        int nextIndex = (currentIndex + 1) % artifacts.Count;
+        OpenArtifactDetails(artifacts[nextIndex].id);
+    }
+
+    // Navigate to previous artifact while on the artifact detail page (page 5)
+    void NavigatePreviousArtifact()
+    {
+        if (artifacts == null || artifacts.Count == 0) return;
+        int currentIndex = artifacts.FindIndex(a => a.id == selectedArtifactId);
+        int prevIndex = (currentIndex - 1 + artifacts.Count) % artifacts.Count;
+        OpenArtifactDetails(artifacts[prevIndex].id);
+    }
+
 
     class LoginPayload
     {
@@ -1274,24 +1292,40 @@ public class TuioDemo : Form , TuioListener
            
             else
             {
-                if (msg.Trim() == "SwipeRight") NavigateNextPage();
-                if (msg.Trim() == "SwipeLeft") NavigatePreviousPage();
-                if (msg.Trim() == "Circle" && page == 5 && selectedArtifactId >= 0)
+                string gesture = msg.Trim();
+
+                // SwipeRight: navigate next artifact (on detail page) or next menu page
+                if (gesture == "SwipeRight")
+                {
+                    if (page == 5 && selectedArtifactId >= 0) NavigateNextArtifact();
+                    else NavigateNextPage();
+                }
+
+                // SwipeLeft: navigate previous artifact (on detail page) or previous menu page
+                if (gesture == "SwipeLeft")
+                {
+                    if (page == 5 && selectedArtifactId >= 0) NavigatePreviousArtifact();
+                    else NavigatePreviousPage();
+                }
+
+                // Circle: toggle favourite for the currently open artifact
+                if (gesture == "Circle" && page == 5 && selectedArtifactId >= 0)
                 {
                     ToggleFavoriteForSelectedArtifact();
                 }
-                if ((msg.Trim() == "ZoomIn" || msg.Trim() == "ZoomOut") && page == 5 && selectedArtifactId >= 0)
+
+                // Mute: toggle audio narration
+                if (gesture == "Mute")
                 {
-                    ArtifactRecord artifact = GetArtifactById(selectedArtifactId);
-                    if (artifact != null)
-                    {
-                        string objPath = Resolve3DModelPath(artifact.name);
-                        if (objPath != null)
-                        {
-                            try { Process.Start(objPath); } catch { }
-                        }
-                    }
+                    ToggleNarration();
                 }
+
+                // DarkMode: toggle light/dark theme
+                if (gesture == "DarkMode")
+                {
+                    ToggleThemeMode();
+                }
+
                 Invoke((Action)(Invalidate));
             }
 
