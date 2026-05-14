@@ -1,6 +1,17 @@
 import logging
 import os
+import sys
 import warnings
+
+# If launched with anything other than the project's venv interpreter, re-launch
+# with the venv python so dependencies resolve correctly. We use subprocess
+# instead of os.execv because os.execv mishandles Windows paths containing
+# spaces (e.g. "project 2").
+_VENV_PY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "Scripts", "python.exe")
+if os.path.exists(_VENV_PY) and os.path.normcase(sys.executable) != os.path.normcase(_VENV_PY):
+    import subprocess
+    print(f"[BOOT] Re-launching under venv python: {_VENV_PY}")
+    sys.exit(subprocess.call([_VENV_PY, "-u", os.path.abspath(__file__), *sys.argv[1:]]))
 
 # Suppress MediaPipe / absl C++ stderr noise before any imports load the libs.
 os.environ.setdefault("GLOG_minloglevel", "3")          # suppress glog INFO/WARNING/ERROR
@@ -8,13 +19,7 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 os.environ.setdefault("MEDIAPIPE_DISABLE_GPU", "1")
 
-# Redirect stderr to devnull for the duration of the import phase so that
-# MediaPipe's C++ backend "inference_feedback_manager" warnings are swallowed.
-import sys
 import io
-
-_real_stderr = sys.stderr
-sys.stderr = open(os.devnull, "w")
 
 logging.getLogger("tensorflow").setLevel(logging.ERROR)
 logging.getLogger("absl").setLevel(logging.ERROR)
@@ -29,40 +34,49 @@ warnings.filterwarnings(
     "ignore",
     message=r".*tf\.losses\.sparse_softmax_cross_entropy is deprecated.*",
 )
-import cv2
-import mediapipe as mp
-import numpy as np
-import socket
-import pickle
-import socket
-import json
-import bluetooth
-import time
-from dollarpy import Point
-from gestures import (
-    is_circle_like,
-    is_gesture_significant,
-    show_gesture_feedback,
-    draw_gesture_feedback,
-)
-from pathlib import Path
-from users import normalize_mac, load_users_by_mac
-from movements import recognizer as _movements_recognizer  # kept for fallback
-from test_movements import recognizer
-from hand_shape_recognizer import normalize_landmarks, load_hand_shapes, recognize_hand_shape
-from context_store import ContextStore, apply_gesture_action
-from event_protocol import build_event, event_to_console, to_pretty_json
 
-from expression_tracker import ExpressionTracker
-from gaze_tracker import GazeTracker
-from gaze_report import GazeSessionLogger
-from session_reports import save_session_reports
-from face_recognizer import FaceRecognizer
-from face_signup import FaceSignupFlow
+# Redirect stderr to devnull only for the heavy ML imports so the
+# "inference_feedback_manager" C++ noise is swallowed. If an import raises,
+# restore stderr first so the traceback is visible.
+_real_stderr = sys.stderr
+sys.stderr = open(os.devnull, "w")
+try:
+    import cv2
+    import mediapipe as mp
+    import numpy as np
+    import socket
+    import pickle
+    import json
+    import bluetooth
+    import time
+    from dollarpy import Point
+    from gestures import (
+        is_circle_like,
+        is_gesture_significant,
+        show_gesture_feedback,
+        draw_gesture_feedback,
+    )
+    from pathlib import Path
+    from users import normalize_mac, load_users_by_mac
+    from movements import recognizer as _movements_recognizer  # kept for fallback
+    from test_movements import recognizer
+    from hand_shape_recognizer import normalize_landmarks, load_hand_shapes, recognize_hand_shape
+    from context_store import ContextStore, apply_gesture_action
+    from event_protocol import build_event, event_to_console, to_pretty_json
 
-# Restore stderr now that all noisy imports are done.
-sys.stderr.close()
-sys.stderr = _real_stderr
+    from expression_tracker import ExpressionTracker
+    from gaze_tracker import GazeTracker
+    from gaze_report import GazeSessionLogger
+    from session_reports import save_session_reports
+    from face_recognizer import FaceRecognizer
+    from face_signup import FaceSignupFlow
+finally:
+    # Always restore stderr, even on import failure, so tracebacks are visible.
+    try:
+        sys.stderr.close()
+    except Exception:
+        pass
+    sys.stderr = _real_stderr
 
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 5001
@@ -95,10 +109,17 @@ def send_socket_message(connection: socket.socket | None, payload: str) -> bool:
         return False
 
     try:
+        # Temporarily switch to blocking so sendall doesn't raise BlockingIOError
+        connection.setblocking(True)
         connection.sendall(f"{payload}\n".encode("utf-8"))
+        connection.setblocking(False)
         return True
     except OSError as exc:
         print(f"[SOCKET] Send failed: {exc}")
+        try:
+            connection.setblocking(False)
+        except OSError:
+            pass
         return False
 
 
@@ -387,6 +408,8 @@ active_user_name = "guest"
 
 # signup_flow is non-None only when BT found no known user
 signup_flow: FaceSignupFlow | None = None
+# cached login payload — re-sent on reconnect if C# dropped during signup
+pending_login_payload: str | None = None
 
 if login_message is not None:
     active_user_name = str(login_message.get("name", "guest")).strip() or "guest"
@@ -436,8 +459,40 @@ gaze_session = GazeSessionLogger(active_user_name)
 reports_dir = Path("reports")
 
 cap = cv2.VideoCapture(0)
-cv2.namedWindow("Output", cv2.WINDOW_NORMAL)
-cv2.resizeWindow("Output", 960, 640)
+
+# === Adaptive interface: live-feed (OpenCV preview window) visibility ===
+# The C# GUI sends "CAMERA:ON" / "CAMERA:OFF" based on the logged-in user's
+# age profile (Child & Senior modes hide the window; Teen/Adult show it).
+# Default is OFF until the first command arrives so we don't briefly flash a
+# window for a Child user.
+camera_window_visible = False
+_camera_window_created = False
+
+
+def set_camera_window(visible: bool) -> None:
+    """Show or hide the OpenCV live-feed window."""
+    global camera_window_visible, _camera_window_created
+    if visible and not _camera_window_created:
+        cv2.namedWindow("Output", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Output", 960, 640)
+        _camera_window_created = True
+    elif not visible and _camera_window_created:
+        try:
+            cv2.destroyWindow("Output")
+        except Exception:
+            pass
+        _camera_window_created = False
+    camera_window_visible = visible
+
+
+def emit_transcription(connection, text: str) -> None:
+    """Send a TRANS: line to the C# GUI for the live-transcription panel."""
+    if not text:
+        return
+    try:
+        send_socket_message(connection, "TRANS:" + str(text).strip())
+    except Exception:
+        pass
 user_login = 0
 flag_bluetooth = 0
 socket_buffer = ""
@@ -478,9 +533,27 @@ while cap.isOpened():
         socket_buffer = ""
         old_msg = ""
         user_login = 0
+        # Re-send login payload if we already completed login/signup before the disconnect
+        if pending_login_payload is not None:
+            print(f"[LOGIN] C# reconnected — re-sending cached login payload")
+            if send_socket_message(conn, pending_login_payload):
+                user_login = 1
+                print(f"[LOGIN] Re-sent login payload successfully")
+            else:
+                print(f"[LOGIN] Re-send failed, will retry next iteration")
         continue
 
     for line in incoming_lines:
+        # Adaptive UI command from C#: toggle the OpenCV live-feed window.
+        if line.startswith("CAMERA:"):
+            value = line.split(":", 1)[1].strip().upper()
+            want_visible = value in ("ON", "1", "TRUE", "VISIBLE", "SHOW")
+            set_camera_window(want_visible)
+            print(f"[UI] Live feed -> {'ON' if want_visible else 'OFF'}")
+            emit_transcription(
+                conn, f"Live feed {'enabled' if want_visible else 'disabled'} by UI"
+            )
+            continue
         if line.startswith("TUIO:"):
             parts = line.split(":", 1)
             if len(parts) == 2:
@@ -509,6 +582,7 @@ while cap.isOpened():
                     last_tuio_marker_id = marker_id
                     tuio_last_seen = time.monotonic()
                     print(f"[TUIO] Marker {marker_id} -> {artifact_name}")
+                    emit_transcription(conn, f"Marker {marker_id}: {artifact_name}")
         else:
             # Allow the C# client to update context when user opens a single-artifact page.
             # Expected examples:
@@ -593,6 +667,7 @@ while cap.isOpened():
             message_payload = json.dumps(login_payload)
             print(f"[LOGIN] BT match → {active_user_name}")
             if send_socket_message(conn, message_payload):
+                pending_login_payload = message_payload
                 context_store.log_event(
                     build_event(
                         "face_login",
@@ -637,9 +712,12 @@ while cap.isOpened():
         display_signup = cv2.resize(
             annotated_signup, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_LINEAR
         )
-        cv2.imshow("Output", display_signup)
-        if cv2.waitKey(1) == ord("q"):
-            break
+        if camera_window_visible:
+            cv2.imshow("Output", display_signup)
+            if cv2.waitKey(1) == ord("q"):
+                break
+        else:
+            time.sleep(0.005)
 
         # Handle completion immediately — don't wait for next iteration
         if not signup_flow.done:
@@ -675,13 +753,27 @@ while cap.isOpened():
 
             payload_str = json.dumps(login_payload)
             print(f"[LOGIN] Face {status} → {active_user_name}")
+
+            # If conn dropped during the capture phase, wait for C# to reconnect
+            if conn is None:
+                print("[LOGIN] Socket disconnected during signup — waiting for C# to reconnect...")
+                conn, addr = wait_for_csharp_client(soc)
+                conn.setblocking(False)
+                socket_buffer = ""
+
             ok = send_socket_message(conn, payload_str)
             if not ok:
-                print(f"[LOGIN] Send failed for {active_user_name}")
+                print(f"[LOGIN] Send failed for {active_user_name}, retrying once...")
+                import time as _t; _t.sleep(0.2)
+                ok = send_socket_message(conn, payload_str)
             if ok:
+                pending_login_payload = payload_str
+                print(f"[LOGIN] Payload sent successfully for {active_user_name}")
                 context_store.log_event(
                     build_event("face_login", {"user": active_user_name, "source": status})
                 )
+            else:
+                print(f"[LOGIN] Send failed for {active_user_name} after retry")
         else:
             print("[SIGNUP] User cancelled — continuing as guest")
 
@@ -737,6 +829,9 @@ while cap.isOpened():
                     last_gaze_zone = expression["gaze_zone"]
                     last_expression_signature = current_signature
                     expression_log_until = time.monotonic() + 2.0
+                    emit_transcription(
+                        conn, f"Expression: {last_emotion} (gaze: {last_gaze_zone})"
+                    )
 
                     context_store.update_context(
                         active_user_name,
@@ -925,9 +1020,11 @@ while cap.isOpened():
             last_interest_emotion,
             last_interest_delta,
         )
-        cv2.imshow("Output", display_image)
+        if camera_window_visible:
+            cv2.imshow("Output", display_image)
         # logic to send msg to unity
         if msg != "" and msg != old_msg:  # only send when there's actually something
+            emit_transcription(conn, f"Gesture: {msg}")
             context_snapshot = context_store.get_context_snapshot(active_user_name)
             current_item_id = (
                 context_snapshot.get("current_artifact") or "current_artifact"
@@ -974,8 +1071,13 @@ while cap.isOpened():
             break
     except Exception as e:
         print(e)
-    if cv2.waitKey(1) == ord("q"):
-        break
+    if camera_window_visible:
+        if cv2.waitKey(1) == ord("q"):
+            break
+    else:
+        # No HighGUI window → cv2.waitKey would do nothing useful and the loop
+        # would burn CPU. Sleep briefly so the rest of the loop can breathe.
+        time.sleep(0.005)
 
 try:
     result = save_session_reports(
