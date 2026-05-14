@@ -187,6 +187,36 @@ class GazeSessionLogger:
         mean_delta = float(sum(deltas) / len(deltas)) if deltas else 0.0
         max_abs_delta = float(max((abs(d) for d in deltas), default=0.0))
 
+        # Transition matrix: zone_i → zone_{i+1}
+        transitions: dict[str, dict[str, int]] = {
+            "left":   {"left": 0, "center": 0, "right": 0},
+            "center": {"left": 0, "center": 0, "right": 0},
+            "right":  {"left": 0, "center": 0, "right": 0},
+        }
+        for prev, curr in zip(self.samples, self.samples[1:]):
+            if prev.gaze_zone in transitions and curr.gaze_zone in transitions[prev.gaze_zone]:
+                transitions[prev.gaze_zone][curr.gaze_zone] += 1
+
+        # Dwell durations per zone (sum of time spent in each zone segment)
+        dwell_seconds: dict[str, float] = {"left": 0.0, "center": 0.0, "right": 0.0}
+        if len(self.samples) >= 2:
+            for prev, curr in zip(self.samples, self.samples[1:]):
+                dt = max(0.0, curr.t - prev.t)
+                dwell_seconds[prev.gaze_zone] = dwell_seconds.get(prev.gaze_zone, 0.0) + dt
+
+        dominant_zone = max(counts, key=counts.get) if counts else "center"
+
+        # Per-zone average |gaze_delta|
+        zone_delta_sums: dict[str, float] = {"left": 0.0, "center": 0.0, "right": 0.0}
+        zone_delta_n:    dict[str, int]   = {"left": 0,   "center": 0,   "right": 0}
+        for s in self.samples:
+            zone_delta_sums[s.gaze_zone] = zone_delta_sums.get(s.gaze_zone, 0.0) + abs(s.gaze_delta or 0.0)
+            zone_delta_n[s.gaze_zone]    = zone_delta_n.get(s.gaze_zone, 0) + 1
+        zone_mean_abs_delta = {
+            z: round(zone_delta_sums[z] / zone_delta_n[z], 4) if zone_delta_n.get(z, 0) else 0.0
+            for z in ("left", "center", "right")
+        }
+
         started = time.strftime(
             "%Y-%m-%d %H:%M:%S", time.localtime(self.session_started_at)
         )
@@ -198,6 +228,10 @@ class GazeSessionLogger:
             "sample_count": len(self.samples),
             "zone_counts": counts,
             "zone_percent": perc,
+            "dominant_zone": dominant_zone,
+            "dwell_seconds": {k: round(v, 2) for k, v in dwell_seconds.items()},
+            "transitions": transitions,
+            "zone_mean_abs_delta": zone_mean_abs_delta,
             "mean_gaze_delta": round(mean_delta, 4),
             "max_abs_gaze_delta": round(max_abs_delta, 4),
             "artifacts": {
@@ -355,9 +389,10 @@ class GazeSessionLogger:
             2,
         )
 
-        # Bar chart sub-area
+        # Bar chart sub-area — slightly shorter so the Summary block below
+        # has clean space and the in-bar labels don't collide with the heading.
         bar_x0, bar_y0 = left_x + 20, left_y + 70
-        bar_w, bar_h = left_w - 40, 260
+        bar_w, bar_h = left_w - 40, 220
         cv2.rectangle(
             img, (bar_x0, bar_y0), (bar_x0 + bar_w, bar_y0 + bar_h), (248, 248, 248), -1
         )
@@ -403,40 +438,96 @@ class GazeSessionLogger:
                 2,
             )
 
-        # Metrics
+        # Metrics + dwell + dominant zone
         deltas = [s.gaze_delta for s in self.samples]
         mean_delta = float(sum(deltas) / len(deltas)) if deltas else 0.0
         max_abs_delta = float(max((abs(d) for d in deltas), default=0.0))
 
+        # Dwell calc (time spent per zone)
+        dwell_seconds = {"left": 0.0, "center": 0.0, "right": 0.0}
+        if len(self.samples) >= 2:
+            for prev, curr in zip(self.samples, self.samples[1:]):
+                dt = max(0.0, curr.t - prev.t)
+                dwell_seconds[prev.gaze_zone] = dwell_seconds.get(prev.gaze_zone, 0.0) + dt
+        total_dwell = sum(dwell_seconds.values())
+
+        dominant = max(counts, key=counts.get) if counts else "center"
+
         mx0 = left_x + 20
-        my0 = left_y + 400
+        my0 = left_y + 380
         cv2.putText(
             img, "Summary", (mx0, my0), cv2.FONT_HERSHEY_SIMPLEX, 0.9, text_primary, 2
         )
         cv2.putText(
             img,
-            f"Samples: {len(self.samples)}",
-            (mx0, my0 + 40),
+            f"Samples: {len(self.samples)}    Dominant: {dominant.upper()}",
+            (mx0, my0 + 36),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.72,
+            0.66,
             text_primary,
             2,
         )
+
+        # Dwell line (only if any non-zero)
+        if total_dwell > 0.05:
+            dwell_label = (
+                f"Dwell  L:{dwell_seconds['left']:.1f}s  "
+                f"C:{dwell_seconds['center']:.1f}s  "
+                f"R:{dwell_seconds['right']:.1f}s"
+            )
+        else:
+            dwell_label = "Dwell  -"
         cv2.putText(
             img,
-            f"Mean delta: {mean_delta:+.3f}",
-            (mx0, my0 + 74),
+            dwell_label,
+            (mx0, my0 + 66),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.72,
+            0.6,
             text_primary,
             2,
         )
+
         cv2.putText(
             img,
-            f"Max |delta|: {max_abs_delta:.3f}",
-            (mx0, my0 + 108),
+            f"Mean delta: {mean_delta:+.3f}    Max |delta|: {max_abs_delta:.3f}",
+            (mx0, my0 + 96),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.72,
+            0.6,
+            text_primary,
+            2,
+        )
+
+        # Transitions row (compact)
+        transitions = {
+            "left":   {"left": 0, "center": 0, "right": 0},
+            "center": {"left": 0, "center": 0, "right": 0},
+            "right":  {"left": 0, "center": 0, "right": 0},
+        }
+        for prev, curr in zip(self.samples, self.samples[1:]):
+            if prev.gaze_zone in transitions and curr.gaze_zone in transitions[prev.gaze_zone]:
+                transitions[prev.gaze_zone][curr.gaze_zone] += 1
+        most_common_transitions = []
+        for src in ("left", "center", "right"):
+            for dst in ("left", "center", "right"):
+                if src == dst:
+                    continue
+                c = transitions[src][dst]
+                if c > 0:
+                    most_common_transitions.append((c, src, dst))
+        most_common_transitions.sort(reverse=True)
+        if most_common_transitions:
+            top = most_common_transitions[:3]
+            # ASCII arrow — Hershey fonts don't render unicode glyphs.
+            parts = [f"{src[0].upper()}->{dst[0].upper()}:{cnt}" for cnt, src, dst in top]
+            trans_text = "Top moves  " + "   ".join(parts)
+        else:
+            trans_text = "Top moves  -"
+        cv2.putText(
+            img,
+            trans_text,
+            (mx0, my0 + 126),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
             text_primary,
             2,
         )
@@ -643,57 +734,149 @@ class GazeSessionLogger:
         cv2.imwrite(str(path), img)
 
     def _render_heatmap(self, path: Path) -> None:
-        width, height = 1280, 720
-        heat = np.zeros((height, width), dtype=np.float32)
+        """Render a 2-D gaze heatmap overlaid on a virtual-screen frame.
 
-        def sample_to_xy(sample: GazeSample) -> tuple[int, int]:
-            if sample.gaze_ratio is not None and math.isfinite(sample.gaze_ratio):
-                ratio = sample.gaze_ratio
-                if 0.0 <= ratio <= 1.0:
-                    x = int(ratio * (width - 1))
-                else:
-                    x = int(((ratio + 1.0) / 2.0) * (width - 1))
-            else:
-                zone = sample.gaze_zone
-                if zone == "left":
-                    x = int(0.22 * (width - 1))
-                elif zone == "right":
-                    x = int(0.78 * (width - 1))
-                else:
-                    x = int(0.5 * (width - 1))
-            x = max(0, min(width - 1, x))
-            y = height // 2
-            return x, y
+        X axis = horizontal gaze direction in user-perspective ("left" gazes
+        land on the left third, "right" gazes on the right third, "center"
+        gazes in the middle). Within each zone we offset further toward the
+        edge proportionally to |gaze_delta| (stronger gaze → further edge).
+
+        Y axis = deterministic Gaussian-jitter around screen-center, so each
+        sample becomes a small splat rather than collapsing onto one line.
+        This avoids a featureless horizontal stripe and produces a real 2-D
+        density distribution.
+        """
+        width, height = 1280, 720
+        canvas = np.full((height, width, 3), 18, dtype=np.uint8)  # near-black bg
+
+        # Virtual "screen" frame the user was looking at
+        margin_x, margin_y = 90, 110
+        sx1, sy1 = margin_x, margin_y
+        sx2, sy2 = width - margin_x, height - margin_y
+        sw, sh = sx2 - sx1, sy2 - sy1
+
+        heat = np.zeros((sh, sw), dtype=np.float32)
+
+        rng = np.random.default_rng(seed=42)
 
         for sample in self.samples:
-            x, y = sample_to_xy(sample)
+            zone = sample.gaze_zone
+            # Magnitude (clamped) controls how far the splat is pushed toward
+            # the edge of its zone. Mean delta on a strong look is ~0.10.
+            delta_mag = min(0.12, abs(sample.gaze_delta or 0.0))
+
+            if zone == "left":
+                base_x = 0.20 - delta_mag * 0.7   # pushes toward 0.12 max
+            elif zone == "right":
+                base_x = 0.80 + delta_mag * 0.7   # pushes toward 0.88 max
+            else:
+                base_x = 0.50
+
+            # Add a small natural jitter on both axes
+            jit_x = float(rng.normal(0.0, 0.018))
+            jit_y = float(rng.normal(0.0, 0.16))    # bigger to fill vertical
+
+            fx = max(0.02, min(0.98, base_x + jit_x))
+            fy = max(0.05, min(0.95, 0.5 + jit_y))
+
+            x = int(fx * (sw - 1))
+            y = int(fy * (sh - 1))
             heat[y, x] += 1.0
 
-        canvas = np.zeros((height, width, 3), dtype=np.uint8)
+        # Convert hits into a smooth coloured heatmap
         if heat.max() > 0:
-            heat = cv2.GaussianBlur(heat, (0, 0), 45)
+            heat = cv2.GaussianBlur(heat, (0, 0), 22)
             heat = heat / heat.max()
-            heat_img = np.uint8(heat * 255)
-            color = cv2.applyColorMap(heat_img, cv2.COLORMAP_INFERNO)
-            canvas = cv2.addWeighted(canvas, 0.15, color, 0.85, 0.0)
+            heat_u8 = np.uint8(heat * 255)
+            colour = cv2.applyColorMap(heat_u8, cv2.COLORMAP_INFERNO)
+            roi = canvas[sy1:sy2, sx1:sx2]
+            canvas[sy1:sy2, sx1:sx2] = cv2.addWeighted(roi, 0.10, colour, 0.90, 0.0)
 
+        # Virtual screen border
+        cv2.rectangle(canvas, (sx1, sy1), (sx2, sy2), (190, 190, 190), 2)
+
+        # Zone-divider hairlines (visually mark the thirds)
+        third_l = sx1 + sw // 3
+        third_r = sx1 + 2 * sw // 3
+        for x in (third_l, third_r):
+            for y_seg in range(sy1, sy2, 16):
+                cv2.line(canvas, (x, y_seg), (x, y_seg + 8), (90, 90, 90), 1)
+
+        # Title block
         cv2.putText(
-            canvas,
-            "Gaze Heatmap",
-            (30, 50),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            (240, 240, 240),
-            2,
+            canvas, "Gaze Heatmap",
+            (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (240, 240, 240), 2,
         )
         cv2.putText(
             canvas,
             f"Samples: {len(self.samples)}",
-            (30, 85),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (200, 200, 200),
-            2,
+            (30, 82), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 2,
         )
+        cv2.putText(
+            canvas,
+            "(X = gaze direction, user perspective)",
+            (30, height - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (140, 140, 140), 1,
+        )
+
+        # Zone labels with percentages directly under each third
+        counts = self._zone_counts()
+        total = max(sum(counts.values()), 1)
+        zone_centers = [
+            sx1 + sw // 6,
+            sx1 + sw // 2,
+            sx1 + 5 * sw // 6,
+        ]
+        zone_colors = {
+            "left":   (90, 130, 255),
+            "center": (110, 220, 130),
+            "right":  (255, 140, 90),
+        }
+        label_y = sy2 + 42
+        for i, zone in enumerate(["left", "center", "right"]):
+            pct = (counts.get(zone, 0) / total) * 100.0
+            label = f"{zone.upper()}   {pct:.1f}%"
+            size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.72, 2)[0]
+            tx = zone_centers[i] - size[0] // 2
+            # Coloured dot
+            cv2.circle(canvas, (tx - 18, label_y - 8), 7, zone_colors[zone], -1)
+            cv2.putText(
+                canvas, label,
+                (tx, label_y),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.72, (235, 235, 235), 2,
+            )
+            sub = f"{counts.get(zone, 0)} samples"
+            sub_size = cv2.getTextSize(sub, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+            cv2.putText(
+                canvas, sub,
+                (zone_centers[i] - sub_size[0] // 2, label_y + 24),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (160, 160, 160), 1,
+            )
+
+        # Scan path — connect consecutive samples in time order so the viewer
+        # can see how the gaze moved during the session. Drawn behind the
+        # heatmap for context; kept thin and translucent so it doesn't fight
+        # the density colours.
+        if len(self.samples) >= 2:
+            pts: list[tuple[int, int]] = []
+            for i, sample in enumerate(self.samples):
+                zone = sample.gaze_zone
+                delta_mag = min(0.12, abs(sample.gaze_delta or 0.0))
+                if zone == "left":
+                    bx = 0.20 - delta_mag * 0.7
+                elif zone == "right":
+                    bx = 0.80 + delta_mag * 0.7
+                else:
+                    bx = 0.50
+                by = 0.5 + 0.32 * math.sin(i * 0.42)  # gentle vertical weave
+                px = int(max(0.02, min(0.98, bx)) * (sw - 1)) + sx1
+                py = int(max(0.05, min(0.95, by)) * (sh - 1)) + sy1
+                pts.append((px, py))
+            for i in range(1, len(pts)):
+                alpha = i / max(1, len(pts) - 1)   # fade darker→lighter over time
+                grey = int(80 + 100 * alpha)
+                cv2.line(canvas, pts[i - 1], pts[i], (grey, grey, grey), 1)
+            # Start / end markers
+            cv2.circle(canvas, pts[0],  6, (120, 220, 120), -1)   # green start
+            cv2.circle(canvas, pts[-1], 6, (90, 100, 255), -1)    # red-ish end
 
         cv2.imwrite(str(path), canvas)

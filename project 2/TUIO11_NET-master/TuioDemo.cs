@@ -194,6 +194,9 @@ public class TuioDemo : Form , TuioListener
 
         static AgeProfile ResolveAgeProfile(int age)
         {
+                // Transcription panel intentionally disabled for all ages — the
+                // event log (gestures / expressions / TUIO markers) still gets
+                // collected internally, just not rendered.
                 if (age <= 12) return new AgeProfile {
                         Mode = UIMode.Child,  Label = "Child (basic)",
                         CameraVisible = false, ShowTranscription = false,
@@ -201,17 +204,17 @@ public class TuioDemo : Form , TuioListener
                 };
                 if (age <= 19) return new AgeProfile {
                         Mode = UIMode.Teen,   Label = "Teen (detailed)",
-                        CameraVisible = true,  ShowTranscription = true,
+                        CameraVisible = true,  ShowTranscription = false,
                         FontScale = 1.0f,  ForceHighContrast = false, LargeIcons = false
                 };
                 if (age <= 49) return new AgeProfile {
                         Mode = UIMode.Adult,  Label = "Adult (expert)",
-                        CameraVisible = true,  ShowTranscription = true,
+                        CameraVisible = true,  ShowTranscription = false,
                         FontScale = 1.0f,  ForceHighContrast = false, LargeIcons = false
                 };
                 return new AgeProfile {
                         Mode = UIMode.Senior, Label = "Senior (accessible)",
-                        CameraVisible = false, ShowTranscription = true,
+                        CameraVisible = false, ShowTranscription = false,
                         FontScale = 1.55f, ForceHighContrast = true,  LargeIcons = true
                 };
         }
@@ -235,6 +238,17 @@ public class TuioDemo : Form , TuioListener
         readonly List<string> transcriptionLog = new List<string>();
         readonly object transcriptionLock = new object();
         const int MAX_TRANSCRIPTION_LINES = 12;
+
+        // Emotion-reactive effects engine (balloons / ring / drops / toast).
+        readonly EmotionEffectEngine emotionEngine = new EmotionEffectEngine();
+        System.Timers.Timer effectsTimer;
+
+        // Gaze spotlight (soft radial glow that follows the user's gaze across
+        // the three screen thirds).
+        string lastGazeZone = "";          // raw zone from TRANS messages
+        float gazeSpotlightX = -1f;        // current animated centre X (negative = uninitialised)
+        float gazeSpotlightTargetX = -1f;  // where it should be (centre of the active third)
+        float gazeSpotlightAlpha = 0f;     // 0..1, fades in once we have a gaze fix
 
         // Circular menu control
         bool tuioMarker100Visible = false;
@@ -268,7 +282,23 @@ public class TuioDemo : Form , TuioListener
         System.Timers.Timer uiTimer = new System.Timers.Timer(UI_REFRESH_MS);
         uiTimer.Elapsed += (s, e) => { try { Invoke((Action)Invalidate); } catch { } };
         uiTimer.Start();
-        
+
+        // 30 fps repaint while emotion effects are alive (balloons need smoothness).
+        // Stays idle most of the time and starts/stops itself based on engine state.
+        effectsTimer = new System.Timers.Timer(33);
+        effectsTimer.AutoReset = true;
+        effectsTimer.Elapsed += (s, e) =>
+        {
+            if (emotionEngine.HasActiveEffects)
+            {
+                try { Invoke((Action)Invalidate); } catch { }
+            }
+            else
+            {
+                try { effectsTimer.Stop(); } catch { }
+            }
+        };
+
         menuSelectTimer = new System.Timers.Timer(MENU_SELECT_DELAY_MS);
         menuSelectTimer.AutoReset = false;
         menuSelectTimer.Elapsed += (s, e) => {
@@ -903,6 +933,9 @@ public class TuioDemo : Form , TuioListener
         {
             ApplyThemeMode("dark");
         }
+
+        // Re-tune emotion-effects engine for this mode (confirmation, cooldowns).
+        try { emotionEngine.Configure(activeProfile.Mode, accentBrush.Color); } catch { }
 
         lock (transcriptionLock)
         {
@@ -1566,6 +1599,46 @@ public class TuioDemo : Form , TuioListener
                         while (transcriptionLog.Count > MAX_TRANSCRIPTION_LINES)
                             transcriptionLog.RemoveAt(0);
                     }
+
+                    // Hook for the emotion-effects engine: parse expression events
+                    // like "Expression: happy (gaze: center)" and route the emotion.
+                    if (entry.StartsWith("Expression: ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            string rest = entry.Substring("Expression: ".Length);
+                            int paren = rest.IndexOf('(');
+                            string emotion = (paren > 0 ? rest.Substring(0, paren) : rest).Trim();
+                            emotionEngine.OnEmotionEvent(emotion);
+
+                            // Extract gaze zone for the spotlight overlay.
+                            // Format: "happy (gaze: center)" — pull what's after "gaze:".
+                            int gIdx = rest.IndexOf("gaze:", StringComparison.OrdinalIgnoreCase);
+                            if (gIdx >= 0)
+                            {
+                                int zStart = gIdx + 5;
+                                int zEnd = rest.IndexOf(')', zStart);
+                                string zone =
+                                    (zEnd > zStart ? rest.Substring(zStart, zEnd - zStart) : rest.Substring(zStart))
+                                    .Trim().ToLowerInvariant();
+                                if (zone == "left" || zone == "right" || zone == "center")
+                                {
+                                    lastGazeZone = zone;
+                                }
+                            }
+                            // If an effect was spawned (engine now has live effects), start
+                            // the 30 fps repaint timer.
+                            if (emotionEngine.HasActiveEffects)
+                            {
+                                try { effectsTimer.Start(); } catch { }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("[FX] Emotion routing failed: " + ex.Message);
+                        }
+                    }
+
                     try { Invoke((Action)Invalidate); } catch { }
                 }
                 continue;
@@ -2374,6 +2447,10 @@ public class TuioDemo : Form , TuioListener
     {
         if (activeProfile == null) return;
 
+        // (0) Gaze spotlight — rendered first so the badge / transcription
+        // panel / effects sit on top of it.
+        DrawGazeSpotlight(g);
+
         // (1) Profile badge — small chip below the status block, top-right.
         try
         {
@@ -2466,12 +2543,91 @@ public class TuioDemo : Form , TuioListener
             }
             catch { }
         }
+
+        // (4) Emotion-reactive effects (balloons, ring, drops, calming overlay,
+        // toasts). Drawn last so they sit on top of every other overlay.
+        try
+        {
+            emotionEngine.DrawAll(g, new Rectangle(0, 0, this.ClientSize.Width, this.ClientSize.Height));
+        }
+        catch { }
     }
 
     private string GetArtifactNameById(int id)
     {
         foreach (var a in artifacts) if (a.id == id) return a.name ?? ("#" + id);
         return "#" + id;
+    }
+
+    // Soft accent-coloured radial glow that follows the user's gaze across the
+    // three screen thirds. Eased X-interpolation per paint, fade-in alpha, sits
+    // below all other overlays so the badge / transcription / effects remain
+    // legible on top of it.
+    private void DrawGazeSpotlight(Graphics g)
+    {
+        if (string.IsNullOrEmpty(lastGazeZone)) return;
+        if (uname == "Visitor") return;
+
+        int W = this.ClientSize.Width;
+        int H = this.ClientSize.Height;
+
+        // Target X is the centre of whichever third we're looking at.
+        switch (lastGazeZone)
+        {
+            case "left":   gazeSpotlightTargetX = W / 6f; break;
+            case "right":  gazeSpotlightTargetX = 5 * W / 6f; break;
+            default:       gazeSpotlightTargetX = W / 2f; break;
+        }
+
+        // First time we have a fix — snap to target instead of easing from 0.
+        if (gazeSpotlightX < 0f) gazeSpotlightX = gazeSpotlightTargetX;
+
+        // Ease toward the target (~18 % closer per paint).
+        gazeSpotlightX += (gazeSpotlightTargetX - gazeSpotlightX) * 0.18f;
+
+        // Fade in over the first ~20 paints.
+        gazeSpotlightAlpha = Math.Min(1.0f, gazeSpotlightAlpha + 0.05f);
+
+        // Per-age intensity: subtler for Senior, brighter for Child.
+        int peakAlpha;
+        float radiusFactor;
+        switch (activeProfile != null ? activeProfile.Mode : UIMode.Adult)
+        {
+            case UIMode.Child:  peakAlpha = 180; radiusFactor = 0.34f; break;
+            case UIMode.Senior: peakAlpha = 100; radiusFactor = 0.28f; break;
+            default:            peakAlpha = 145; radiusFactor = 0.30f; break;
+        }
+
+        int radius = (int)(Math.Min(W, H) * radiusFactor);
+        int cx = (int)gazeSpotlightX;
+        // Push the glow centre down a bit so it sits over content (below the
+        // 105-px header band).
+        int cy = (H + 105) / 2;
+
+        Rectangle rect = new Rectangle(cx - radius, cy - radius, radius * 2, radius * 2);
+
+        // GDI+ radial gradient: PathGradientBrush with an ellipse path.
+        try
+        {
+            using (GraphicsPath path = new GraphicsPath())
+            {
+                path.AddEllipse(rect);
+                using (PathGradientBrush pgb = new PathGradientBrush(path))
+                {
+                    pgb.CenterPoint = new PointF(cx, cy);
+                    int centreAlphaInt = (int)(peakAlpha * gazeSpotlightAlpha);
+                    pgb.CenterColor = Color.FromArgb(centreAlphaInt, accentBrush.Color);
+                    pgb.SurroundColors = new[] { Color.FromArgb(0, accentBrush.Color) };
+                    // Sharper falloff for a softer rim
+                    pgb.FocusScales = new PointF(0.0f, 0.0f);
+                    SmoothingMode prev = g.SmoothingMode;
+                    g.SmoothingMode = SmoothingMode.AntiAlias;
+                    try { g.FillPath(pgb, path); }
+                    finally { g.SmoothingMode = prev; }
+                }
+            }
+        }
+        catch { }
     }
 
     // =====================================================================
@@ -3690,6 +3846,686 @@ public class TuioDemo : Form , TuioListener
     private void label1_Click(object sender, EventArgs e)
     {
 
+    }
+
+    // =====================================================================
+    //              EMOTION-REACTIVE EFFECTS (balloons, ring, etc.)
+    // =====================================================================
+    //
+    // Listens for Python "TRANS:Expression: <emotion>" lines. Spawns short
+    // visual reactions on the GUI, throttled with confirmation + cooldowns so
+    // the user is never carpet-bombed. Each age mode gets a different
+    // intensity (Child = playful balloons; Senior = gentle text toast only).
+
+    private abstract class Effect
+    {
+        public DateTime SpawnTime { get; private set; } = DateTime.Now;
+        public double LifetimeSec { get; protected set; } = 4.0;
+        public double Age => (DateTime.Now - SpawnTime).TotalSeconds;
+        public bool IsAlive => Age < LifetimeSec;
+        public double Progress => Math.Min(1.0, Age / LifetimeSec);
+        public abstract void Draw(Graphics g, Rectangle bounds);
+
+        protected static int Fade(double t, double fadeInEnd = 0.15, double fadeOutStart = 0.8)
+        {
+            if (t < fadeInEnd) return (int)(255 * (t / fadeInEnd));
+            if (t > fadeOutStart) return (int)(255 * Math.Max(0, 1.0 - (t - fadeOutStart) / (1.0 - fadeOutStart)));
+            return 255;
+        }
+    }
+
+    // A multi-layer celebration: balloons rising with sway + tumbling confetti
+    // pieces + twinkling sparkles. Staggered spawn, gradient-shaded balloon
+    // bodies with curved strings, bright/varied confetti, and four-point sparkle
+    // glints. Replaces the old single-particle balloon effect.
+    private class BalloonBurstEffect : Effect
+    {
+        private struct Balloon
+        {
+            public float StartX, BaseRiseSpeed, SwayAmp, SwayPhase, SwayPeriod;
+            public Color Color;
+            public float Radius;
+            public double Delay;
+            public float Tilt;            // degrees, oscillating
+            public float TiltSpeed;
+        }
+
+        private struct Confetto
+        {
+            public float StartX, StartY, FallSpeed, SwayAmp, SwayPeriod, SwayPhase;
+            public Color Color;
+            public float Size;            // long edge px
+            public float Aspect;          // short/long ratio
+            public float RotStart, RotSpeed; // degrees / s
+            public double Delay;
+            public int Shape;             // 0=rect, 1=triangle, 2=ribbon (squashed rect)
+        }
+
+        private struct Sparkle
+        {
+            public float X, Y, Size;
+            public double Start, Duration; // absolute lifetimes within the effect
+            public Color Color;
+        }
+
+        private readonly List<Balloon> balloons = new List<Balloon>();
+        private readonly List<Confetto> confettis = new List<Confetto>();
+        private readonly List<Sparkle> sparkles = new List<Sparkle>();
+
+        public BalloonBurstEffect(int count, int radius, Color[] palette, Random rng)
+        {
+            LifetimeSec = 7.0;
+
+            // ---- Balloons: rise from both bottom corners, varied sizes ----
+            for (int i = 0; i < count; i++)
+            {
+                bool leftSide = (i % 2) == 0;
+                float startX = leftSide
+                    ? (float)(40 + rng.NextDouble() * 320)
+                    : (float)(960 + rng.NextDouble() * 320);
+                float r = radius + (float)(rng.NextDouble() * 14 - 7);
+                balloons.Add(new Balloon
+                {
+                    StartX        = startX,
+                    BaseRiseSpeed = (float)(95 + rng.NextDouble() * 55),  // px/s
+                    SwayAmp       = (float)(14 + rng.NextDouble() * 18),
+                    SwayPhase     = (float)(rng.NextDouble() * Math.PI * 2),
+                    SwayPeriod    = (float)(2.4 + rng.NextDouble() * 1.6),
+                    Color         = palette[rng.Next(palette.Length)],
+                    Radius        = Math.Max(14, r),
+                    Delay         = rng.NextDouble() * 1.2,
+                    Tilt          = (float)((rng.NextDouble() - 0.5) * 6),
+                    TiltSpeed     = (float)(0.7 + rng.NextDouble() * 0.8),
+                });
+            }
+
+            // ---- Confetti: fall from top, tumble, scattered across width ----
+            int confettiCount = (int)(count * 2.2);
+            for (int i = 0; i < confettiCount; i++)
+            {
+                confettis.Add(new Confetto
+                {
+                    StartX     = (float)(rng.NextDouble() * 1200 + 30),
+                    StartY     = (float)(-40 - rng.NextDouble() * 100),
+                    FallSpeed  = (float)(70 + rng.NextDouble() * 90),
+                    SwayAmp    = (float)(20 + rng.NextDouble() * 40),
+                    SwayPeriod = (float)(1.8 + rng.NextDouble() * 1.6),
+                    SwayPhase  = (float)(rng.NextDouble() * Math.PI * 2),
+                    Color      = palette[rng.Next(palette.Length)],
+                    Size       = (float)(9 + rng.NextDouble() * 9),
+                    Aspect     = (float)(0.35 + rng.NextDouble() * 0.35),
+                    RotStart   = (float)(rng.NextDouble() * 360),
+                    RotSpeed   = (float)((rng.NextDouble() - 0.5) * 360),
+                    Delay      = 0.35 + rng.NextDouble() * 2.0,
+                    Shape      = rng.Next(3),
+                });
+            }
+
+            // ---- Sparkles: tiny twinkling glints scattered in the upper half ----
+            int sparkleCount = count * 2 + 12;
+            for (int i = 0; i < sparkleCount; i++)
+            {
+                double start = rng.NextDouble() * (LifetimeSec - 1.0);
+                sparkles.Add(new Sparkle
+                {
+                    X        = (float)(40 + rng.NextDouble() * 1200),
+                    Y        = (float)(80  + rng.NextDouble() * 520),
+                    Size     = (float)(5 + rng.NextDouble() * 7),
+                    Start    = start,
+                    Duration = 0.55 + rng.NextDouble() * 0.4,
+                    Color    = Color.FromArgb(255,
+                        220 + rng.Next(36), 220 + rng.Next(36), 180 + rng.Next(76)),
+                });
+            }
+        }
+
+        private static float EaseOutSine(float t)
+        {
+            t = Math.Max(0, Math.Min(1, t));
+            return (float)Math.Sin(t * Math.PI / 2.0);
+        }
+
+        public override void Draw(Graphics g, Rectangle bounds)
+        {
+            // Higher-quality drawing for smooth ellipses + small text
+            SmoothingMode prevSmooth = g.SmoothingMode;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            try
+            {
+                double now = Age;
+
+                DrawConfetti(g, bounds, now);
+                DrawSparkles(g, bounds, now);
+                DrawBalloons(g, bounds, now);
+            }
+            finally { g.SmoothingMode = prevSmooth; }
+        }
+
+        private void DrawBalloons(Graphics g, Rectangle bounds, double now)
+        {
+            foreach (var b in balloons)
+            {
+                double t = now - b.Delay;
+                if (t < 0) continue;
+                double localProgress = Math.Min(1.0, t / (LifetimeSec - b.Delay));
+
+                // Vertical rise with a soft ease-in (release feel) for first 0.6 s,
+                // then constant terminal speed.
+                float ease = t < 0.6 ? EaseOutSine((float)(t / 0.6)) : 1f;
+                float distance = b.BaseRiseSpeed * (float)t * (0.6f + 0.4f * ease);
+                float y = bounds.Height - 30 - distance;
+                if (y < -b.Radius * 3) continue;
+
+                // Horizontal sway around the spawn column
+                float sway = (float)Math.Sin(t / b.SwayPeriod * Math.PI * 2 + b.SwayPhase) * b.SwayAmp;
+                float x = b.StartX + sway;
+
+                // Subtle scale "bob" — breathes 3% in and out, period ~1.6 s
+                float scale = 1f + 0.03f * (float)Math.Sin(t * 4.2);
+
+                // Tilt oscillates ±5°
+                float tilt = b.Tilt + (float)Math.Sin(t * b.TiltSpeed) * 5f;
+
+                int alpha = Fade(localProgress, 0.05, 0.78);
+                if (alpha <= 0) continue;
+
+                float radius = b.Radius * scale;
+
+                // Save state, then translate+rotate so the balloon's "knot point"
+                // sits at (x, y + radius * 1.05).
+                GraphicsState state = g.Save();
+                try
+                {
+                    g.TranslateTransform(x, y);
+                    g.RotateTransform(tilt);
+
+                    // Curved string drawn from knot down ~28-36 px
+                    int stringAlpha = Math.Min(180, alpha);
+                    using (var pen = new Pen(Color.FromArgb(stringAlpha, 60, 60, 60), 1.5f))
+                    {
+                        float kx = 0, ky = radius * 1.18f;
+                        // Cubic Bezier for an S-curve string
+                        PointF p0 = new PointF(kx, ky);
+                        PointF p1 = new PointF(kx + 6, ky + 12);
+                        PointF p2 = new PointF(kx - 6, ky + 22);
+                        PointF p3 = new PointF(kx + 2, ky + 34);
+                        g.DrawBezier(pen, p0, p1, p2, p3);
+                    }
+
+                    // Knot — small triangle below the balloon body
+                    using (var knotBrush = new SolidBrush(Color.FromArgb(alpha,
+                        DarkenColor(b.Color, 0.7f))))
+                    {
+                        PointF[] knot = {
+                            new PointF(-3.5f, radius * 1.0f),
+                            new PointF( 3.5f, radius * 1.0f),
+                            new PointF( 0,    radius * 1.2f)
+                        };
+                        g.FillPolygon(knotBrush, knot);
+                    }
+
+                    // Balloon body — gradient (light top, full color bottom)
+                    RectangleF bodyRect = new RectangleF(
+                        -radius, -radius,
+                        radius * 2, radius * 2.3f);
+
+                    Color top = LightenColor(b.Color, 0.55f);
+                    Color bottom = DarkenColor(b.Color, 0.92f);
+                    using (var grad = new LinearGradientBrush(bodyRect,
+                        Color.FromArgb(alpha, top),
+                        Color.FromArgb(alpha, bottom),
+                        90f))
+                    {
+                        g.FillEllipse(grad, bodyRect);
+                    }
+
+                    // Crisp outline
+                    using (var outline = new Pen(Color.FromArgb((int)(alpha * 0.5f),
+                        DarkenColor(b.Color, 0.55f)), 1.2f))
+                    {
+                        g.DrawEllipse(outline, bodyRect);
+                    }
+
+                    // Highlight gloss (upper-left ellipse, soft white)
+                    using (var hb = new SolidBrush(Color.FromArgb(
+                        (int)(alpha * 0.55), 255, 255, 255)))
+                    {
+                        g.FillEllipse(hb,
+                            -radius * 0.55f, -radius * 0.78f,
+                             radius * 0.55f,  radius * 0.45f);
+                    }
+                    using (var hb2 = new SolidBrush(Color.FromArgb(
+                        (int)(alpha * 0.35), 255, 255, 255)))
+                    {
+                        g.FillEllipse(hb2,
+                            -radius * 0.30f, -radius * 0.40f,
+                             radius * 0.18f,  radius * 0.18f);
+                    }
+                }
+                finally { g.Restore(state); }
+            }
+        }
+
+        private void DrawConfetti(Graphics g, Rectangle bounds, double now)
+        {
+            foreach (var c in confettis)
+            {
+                double t = now - c.Delay;
+                if (t < 0) continue;
+                double maxLife = LifetimeSec - c.Delay;
+                if (t > maxLife) continue;
+
+                float y = c.StartY + c.FallSpeed * (float)t;
+                if (y > bounds.Height + 20) continue;
+
+                float sway = (float)Math.Sin(t / c.SwayPeriod * Math.PI * 2 + c.SwayPhase) * c.SwayAmp;
+                float x = c.StartX + sway;
+                float rot = c.RotStart + c.RotSpeed * (float)t;
+
+                int alpha = Fade(Math.Min(1.0, t / maxLife), 0.08, 0.78);
+                if (alpha <= 0) continue;
+
+                GraphicsState s = g.Save();
+                try
+                {
+                    g.TranslateTransform(x, y);
+                    g.RotateTransform(rot);
+                    using (var brush = new SolidBrush(Color.FromArgb(alpha, c.Color)))
+                    {
+                        if (c.Shape == 1)
+                        {
+                            // Triangle
+                            float h = c.Size;
+                            float w = c.Size * 0.85f;
+                            PointF[] tri = {
+                                new PointF(0,      -h/2),
+                                new PointF(-w/2,    h/2),
+                                new PointF( w/2,    h/2)
+                            };
+                            g.FillPolygon(brush, tri);
+                        }
+                        else
+                        {
+                            // Rectangle / ribbon
+                            float h = c.Size;
+                            float w = c.Size * c.Aspect;
+                            g.FillRectangle(brush, -w / 2, -h / 2, w, h);
+                            // Specular highlight band
+                            using (var hb = new SolidBrush(Color.FromArgb(
+                                (int)(alpha * 0.4), 255, 255, 255)))
+                                g.FillRectangle(hb, -w / 2, -h / 2, w, h / 3.2f);
+                        }
+                    }
+                }
+                finally { g.Restore(s); }
+            }
+        }
+
+        private void DrawSparkles(Graphics g, Rectangle bounds, double now)
+        {
+            foreach (var s in sparkles)
+            {
+                double t = now - s.Start;
+                if (t < 0 || t > s.Duration) continue;
+                double local = t / s.Duration;
+                // Twinkle: fade in/out via sine-pulse
+                double pulse = Math.Sin(local * Math.PI);
+                int alpha = (int)(255 * pulse);
+                if (alpha <= 8) continue;
+
+                using (var p = new Pen(Color.FromArgb(alpha, s.Color), 1.6f))
+                {
+                    float L = s.Size;
+                    g.DrawLine(p, s.X - L, s.Y, s.X + L, s.Y);
+                    g.DrawLine(p, s.X, s.Y - L, s.X, s.Y + L);
+                }
+                using (var p2 = new Pen(Color.FromArgb((int)(alpha * 0.6), s.Color), 1.0f))
+                {
+                    float L = s.Size * 0.7f;
+                    g.DrawLine(p2, s.X - L, s.Y - L, s.X + L, s.Y + L);
+                    g.DrawLine(p2, s.X + L, s.Y - L, s.X - L, s.Y + L);
+                }
+                // Bright center dot
+                using (var dot = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255)))
+                    g.FillEllipse(dot, s.X - 1.5f, s.Y - 1.5f, 3f, 3f);
+            }
+        }
+
+        private static Color LightenColor(Color c, float amount)
+        {
+            // amount in [0,1] — 0 = unchanged, 1 = white
+            amount = Math.Max(0, Math.Min(1, amount));
+            return Color.FromArgb(c.A,
+                (int)(c.R + (255 - c.R) * amount),
+                (int)(c.G + (255 - c.G) * amount),
+                (int)(c.B + (255 - c.B) * amount));
+        }
+
+        private static Color DarkenColor(Color c, float factor)
+        {
+            // factor in [0,1] — 1 = unchanged, 0 = black
+            factor = Math.Max(0, Math.Min(1, factor));
+            return Color.FromArgb(c.A,
+                (int)(c.R * factor),
+                (int)(c.G * factor),
+                (int)(c.B * factor));
+        }
+    }
+
+    // Expanding ring centered on the screen with optional "Wow!" text.
+    private class SurprisedRingEffect : Effect
+    {
+        private readonly Color color;
+        public SurprisedRingEffect(Color color) { this.color = color; LifetimeSec = 1.6; }
+
+        public override void Draw(Graphics g, Rectangle bounds)
+        {
+            double t = Age;
+            double r = 40 + 320 * t; // grows outward
+            int alpha = Fade(Progress, 0.05, 0.5);
+            float cx = bounds.Width / 2f;
+            float cy = bounds.Height / 2f;
+            using (var pen = new Pen(Color.FromArgb(alpha, color), 6))
+                g.DrawEllipse(pen, (float)(cx - r), (float)(cy - r), (float)(r * 2), (float)(r * 2));
+        }
+    }
+
+    // Slow blue droplets falling down the screen edges.
+    private class SadDropsEffect : Effect
+    {
+        private struct Drop
+        {
+            public float X, Vy, Radius;
+            public double Delay;
+            public Color Color;
+        }
+        private readonly List<Drop> drops = new List<Drop>();
+
+        public SadDropsEffect(int count, Random rng)
+        {
+            LifetimeSec = 5.0;
+            for (int i = 0; i < count; i++)
+            {
+                drops.Add(new Drop
+                {
+                    X = (float)(80 + rng.NextDouble() * 1100),
+                    Vy = (float)(60 + rng.NextDouble() * 50),
+                    Radius = 5 + (float)rng.NextDouble() * 4,
+                    Delay = rng.NextDouble() * 1.5,
+                    Color = Color.FromArgb(255, 95, 150, 210)
+                });
+            }
+        }
+
+        public override void Draw(Graphics g, Rectangle bounds)
+        {
+            double now = Age;
+            foreach (var d in drops)
+            {
+                double t = now - d.Delay;
+                if (t < 0) continue;
+                float y = 60 + d.Vy * (float)t;
+                if (y > bounds.Height) continue;
+                int alpha = Fade(Math.Min(1.0, t / (LifetimeSec - d.Delay)), 0.1, 0.7);
+                using (var b = new SolidBrush(Color.FromArgb(alpha, d.Color)))
+                {
+                    g.FillEllipse(b, d.X - d.Radius, y - d.Radius, d.Radius * 2, d.Radius * 2.4f);
+                    // Tail
+                    g.FillEllipse(b, d.X - d.Radius * 0.5f, y - d.Radius * 3,
+                        d.Radius, d.Radius * 1.5f);
+                }
+            }
+        }
+    }
+
+    // A pill-shaped text toast — used for Senior gentle messages, Adult corner
+    // emojis, and Child "Yay!" notifications.
+    private class TextToastEffect : Effect
+    {
+        public enum ToastPosition { CenterBottom, BottomRight, TopCenter }
+        private readonly string text;
+        private readonly Color accent;
+        private readonly ToastPosition position;
+        private readonly float fontSize;
+
+        public TextToastEffect(string text, Color accent, double lifetime,
+            ToastPosition position = ToastPosition.CenterBottom, float fontSize = 16f)
+        {
+            this.text = text;
+            this.accent = accent;
+            this.position = position;
+            this.fontSize = fontSize;
+            LifetimeSec = lifetime;
+        }
+
+        public override void Draw(Graphics g, Rectangle bounds)
+        {
+            int alpha = Fade(Progress, 0.1, 0.75);
+            using (var font = new Font("Segoe UI", fontSize, FontStyle.Bold))
+            {
+                SizeF sz = g.MeasureString(text, font);
+                int padX = 22, padY = 12;
+                int w = (int)sz.Width + padX * 2;
+                int h = (int)sz.Height + padY * 2;
+                int x, y;
+                switch (position)
+                {
+                    case ToastPosition.BottomRight:
+                        x = bounds.Right - w - 30; y = bounds.Bottom - h - 110; break;
+                    case ToastPosition.TopCenter:
+                        x = (bounds.Width - w) / 2; y = 120; break;
+                    default:
+                        x = (bounds.Width - w) / 2; y = bounds.Bottom - h - 110; break;
+                }
+                Rectangle pill = new Rectangle(x, y, w, h);
+                // Rounded fill (manual since this class can't call form helpers easily)
+                using (var path = new GraphicsPath())
+                {
+                    int r = h / 2;
+                    path.AddArc(pill.X, pill.Y, r * 2, r * 2, 90, 180);
+                    path.AddArc(pill.Right - r * 2, pill.Y, r * 2, r * 2, 270, 180);
+                    path.CloseFigure();
+                    using (var bg = new SolidBrush(Color.FromArgb((int)(alpha * 0.95), accent)))
+                        g.FillPath(bg, path);
+                }
+                using (var tb = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255)))
+                    g.DrawString(text, font, tb, x + padX, y + padY);
+            }
+        }
+    }
+
+    // Semi-transparent calming wash + centered "Need a break?" text.
+    private class CalmingOverlayEffect : Effect
+    {
+        private readonly string text;
+        private readonly Color tint;
+        public CalmingOverlayEffect(string text, Color tint)
+        {
+            this.text = text;
+            this.tint = tint;
+            LifetimeSec = 5.0;
+        }
+        public override void Draw(Graphics g, Rectangle bounds)
+        {
+            int alpha = Fade(Progress, 0.2, 0.7);
+            int wash = (int)(alpha * 0.35);
+            using (var b = new SolidBrush(Color.FromArgb(wash, tint)))
+                g.FillRectangle(b, bounds);
+            using (var font = new Font("Segoe UI", 22f, FontStyle.Bold))
+            {
+                SizeF sz = g.MeasureString(text, font);
+                using (var tb = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255)))
+                    g.DrawString(text, font, tb,
+                        bounds.X + (bounds.Width - sz.Width) / 2,
+                        bounds.Y + (bounds.Height - sz.Height) / 2);
+            }
+        }
+    }
+
+    private class EmotionEffectEngine
+    {
+        private readonly List<Effect> active = new List<Effect>();
+        private readonly object lockObj = new object();
+        private readonly Random rng = new Random();
+
+        // Confirmation tracking
+        private string lastSeenEmotion = "";
+        private int confirmCount = 0;
+
+        // Cooldowns
+        private DateTime globalCooldownUntil = DateTime.MinValue;
+        private readonly Dictionary<string, DateTime> perEmotionCooldown
+            = new Dictionary<string, DateTime>();
+
+        // Tuned per age mode in Configure(...)
+        public int ConfirmationRequired { get; private set; } = 2;
+        public int GlobalCooldownSec { get; private set; } = 20;
+        public int SameEmotionCooldownSec { get; private set; } = 45;
+        public int MaxConcurrent { get; private set; } = 1;
+        public UIMode Mode { get; private set; } = UIMode.Adult;
+        public Color AccentColor { get; set; } = Color.DodgerBlue;
+
+        public void Configure(UIMode mode, Color accent)
+        {
+            Mode = mode;
+            AccentColor = accent;
+            // Single simple rule for every age: fire on first detection, then
+            // a global 10-second cooldown before any other animation can run.
+            // (Per-mode tuning still applies to *which* effect we spawn —
+            //  balloons for Child, plain toast for Senior, etc.)
+            ConfirmationRequired   = 1;
+            GlobalCooldownSec      = 10;
+            SameEmotionCooldownSec = 10; // same as global → no extra per-emotion gating
+            MaxConcurrent          = 3; // each spawn now adds 2 effects (visual + toast); allow headroom
+
+            // Clear cooldown state on mode change
+            globalCooldownUntil = DateTime.MinValue;
+            perEmotionCooldown.Clear();
+            lastSeenEmotion = "";
+            confirmCount = 0;
+        }
+
+        public bool HasActiveEffects
+        {
+            get { lock (lockObj) { return active.RemoveAll(e => !e.IsAlive) > -1 && active.Count > 0; } }
+        }
+
+        // Called from the message loop with the parsed emotion word.
+        public void OnEmotionEvent(string emotionRaw)
+        {
+            string emotion = (emotionRaw ?? "").Trim().ToLowerInvariant();
+            if (string.IsNullOrEmpty(emotion) || emotion == "neutral") return;
+            if (!IsKnownEmotion(emotion)) return;
+
+            bool isSpike = (emotion == "surprised" || emotion == "surprise");
+
+            if (!isSpike)
+            {
+                if (emotion != lastSeenEmotion)
+                {
+                    lastSeenEmotion = emotion;
+                    confirmCount = 1;
+                }
+                else
+                {
+                    confirmCount++;
+                }
+                if (confirmCount < ConfirmationRequired) return;
+            }
+
+            DateTime now = DateTime.Now;
+            if (now < globalCooldownUntil) return;
+            DateTime untilDt;
+            if (perEmotionCooldown.TryGetValue(emotion, out untilDt) && now < untilDt) return;
+
+            lock (lockObj)
+            {
+                active.RemoveAll(e => !e.IsAlive);
+                if (active.Count >= MaxConcurrent) return;
+            }
+
+            Spawn(emotion);
+            globalCooldownUntil = now.AddSeconds(GlobalCooldownSec);
+            perEmotionCooldown[emotion] = now.AddSeconds(SameEmotionCooldownSec);
+
+            if (!isSpike) { confirmCount = 0; lastSeenEmotion = ""; }
+        }
+
+        private bool IsKnownEmotion(string e)
+        {
+            return e == "happy" || e == "surprised" || e == "surprise"
+                || e == "sad" || e == "angry" || e == "anger"
+                || e == "fear" || e == "fearful";
+        }
+
+        private void Spawn(string emotion)
+        {
+            lock (lockObj)
+            {
+                if (emotion == "happy") SpawnHappy();
+                else if (emotion == "surprised" || emotion == "surprise") SpawnSurprised();
+                else if (emotion == "sad") SpawnSad();
+                else SpawnCalming(emotion);
+            }
+        }
+
+        private static readonly Color[] BalloonPalette = {
+            Color.FromArgb(255, 110, 130),
+            Color.FromArgb(135, 201, 255),
+            Color.FromArgb(255, 219, 102),
+            Color.FromArgb(160, 220, 130),
+            Color.FromArgb(196, 174, 240),
+            Color.FromArgb(255, 165, 102),
+        };
+
+        // All ages now get the full "Child" celebration treatment — the rich
+        // multi-layer balloon/confetti/sparkle scene + accompanying toasts.
+        private void SpawnHappy()
+        {
+            active.Add(new BalloonBurstEffect(10, 32, BalloonPalette, rng));
+            active.Add(new TextToastEffect("Yay! 🎉",
+                Color.FromArgb(255, 110, 175), 2.5,
+                TextToastEffect.ToastPosition.TopCenter, 22f));
+        }
+
+        private void SpawnSurprised()
+        {
+            active.Add(new SurprisedRingEffect(AccentColor));
+            active.Add(new TextToastEffect("Wow!",
+                AccentColor, 1.6,
+                TextToastEffect.ToastPosition.TopCenter, 28f));
+        }
+
+        private void SpawnSad()
+        {
+            active.Add(new SadDropsEffect(6, rng));
+            active.Add(new TextToastEffect("Want to try favourites?",
+                Color.FromArgb(255, 95, 150, 210), 3.5,
+                TextToastEffect.ToastPosition.TopCenter, 14f));
+        }
+
+        private void SpawnCalming(string emotion)
+        {
+            string text = (emotion == "angry" || emotion == "anger")
+                ? "Need a break?"
+                : "It's okay, take your time.";
+            Color tint = Color.FromArgb(80, 100, 130);
+            active.Add(new CalmingOverlayEffect(text, tint));
+        }
+
+        public void DrawAll(Graphics g, Rectangle bounds)
+        {
+            List<Effect> snapshot;
+            lock (lockObj)
+            {
+                active.RemoveAll(e => !e.IsAlive);
+                snapshot = new List<Effect>(active);
+            }
+            foreach (Effect e in snapshot)
+            {
+                try { e.Draw(g, bounds); } catch { }
+            }
+        }
     }
 
     public static void Main(String[] argv) {

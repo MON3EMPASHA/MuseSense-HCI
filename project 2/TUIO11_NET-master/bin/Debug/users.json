@@ -17,7 +17,9 @@
     "mac": ["43:6F:AB:C8:FA:F6"],
     "Profile": "",
     "favorites": [],
-    "themeMode": "light"
+    "themeMode": "light",
+    "role": null,
+    "password": null
   },
   {
     "name": "Youssef Abdulghany",
@@ -26,7 +28,9 @@
     "mac": ["54:C4:E5:20:E2:C8"],
     "Profile": "",
     "favorites": [],
-    "themeMode": "light"
+    "themeMode": "light",
+    "role": null,
+    "password": null
   },
   {
     "name": "Mohamed Taha",
@@ -35,7 +39,9 @@
     "mac": ["9C:6B:72:01:A3:DA"],
     "Profile": "objects/Taha.png",
     "favorites": [],
-    "themeMode": "light"
+    "themeMode": "light",
+    "role": null,
+    "password": null
   },
   {
     "name": "Abdelmonem Hatem",
@@ -50,7 +56,9 @@
     ],
     "Profile": "objects/Monem.png",
     "favorites": [3],
-    "themeMode": "light"
+    "themeMode": "light",
+    "role": null,
+    "password": null
   },
   {
     "name": "Abdelmonem Hatem",
@@ -65,7 +73,9 @@
     ],
     "Profile": "objects/Monem.png",
     "favorites": [3],
-    "themeMode": "light"
+    "themeMode": "light",
+    "role": null,
+    "password": null
   },
   {
     "name": "Mohamed Ibrahim",
@@ -74,7 +84,9 @@
     "mac": null,
     "Profile": "objects/Soltan.png",
     "favorites": [4, 1],
-    "themeMode": "dark"
+    "themeMode": "dark",
+    "role": null,
+    "password": null
   },
   {
     "name": "Andrew Talaat",
@@ -89,6 +101,8 @@
     ],
     "Profile": "",
     "favorites": [2, 1, 0],
-    "themeMode": ""
+    "themeMode": "",
+    "role": null,
+    "password": null
   }
 ]

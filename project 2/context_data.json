@@ -337,11 +337,39 @@
         "last_gaze": ""
       },
       "updated_at": 0
+    },
+    "Andrew Talaat": {
+      "profile": "",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {
+        "Egypt": 128.3
+      },
+      "artifact_scores": {
+        "Bust of Nefertiti": 104.1,
+        "Mask of Tutankhamun": 24.2
+      },
+      "opened_artifacts": {
+        "bust of nefertiti": 1778784394.4063904,
+        "mask of tutankhamun": 1778784413.7248437
+      },
+      "context": {
+        "current_artifact": "Mask of Tutankhamun",
+        "current_category": "Egypt",
+        "last_object": "Mask of Tutankhamun",
+        "last_gesture": "",
+        "last_emotion": "neutral",
+        "last_gaze": "right"
+      },
+      "updated_at": 1778785504
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778762500
+    "updated_at": 1778785504
   }
 }
