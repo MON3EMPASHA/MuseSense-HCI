@@ -5,14 +5,14 @@ import warnings
 from pathlib import Path
 
 # If launched with anything other than the project's venv interpreter, re-launch
-# with the repo-root .venv python so dependencies resolve correctly. We keep the
-# older nested venv as a fallback for existing local setups. We use subprocess
+# with the local venv python so dependencies resolve correctly. We keep the
+# repo-root .venv as a fallback for existing local setups. We use subprocess
 # instead of os.execv because os.execv mishandles Windows paths containing
 # spaces (e.g. "project 2").
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _ROOT_VENV_PY = _SCRIPT_DIR.parent / ".venv" / "Scripts" / "python.exe"
 _LOCAL_VENV_PY = _SCRIPT_DIR / "venv" / "Scripts" / "python.exe"
-_VENV_PY = _ROOT_VENV_PY if _ROOT_VENV_PY.exists() else _LOCAL_VENV_PY
+_VENV_PY = _LOCAL_VENV_PY if _LOCAL_VENV_PY.exists() else _ROOT_VENV_PY
 if _VENV_PY.exists() and os.path.normcase(sys.executable) != os.path.normcase(str(_VENV_PY)):
     import subprocess
     print(f"[BOOT] Re-launching under venv python: {_VENV_PY}")
@@ -75,6 +75,11 @@ try:
     from session_reports import save_session_reports
     from face_recognizer import FaceRecognizer
     from face_signup import FaceSignupFlow
+    from object_tracking import (
+        ArtifactFocusSmoother,
+        YoloTracker,
+        draw_artifact_detections,
+    )
 finally:
     # Always restore stderr, even on import failure, so tracebacks are visible.
     try:
@@ -94,6 +99,11 @@ TUIO_PRIORITY_SECONDS = 3.0
 CSHARP_CONTEXT_PRIORITY_SECONDS = 10.0
 SKIP_CONTEXT_LABELS = {"person", "cell phone", "mobile phone"}
 OBJECTS_DIR = Path("TUIO11_NET-master") / "bin" / "Debug" / "objects"
+ARTIFACT_YOLO_MODEL_PATH = (
+    Path("YOLO Object Tracking") / "models" / "artifact_yolo11s_best.pt"
+)
+ARTIFACT_YOLO_CONFIDENCE = 0.5
+ARTIFACT_YOLO_INTERVAL = 5
 
 
 # user / bluetooth helpers moved to users.py
@@ -408,6 +418,11 @@ context_store = ContextStore()
 expression_tracker = ExpressionTracker()
 gaze_tracker = GazeTracker()
 face_recognizer = FaceRecognizer(OBJECTS_DIR, users_json=USERS_JSON_PATH)
+artifact_tracker = YoloTracker(
+    ARTIFACT_YOLO_MODEL_PATH,
+    conf_threshold=ARTIFACT_YOLO_CONFIDENCE,
+)
+artifact_focus = ArtifactFocusSmoother(window_size=10, min_hits=5)
 tuio_artifacts = load_tuio_artifacts(ARTIFACTS_JSON_PATH)
 active_user_name = "guest"
 
@@ -504,6 +519,8 @@ socket_buffer = ""
 last_tuio_marker_id = None
 tuio_last_seen = 0.0
 csharp_context_last_seen = 0.0
+artifact_frame_counter = 0
+last_artifact_detections = []
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret or frame is None:
@@ -813,6 +830,47 @@ while cap.isOpened():
         results = holistic.process(frame_rgb)
         annotated_image = f_frame.copy()
         image_height, image_width, _ = frame_rgb.shape
+
+        artifact_frame_counter += 1
+        if artifact_frame_counter >= ARTIFACT_YOLO_INTERVAL:
+            artifact_frame_counter = 0
+            last_artifact_detections = artifact_tracker.detect_artifacts(f_frame)
+            stable_artifact = artifact_focus.update(last_artifact_detections)
+
+            if stable_artifact is not None:
+                now = time.monotonic()
+                external_focus_recent = (
+                    now - tuio_last_seen < TUIO_PRIORITY_SECONDS
+                    or now - csharp_context_last_seen < CSHARP_CONTEXT_PRIORITY_SECONDS
+                )
+                if not external_focus_recent:
+                    artifact_name = stable_artifact["artifact"]
+                    category = stable_artifact["category"]
+                    context_store.update_context(
+                        active_user_name,
+                        current_artifact=artifact_name,
+                        current_category=category,
+                        last_object=artifact_name,
+                    )
+                    context_store.record_artifact_opened(active_user_name, artifact_name)
+                    focus_payload = json.dumps(
+                        {
+                            "type": "artifact_focus",
+                            "source": "yolo11s",
+                            "artifact": artifact_name,
+                            "category": category,
+                            "label": stable_artifact["label"],
+                            "confidence": stable_artifact["confidence"],
+                        }
+                    )
+                    send_socket_message(conn, focus_payload)
+                    print(
+                        f"[YOLO11] Artifact focus -> {artifact_name} "
+                        f"({stable_artifact['confidence']:.2f})"
+                    )
+                    emit_transcription(conn, f"Detected artifact: {artifact_name}")
+
+        draw_artifact_detections(annotated_image, last_artifact_detections)
 
         analysis_frame_counter += 1
         if analysis_frame_counter % 5 == 0:
