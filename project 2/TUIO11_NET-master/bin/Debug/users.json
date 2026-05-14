@@ -106,12 +106,8 @@
     "age": "9",
     "gender": "Male",
     "mac": [],
-    "Profile": "objects/BBKKLL.jpg",
-    "images": [
-      "objects/BBKKLL.jpg",
-      "objects/BBKKLL_2.jpg",
-      "objects/BBKKLL_3.jpg"
-    ],
+    "Profile": "objects/Soltan.png",
+    "images": ["objects/Soltan.png"],
     "themeMode": "light"
   }
 ]
