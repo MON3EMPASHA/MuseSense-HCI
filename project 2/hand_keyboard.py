@@ -2,8 +2,14 @@
 Virtual on-screen keyboard driven by hand landmarks.
 
 Navigation  : index finger tip (1 finger up)
-Click       : index + middle finger tips close together (pinch / 2-finger point)
-Confirm     : show full open LEFT hand for 1 second → triggers confirm
+Click       : index + middle finger tips close together (pinch)
+Confirm     : open LEFT hand held for 1 second
+Cancel      : pinch the  ✕  key
+
+Modes
+-----
+mode="alpha"  – full QWERTY + numbers + DEL / OK / ✕
+mode="num"    – numeric pad  (0-9, DEL, OK, ✕)
 """
 from __future__ import annotations
 
@@ -11,135 +17,201 @@ import time
 import cv2
 import numpy as np
 
-# ── Layout ────────────────────────────────────────────────────────────────────
-ROWS: list[list[str]] = [
+# ── Layouts ───────────────────────────────────────────────────────────────────
+_ROWS_ALPHA: list[list[str]] = [
     ["1","2","3","4","5","6","7","8","9","0"],
     ["Q","W","E","R","T","Y","U","I","O","P"],
     ["A","S","D","F","G","H","J","K","L","DEL"],
-    ["Z","X","C","V","B","N","M","SPC","OK","X"],
+    ["Z","X","C","V","B","N","M","SPC","OK","✕"],
 ]
 
-# Special key labels that map to actions
-_ACTION_MAP = {"DEL": "⌫", "OK": "✓", "X": "✗", "SPC": " "}
+_ROWS_NUM: list[list[str]] = [
+    ["7","8","9"],
+    ["4","5","6"],
+    ["1","2","3"],
+    ["DEL","0","OK"],
+]
 
-KEY_W = 44
-KEY_H = 38
-KEY_PAD = 3
+_ACTION_KEYS = {"DEL", "OK", "✕", "SPC"}
 
-_KB_COLS = 10
-_KB_ROWS = 4
-_KB_TOTAL_W = _KB_COLS * (KEY_W + KEY_PAD) - KEY_PAD   # 467 px
-_KB_TOTAL_H = _KB_ROWS * (KEY_H + KEY_PAD) - KEY_PAD   # 155 px
-KEYBOARD_LEFT = (480 - _KB_TOTAL_W) // 2
-KEYBOARD_TOP  = (320 - _KB_TOTAL_H) // 2 + 20
+# ── Colours (BGR) ─────────────────────────────────────────────────────────────
+_C = {
+    "panel_bg":    (18,  18,  24),
+    "panel_border":(55,  55,  75),
+    "key_bg":      (38,  38,  52),
+    "key_border":  (70,  70,  95),
+    "key_text":    (230, 230, 240),
+    "hover_bg":    (55, 120, 230),
+    "hover_border":(110, 175, 255),
+    "click_bg":    (30, 190,  80),
+    "click_border":(80, 255, 130),
+    "del_bg":      (140,  35,  35),
+    "del_border":  (200,  70,  70),
+    "ok_bg":       (25, 140,  65),
+    "ok_border":   (60, 210, 110),
+    "num_bg":      (30,  30,  48),
+    "input_bg":    (12,  12,  18),
+    "input_text":  (0,  230, 160),
+    "input_border":(55,  55,  75),
+    "confirm_bar": (30, 190,  80),
+    "confirm_text":(255, 255, 255),
+    "hint_text":   (130, 130, 150),
+}
 
-# colours
-COL_BG      = ( 50,  50,  60)
-COL_BORDER  = (120, 120, 140)
-COL_HOVER   = ( 60, 140, 255)
-COL_CLICK   = (  0, 210,  80)
-COL_TEXT    = (255, 255, 255)
-COL_SPECIAL = (180,  50,  50)
-COL_CONFIRM = ( 30, 160,  80)
-COL_NUM     = ( 60,  60,  80)
+# ── Timing ────────────────────────────────────────────────────────────────────
+CLICK_COOLDOWN = 0.45   # seconds between key presses
+PINCH_DIST_PX  = 22     # index-middle distance threshold for a click
+OPEN_HAND_HOLD = 1.0    # seconds open-hand must be held to confirm
 
-CLICK_COOLDOWN   = 0.5   # seconds between key clicks
-PINCH_DIST_PX    = 18    # index-middle pinch threshold
-OPEN_HAND_HOLD   = 1.0   # seconds to hold open hand before confirm fires
-
-# MediaPipe landmark indices used for open-hand detection
-# tip ids:  thumb=4, index=8, middle=12, ring=16, pinky=20
-# pip ids:  thumb=3, index=6, middle=10, ring=14, pinky=18  (one joint below tip)
-_FINGER_TIPS = [8, 12, 16, 20]   # index, middle, ring, pinky
+# ── MediaPipe landmark indices ────────────────────────────────────────────────
+_FINGER_TIPS = [8, 12, 16, 20]
 _FINGER_PIPS = [6, 10, 14, 18]
 _THUMB_TIP   = 4
-_THUMB_IP    = 3   # thumb IP joint (used instead of PIP for thumb)
+_THUMB_IP    = 3
 
 
 def _is_open_hand(hand_landmarks) -> bool:
-    """
-    Return True when all 5 fingers are extended (open palm).
-    Uses the rule: tip.y < pip.y for index–pinky (tip is higher = smaller y),
-    and thumb tip.x further from palm than thumb IP (works for both hands).
-    """
     if hand_landmarks is None:
         return False
     lm = hand_landmarks.landmark
-
-    # index, middle, ring, pinky — tip must be above (smaller y) than PIP
-    fingers_open = all(lm[tip].y < lm[pip].y
-                       for tip, pip in zip(_FINGER_TIPS, _FINGER_PIPS))
-
-    # thumb — tip.x should differ from IP.x by more than a small threshold
-    # (works regardless of hand orientation)
-    thumb_open = abs(lm[_THUMB_TIP].x - lm[_THUMB_IP].x) > 0.04
-
+    fingers_open = all(lm[t].y < lm[p].y for t, p in zip(_FINGER_TIPS, _FINGER_PIPS))
+    thumb_open   = abs(lm[_THUMB_TIP].x - lm[_THUMB_IP].x) > 0.04
     return fingers_open and thumb_open
 
 
-def _key_rect(row: int, col: int) -> tuple[int, int, int, int]:
-    x1 = KEYBOARD_LEFT + col * (KEY_W + KEY_PAD)
-    y1 = KEYBOARD_TOP  + row * (KEY_H + KEY_PAD)
-    return x1, y1, x1 + KEY_W, y1 + KEY_H
+def _rounded_rect(img: np.ndarray, x1: int, y1: int, x2: int, y2: int,
+                  color: tuple, radius: int = 6, thickness: int = -1) -> None:
+    """Draw a filled or outlined rounded rectangle."""
+    if thickness == -1:
+        # filled
+        cv2.rectangle(img, (x1 + radius, y1), (x2 - radius, y2), color, -1)
+        cv2.rectangle(img, (x1, y1 + radius), (x2, y2 - radius), color, -1)
+        for cx, cy in [(x1+radius, y1+radius), (x2-radius, y1+radius),
+                       (x1+radius, y2-radius), (x2-radius, y2-radius)]:
+            cv2.circle(img, (cx, cy), radius, color, -1)
+    else:
+        cv2.rectangle(img, (x1 + radius, y1), (x2 - radius, y1), color, thickness)
+        cv2.rectangle(img, (x1 + radius, y2), (x2 - radius, y2), color, thickness)
+        cv2.rectangle(img, (x1, y1 + radius), (x1, y2 - radius), color, thickness)
+        cv2.rectangle(img, (x2, y1 + radius), (x2, y2 - radius), color, thickness)
+        for cx, cy, a1, a2 in [
+            (x1+radius, y1+radius, 180, 270),
+            (x2-radius, y1+radius, 270, 360),
+            (x1+radius, y2-radius,  90, 180),
+            (x2-radius, y2-radius,   0,  90),
+        ]:
+            cv2.ellipse(img, (cx, cy), (radius, radius), 0, a1, a2, color, thickness)
 
 
-def _draw_key(frame: np.ndarray, x1: int, y1: int, x2: int, y2: int,
-              bg: tuple, border: tuple, label: str, font_scale: float) -> None:
-    cv2.rectangle(frame, (x1 + 1, y1 + 1), (x2 - 1, y2 - 1), bg, -1)
-    cv2.rectangle(frame, (x1, y1), (x2, y2), border, 1)
-    cv2.line(frame, (x1 + 1, y2), (x2 - 1, y2),
-             (max(bg[0]-30,0), max(bg[1]-30,0), max(bg[2]-30,0)), 1)
-    w = x2 - x1
-    h = y2 - y1
-    (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)
-    tx = x1 + (w - tw) // 2
-    ty = y1 + (h + th) // 2 - 1
+def _draw_key_box(frame: np.ndarray, x1: int, y1: int, x2: int, y2: int,
+                  bg: tuple, border: tuple, label: str) -> None:
+    """Draw a single key with rounded corners and centred label."""
+    _rounded_rect(frame, x1, y1, x2, y2, bg, radius=5)
+    _rounded_rect(frame, x1, y1, x2, y2, border, radius=5, thickness=1)
+
+    # subtle bottom-edge shadow
+    shadow = tuple(max(c - 35, 0) for c in bg)
+    cv2.line(frame, (x1 + 6, y2 - 1), (x2 - 6, y2 - 1), shadow, 1)
+
+    kw, kh = x2 - x1, y2 - y1
+    fs = 0.42
+    if len(label) > 2:
+        fs = 0.30
+    (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, fs, 1)
+    tx = x1 + (kw - tw) // 2
+    ty = y1 + (kh + th) // 2 - 1
     cv2.putText(frame, label, (tx, ty),
-                cv2.FONT_HERSHEY_SIMPLEX, font_scale, COL_TEXT, 1, cv2.LINE_AA)
+                cv2.FONT_HERSHEY_SIMPLEX, fs, _C["key_text"], 1, cv2.LINE_AA)
 
 
 class HandKeyboard:
-    def __init__(self) -> None:
-        self.text: str = ""
-        self._last_click_time: float = 0.0
-        self._hovered: tuple[int, int] | None = None
-        self._clicked_key: str | None = None
-        self._click_flash_until: float = 0.0
+    """
+    Parameters
+    ----------
+    mode : "alpha" | "num"
+        "alpha" shows full QWERTY; "num" shows a numeric pad.
+    frame_w, frame_h : int
+        Dimensions of the frame the keyboard will be drawn on.
+        The keyboard is sized and positioned relative to these.
+    """
+
+    def __init__(self, mode: str = "alpha",
+                 frame_w: int = 960, frame_h: int = 640) -> None:
+        self.text: str      = ""
         self.confirmed: bool = False
         self.cancelled: bool = False
+        self._mode           = mode
+        self._fw             = frame_w
+        self._fh             = frame_h
 
-        # open-hand confirm state
-        self._open_hand_since: float | None = None   # when the open hand started
-        self._confirm_flash_until: float = 0.0       # brief green flash after confirm
+        self._rows = _ROWS_ALPHA if mode == "alpha" else _ROWS_NUM
+        self._compute_layout()
 
-    # ── Public API ────────────────────────────────────────────────────────────
+        self._last_click_time: float  = 0.0
+        self._hovered: tuple[int,int] | None = None
+        self._clicked_key: str | None = None
+        self._click_flash_until: float = 0.0
 
-    def update(
-        self,
-        frame: np.ndarray,
-        index_tip: tuple[int, int] | None,
-        middle_tip: tuple[int, int] | None,
-        left_hand_landmarks=None,   # full MediaPipe hand landmarks for open-hand detect
-    ) -> None:
-        """
-        Call every frame.
-        index_tip / middle_tip : pixel coords on the same resolution as frame, or None.
-        left_hand_landmarks    : holistic_results.left_hand_landmarks (or None).
-        """
+        self._open_hand_since: float | None = None
+        self._confirm_flash_until: float    = 0.0
+
+    # ── layout ────────────────────────────────────────────────────────────────
+
+    def _compute_layout(self) -> None:
+        """Compute key sizes and keyboard origin based on frame dimensions."""
+        fw, fh = self._fw, self._fh
+
+        if self._mode == "alpha":
+            cols = 10
+            # keyboard occupies ~88% of frame width
+            total_w = int(fw * 0.88)
+            pad     = max(3, total_w // 120)
+            self._kw  = (total_w - (cols - 1) * pad) // cols
+            self._kh  = max(36, int(fh * 0.085))
+            self._pad = pad
+            rows      = len(self._rows)
+            kb_w      = cols * (self._kw + pad) - pad
+            kb_h      = rows * (self._kh + pad) - pad
+            self._ox  = (fw - kb_w) // 2
+            # sit keyboard in lower 55% of frame
+            self._oy  = int(fh * 0.45)
+        else:
+            # numeric pad: 3 columns, 4 rows, large keys
+            cols = 3
+            self._kw  = int(fw * 0.12)
+            self._kh  = int(fh * 0.12)
+            self._pad = 8
+            rows      = len(self._rows)
+            kb_w      = cols * (self._kw + self._pad) - self._pad
+            kb_h      = rows * (self._kh + self._pad) - self._pad
+            self._ox  = (fw - kb_w) // 2
+            self._oy  = int(fh * 0.38)
+
+    def _key_rect(self, r: int, c: int) -> tuple[int,int,int,int]:
+        x1 = self._ox + c * (self._kw + self._pad)
+        y1 = self._oy + r * (self._kh + self._pad)
+        return x1, y1, x1 + self._kw, y1 + self._kh
+
+    # ── public API ────────────────────────────────────────────────────────────
+
+    def update(self, frame: np.ndarray,
+               index_tip: tuple[int,int] | None,
+               middle_tip: tuple[int,int] | None,
+               left_hand_landmarks=None) -> None:
         self._hovered = None
-        clicked = False
+        clicked       = False
 
         if index_tip is not None:
             ix, iy = index_tip
-            for r, row in enumerate(ROWS):
-                for c, _ in enumerate(row):
-                    x1, y1, x2, y2 = _key_rect(r, c)
+            for r, row in enumerate(self._rows):
+                for c in range(len(row)):
+                    x1, y1, x2, y2 = self._key_rect(r, c)
                     if x1 <= ix <= x2 and y1 <= iy <= y2:
                         self._hovered = (r, c)
 
             if middle_tip is not None:
                 mx, my = middle_tip
-                dist = ((ix - mx) ** 2 + (iy - my) ** 2) ** 0.5
+                dist = ((ix - mx)**2 + (iy - my)**2) ** 0.5
                 if dist < PINCH_DIST_PX:
                     now = time.monotonic()
                     if now - self._last_click_time > CLICK_COOLDOWN:
@@ -147,107 +219,122 @@ class HandKeyboard:
                         self._last_click_time = now
 
         if clicked and self._hovered is not None:
-            r, c = self._hovered
-            key = ROWS[r][c]
-            self._clicked_key = key
-            self._click_flash_until = time.monotonic() + 0.3
+            r, c  = self._hovered
+            key   = self._rows[r][c]
+            self._clicked_key       = key
+            self._click_flash_until = time.monotonic() + 0.25
             self._handle_key(key)
 
-        # ── open-hand confirm detection ───────────────────────────────────
+        # open-hand confirm
         if not self.confirmed:
             if _is_open_hand(left_hand_landmarks):
                 if self._open_hand_since is None:
                     self._open_hand_since = time.monotonic()
                 elif time.monotonic() - self._open_hand_since >= OPEN_HAND_HOLD:
-                    self.confirmed = True
-                    self._confirm_flash_until = time.monotonic() + 0.6
-                    self._open_hand_since = None
+                    self.confirmed            = True
+                    self._confirm_flash_until = time.monotonic() + 0.5
+                    self._open_hand_since     = None
             else:
-                self._open_hand_since = None   # reset if hand closes
+                self._open_hand_since = None
 
         self._draw(frame)
 
+    # ── input handling ────────────────────────────────────────────────────────
+
     def _handle_key(self, key: str) -> None:
-        action = _ACTION_MAP.get(key, key)
-        if action == "⌫":
+        if key == "DEL":
             self.text = self.text[:-1]
-        elif action == "✓":
+        elif key == "OK":
             self.confirmed = True
-        elif action == "✗":
+        elif key == "✕":
             self.cancelled = True
-        elif action == " ":
+        elif key == "SPC":
             if len(self.text) < 32:
                 self.text += " "
         else:
+            if self._mode == "num" and not key.isdigit():
+                return
             if len(self.text) < 32:
                 self.text += key
 
+    # ── drawing ───────────────────────────────────────────────────────────────
+
     def _draw(self, frame: np.ndarray) -> None:
-        now = time.monotonic()
+        now  = time.monotonic()
+        rows = self._rows
+        cols = max(len(r) for r in rows)
+
+        kb_w = cols * (self._kw + self._pad) - self._pad
+        kb_h = len(rows) * (self._kh + self._pad) - self._pad
+
+        # panel background
+        pad_x, pad_y = 12, 8
+        input_h      = 36
+        px1 = self._ox - pad_x
+        py1 = self._oy - input_h - 14 - pad_y
+        px2 = self._ox + kb_w + pad_x
+        py2 = self._oy + kb_h + pad_y
+
         overlay = frame.copy()
+        _rounded_rect(overlay, px1, py1, px2, py2, _C["panel_bg"], radius=10)
+        cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
+        _rounded_rect(frame, px1, py1, px2, py2, _C["panel_border"], radius=10, thickness=1)
 
-        # background panel
-        kx1 = KEYBOARD_LEFT - 4
-        ky1 = KEYBOARD_TOP - 32
-        kx2 = KEYBOARD_LEFT + _KB_TOTAL_W + 4
-        ky2 = KEYBOARD_TOP + _KB_TOTAL_H + 4
-        cv2.rectangle(overlay, (kx1, ky1), (kx2, ky2), (20, 20, 25), -1)
-        cv2.rectangle(overlay, (kx1, ky1), (kx2, ky2), (80, 80, 100), 1)
+        # input field
+        inp_x1 = self._ox
+        inp_y1 = self._oy - input_h - 8
+        inp_x2 = self._ox + kb_w
+        inp_y2 = self._oy - 8
+        _rounded_rect(frame, inp_x1, inp_y1, inp_x2, inp_y2, _C["input_bg"], radius=5)
+        _rounded_rect(frame, inp_x1, inp_y1, inp_x2, inp_y2, _C["input_border"], radius=5, thickness=1)
 
-        for r, row in enumerate(ROWS):
+        display = (self.text[-38:] if len(self.text) > 38 else self.text) + "|"
+        cv2.putText(frame, display, (inp_x1 + 8, inp_y2 - 9),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.48, _C["input_text"], 1, cv2.LINE_AA)
+
+        # keys
+        for r, row in enumerate(rows):
+            # centre short rows (e.g. num pad last row)
+            row_w = len(row) * (self._kw + self._pad) - self._pad
+            row_ox = self._ox + (kb_w - row_w) // 2
+
             for c, key in enumerate(row):
-                x1, y1, x2, y2 = _key_rect(r, c)
+                x1 = row_ox + c * (self._kw + self._pad)
+                y1 = self._oy + r * (self._kh + self._pad)
+                x2, y2 = x1 + self._kw, y1 + self._kh
+
                 is_hover = self._hovered == (r, c)
                 is_flash = (self._clicked_key == key and now < self._click_flash_until)
 
                 if is_flash:
-                    bg, border = COL_CLICK, (0, 255, 100)
+                    bg, border = _C["click_bg"], _C["click_border"]
                 elif is_hover:
-                    bg, border = COL_HOVER, (150, 200, 255)
-                elif key in ("DEL", "X"):
-                    bg, border = COL_SPECIAL, (220, 80, 80)
+                    bg, border = _C["hover_bg"], _C["hover_border"]
+                elif key in ("DEL", "✕"):
+                    bg, border = _C["del_bg"], _C["del_border"]
                 elif key == "OK":
-                    bg, border = COL_CONFIRM, (60, 200, 100)
-                elif r == 0:
-                    bg, border = COL_NUM, COL_BORDER
+                    bg, border = _C["ok_bg"], _C["ok_border"]
+                elif r == 0 and self._mode == "alpha":
+                    bg, border = _C["num_bg"], _C["key_border"]
                 else:
-                    bg, border = COL_BG, COL_BORDER
+                    bg, border = _C["key_bg"], _C["key_border"]
 
-                fs = 0.32 if key in ("DEL", "SPC") else 0.38
-                _draw_key(overlay, x1, y1, x2, y2, bg, border, key, fs)
+                _draw_key_box(frame, x1, y1, x2, y2, bg, border, key)
 
-        # text preview bar
-        bar_x1 = KEYBOARD_LEFT
-        bar_x2 = KEYBOARD_LEFT + _KB_TOTAL_W
-        bar_y1 = KEYBOARD_TOP - 28
-        bar_y2 = KEYBOARD_TOP - 6
-        cv2.rectangle(overlay, (bar_x1, bar_y1), (bar_x2, bar_y2), (15, 15, 20), -1)
-        cv2.rectangle(overlay, (bar_x1, bar_y1), (bar_x2, bar_y2), (80, 80, 100), 1)
-        display_text = self.text[-36:] if len(self.text) > 36 else self.text
-        cv2.putText(overlay, display_text + "|",
-                    (bar_x1 + 4, bar_y2 - 4),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.38, (0, 255, 180), 1, cv2.LINE_AA)
-
-        # 50% transparent blend
-        cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
-
-        # ── open-hand progress indicator (drawn on top, fully opaque) ────
+        # open-hand confirm progress
+        bar_y1 = py1 - 14
+        bar_y2 = py1 - 6
         if now < self._confirm_flash_until:
-            # brief green "Confirmed!" flash
+            _rounded_rect(frame, px1, bar_y1, px2, bar_y2, _C["confirm_bar"], radius=3)
             cv2.putText(frame, "Confirmed!",
-                        (KEYBOARD_LEFT, ky1 - 6),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 100), 2, cv2.LINE_AA)
+                        (px1 + 6, bar_y1 - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, _C["confirm_bar"], 1, cv2.LINE_AA)
         elif self._open_hand_since is not None:
             elapsed  = now - self._open_hand_since
             progress = min(elapsed / OPEN_HAND_HOLD, 1.0)
-            # progress bar above the keyboard panel
-            bar_w    = int(_KB_TOTAL_W * progress)
-            bar_top  = ky1 - 10
-            bar_bot  = ky1 - 4
-            cv2.rectangle(frame, (KEYBOARD_LEFT, bar_top),
-                          (KEYBOARD_LEFT + _KB_TOTAL_W, bar_bot), (40, 40, 40), -1)
-            cv2.rectangle(frame, (KEYBOARD_LEFT, bar_top),
-                          (KEYBOARD_LEFT + bar_w, bar_bot), (0, 220, 80), -1)
-            cv2.putText(frame, "Open hand to confirm...",
-                        (KEYBOARD_LEFT, bar_top - 3),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 220, 80), 1, cv2.LINE_AA)
+            bar_fill = px1 + int((px2 - px1) * progress)
+            cv2.rectangle(frame, (px1, bar_y1), (px2, bar_y2), (40, 40, 55), -1)
+            _rounded_rect(frame, px1, bar_y1, bar_fill, bar_y2, _C["confirm_bar"], radius=3)
+            cv2.putText(frame, "Hold open hand to confirm...",
+                        (px1 + 4, bar_y1 - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.36, _C["hint_text"], 1, cv2.LINE_AA)

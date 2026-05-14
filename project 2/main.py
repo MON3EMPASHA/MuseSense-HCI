@@ -505,6 +505,9 @@ def set_camera_window(visible: bool) -> None:
     camera_window_visible = visible
 
 
+set_camera_window(True)
+
+
 def emit_transcription(connection, text: str) -> None:
     """Send a TRANS: line to the C# GUI for the live-transcription panel."""
     if not text:

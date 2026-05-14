@@ -56,9 +56,7 @@
     ],
     "Profile": "objects/Monem.png",
     "favorites": [3],
-    "themeMode": "light",
-    "role": null,
-    "password": null
+    "themeMode": "light"
   },
   {
     "name": "Abdelmonem Hatem",
@@ -101,8 +99,19 @@
     ],
     "Profile": "",
     "favorites": [2, 1, 0],
-    "themeMode": "",
-    "role": null,
-    "password": null
+    "themeMode": ""
+  },
+  {
+    "name": "BBKKLL",
+    "age": "9",
+    "gender": "Male",
+    "mac": [],
+    "Profile": "objects/BBKKLL.jpg",
+    "images": [
+      "objects/BBKKLL.jpg",
+      "objects/BBKKLL_2.jpg",
+      "objects/BBKKLL_3.jpg"
+    ],
+    "themeMode": "light"
   }
 ]
