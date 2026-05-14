@@ -1,5 +1,16 @@
 [
   {
+    "name": "admin",
+    "age": "25",
+    "gender": "Male",
+    "mac": null,
+    "Profile": "",
+    "favorites": [],
+    "themeMode": "dark",
+    "role": "admin",
+    "password": "pass1234"
+  },
+  {
     "name": "Ayad Zewail",
     "age": "999",
     "gender": "non-binary",

@@ -29,6 +29,7 @@ using TUIO;
 using System.Net.Sockets;
 using System.Text;
 using System.IO;
+using System.Linq;
 using System.Web.Script.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Media;
@@ -156,6 +157,8 @@ public class TuioDemo : Form , TuioListener
                 public string Profile { get; set; }
                 public List<int> favorites { get; set; }
                 public string themeMode { get; set; }
+            public string role { get; set; }
+            public string password { get; set; }
         }
 
         class UserRoot
@@ -248,6 +251,8 @@ public class TuioDemo : Form , TuioListener
         Rectangle audioToggleButtonRect = Rectangle.Empty;
         Rectangle favoriteToggleButtonRect = Rectangle.Empty;
         Rectangle themeToggleButtonRect = Rectangle.Empty;
+
+        const int ADMIN_AUTH_MARKER_ID = 110;
         
         PictureBox artifact3DPictureBox;
         
@@ -362,6 +367,8 @@ public class TuioDemo : Form , TuioListener
                 NavigateNextPage();
  			} else if ( e.KeyData == Keys.Left ) {
                 NavigatePreviousPage();
+            } else if ( e.KeyData == (Keys.Control | Keys.Alt | Keys.A) ) {
+                TryOpenAdminPortal();
  			}
 
  		}
@@ -461,6 +468,11 @@ public class TuioDemo : Form , TuioListener
                     Console.WriteLine("Favorite toggled by Marker 103");
                 }
             }
+            else if (o.SymbolID == ADMIN_AUTH_MARKER_ID)
+            {
+                Console.WriteLine("[ADMIN] Admin auth marker detected");
+                TryOpenAdminPortal();
+            }
             else
             {
                 NavigateToArtifactByMarker(o.SymbolID);
@@ -485,6 +497,10 @@ public class TuioDemo : Form , TuioListener
                 return;
             }
             else if (o.SymbolID == TUIO_FAVORITE_TOGGLE_ID)
+            {
+                return;
+            }
+            else if (o.SymbolID == ADMIN_AUTH_MARKER_ID)
             {
                 return;
             }
@@ -1197,6 +1213,146 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
+    private void TryOpenAdminPortal()
+    {
+        using (var loginForm = new AdminLoginForm())
+        {
+            if (loginForm.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            UserRecord adminUser = FindAdminUser(loginForm.EnteredUsername, loginForm.EnteredPassword);
+            if (adminUser == null)
+            {
+                MessageBox.Show(this, "Invalid admin credentials.", "Admin Authentication", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+        }
+
+        string artifactsPath = ResolveArtifactsPath();
+        if (string.IsNullOrWhiteSpace(artifactsPath))
+        {
+            MessageBox.Show(this, "Could not resolve artifacts.json path for admin management.", "Admin Dashboard", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        string contextPath = ResolveContextDataPath();
+        string reportsPath = ResolveReportsPath();
+
+        using (var dashboard = new AdminDashboardForm(
+            artifactsPath,
+            contextPath,
+            reportsPath,
+            () =>
+            {
+                LoadArtifacts();
+                Invalidate();
+            }))
+        {
+            dashboard.ShowDialog(this);
+        }
+    }
+
+    private UserRecord FindAdminUser(string username, string password)
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            return null;
+        }
+
+        string normalizedUsername = username.Trim();
+        foreach (UserRecord user in allUsers)
+        {
+            if (user == null)
+            {
+                continue;
+            }
+
+            string userRole = string.IsNullOrWhiteSpace(user.role) ? string.Empty : user.role.Trim().ToLowerInvariant();
+            if (userRole != "admin")
+            {
+                continue;
+            }
+
+            if (string.Equals((user.name ?? string.Empty).Trim(), normalizedUsername, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals((user.password ?? string.Empty).Trim(), password, StringComparison.Ordinal))
+            {
+                return user;
+            }
+        }
+
+        return null;
+    }
+
+    private string ResolveArtifactsPath()
+    {
+        if (!string.IsNullOrWhiteSpace(artifactsJsonPath) && File.Exists(artifactsJsonPath))
+        {
+            return artifactsJsonPath;
+        }
+
+        string[] candidates = new[]
+        {
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\artifacts.json"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\artifacts.json"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "artifacts.json")
+        };
+
+        foreach (string candidate in candidates)
+        {
+            string fullPath = Path.GetFullPath(candidate);
+            if (File.Exists(fullPath))
+            {
+                return fullPath;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private string ResolveContextDataPath()
+    {
+        string[] candidates = new[]
+        {
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\context_data.json"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\context_data.json"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "context_data.json")
+        };
+
+        foreach (string candidate in candidates)
+        {
+            string fullPath = Path.GetFullPath(candidate);
+            if (File.Exists(fullPath))
+            {
+                return fullPath;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private string ResolveReportsPath()
+    {
+        string[] candidates = new[]
+        {
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\reports"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\reports"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "reports")
+        };
+
+        foreach (string candidate in candidates)
+        {
+            string fullPath = Path.GetFullPath(candidate);
+            if (Directory.Exists(fullPath))
+            {
+                return fullPath;
+            }
+        }
+
+        return string.Empty;
+    }
+
     void GoToPage(int pageIndex)
     {
         if (InvokeRequired)
@@ -1708,6 +1864,7 @@ public class TuioDemo : Form , TuioListener
             Rectangle pill = new Rectangle(cX + (cw - pillW) / 2, cY + ch - pillH - 36, pillW, pillH);
             FillRoundedRect(g, blbBrush, pill, pillH / 2);
             DrawStringCentered(g, btStatus, pillFont, accentBrush, pill);
+
         }
         else if (page == 0) // Home — dispatched per age mode
         {
@@ -3555,3 +3712,915 @@ public class TuioDemo : Form , TuioListener
 			Application.Run(app);
 		}
 	}
+
+public sealed class AdminLoginForm : Form
+{
+    private readonly TextBox usernameTextBox;
+    private readonly TextBox passwordTextBox;
+
+    public string EnteredUsername { get { return (usernameTextBox.Text ?? string.Empty).Trim(); } }
+    public string EnteredPassword { get { return passwordTextBox.Text ?? string.Empty; } }
+
+    public AdminLoginForm()
+    {
+        Text = "Admin Authentication";
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(440, 230);
+        BackColor = Color.FromArgb(245, 248, 252);
+
+        var title = new Label
+        {
+            Text = "MuseSense Admin Portal",
+            Font = new Font("Segoe UI", 14f, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(24, 18),
+            ForeColor = Color.FromArgb(24, 31, 42)
+        };
+
+        var subtitle = new Label
+        {
+            Text = "Enter administrator credentials to continue.",
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
+            AutoSize = true,
+            Location = new Point(26, 50),
+            ForeColor = Color.FromArgb(88, 98, 112)
+        };
+
+        var userLabel = new Label
+        {
+            Text = "Username",
+            AutoSize = true,
+            Location = new Point(28, 86),
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
+        };
+
+        usernameTextBox = new TextBox
+        {
+            Location = new Point(28, 106),
+            Width = 380,
+            Font = new Font("Segoe UI", 10f)
+        };
+
+        var passwordLabel = new Label
+        {
+            Text = "Password",
+            AutoSize = true,
+            Location = new Point(28, 138),
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
+        };
+
+        passwordTextBox = new TextBox
+        {
+            Location = new Point(28, 158),
+            Width = 380,
+            Font = new Font("Segoe UI", 10f),
+            UseSystemPasswordChar = true
+        };
+
+        var cancelButton = new Button
+        {
+            Text = "Cancel",
+            Width = 94,
+            Height = 34,
+            Location = new Point(214, 188),
+            DialogResult = DialogResult.Cancel,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+        };
+
+        var loginButton = new Button
+        {
+            Text = "Sign In",
+            Width = 94,
+            Height = 34,
+            Location = new Point(314, 188),
+            DialogResult = DialogResult.OK,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            BackColor = Color.FromArgb(18, 124, 255),
+            ForeColor = Color.White
+        };
+
+        AcceptButton = loginButton;
+        CancelButton = cancelButton;
+
+        Controls.Add(title);
+        Controls.Add(subtitle);
+        Controls.Add(userLabel);
+        Controls.Add(usernameTextBox);
+        Controls.Add(passwordLabel);
+        Controls.Add(passwordTextBox);
+        Controls.Add(cancelButton);
+        Controls.Add(loginButton);
+    }
+}
+
+public sealed class AdminArtifact
+{
+    public int id { get; set; }
+    public int tuioId { get; set; }
+    public string name { get; set; }
+    public string birthDate { get; set; }
+    public string era { get; set; }
+    public string origin { get; set; }
+    public string description { get; set; }
+    public string narration { get; set; }
+    public string objPath { get; set; }
+    public string audioPath { get; set; }
+    public string color { get; set; }
+    public string country { get; set; }
+    public string category { get; set; }
+    public string tags { get; set; }
+    public string historicalInfo { get; set; }
+    public string period { get; set; }
+}
+
+internal sealed class AdminArtifactRoot
+{
+    public List<AdminArtifact> artifacts { get; set; }
+}
+
+public sealed class AdminArtifactEditorForm : Form
+{
+    private readonly TextBox idBox;
+    private readonly TextBox tuioIdBox;
+    private readonly TextBox nameBox;
+    private readonly TextBox descriptionBox;
+    private readonly TextBox categoryBox;
+    private readonly TextBox historicalInfoBox;
+    private readonly TextBox tagsBox;
+    private readonly TextBox periodBox;
+    private readonly TextBox birthDateBox;
+    private readonly TextBox eraBox;
+    private readonly TextBox originBox;
+    private readonly TextBox countryBox;
+    private readonly TextBox objPathBox;
+    private readonly TextBox audioPathBox;
+    private readonly TextBox colorBox;
+    private readonly TextBox narrationBox;
+
+    public AdminArtifact Artifact { get; private set; }
+
+    public AdminArtifactEditorForm(AdminArtifact source)
+    {
+        var artifact = source ?? new AdminArtifact();
+
+        Text = source == null ? "Create Artifact" : "Edit Artifact";
+        StartPosition = FormStartPosition.CenterParent;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        ClientSize = new Size(850, 720);
+
+        var panel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = Color.FromArgb(248, 250, 255)
+        };
+        Controls.Add(panel);
+
+        int leftX = 24;
+        int rightX = 430;
+        int y = 24;
+
+        idBox = AddField(panel, "Artifact ID", artifact.id.ToString(), leftX, ref y);
+        tuioIdBox = AddField(panel, "TUIO ID", artifact.tuioId.ToString(), rightX, ref y);
+        nameBox = AddField(panel, "Title", artifact.name, leftX, ref y);
+        categoryBox = AddField(panel, "Category", string.IsNullOrWhiteSpace(artifact.category) ? artifact.country : artifact.category, rightX, ref y);
+        descriptionBox = AddMultiLineField(panel, "Description", artifact.description, leftX, 90, ref y);
+        historicalInfoBox = AddMultiLineField(panel, "Historical Information", string.IsNullOrWhiteSpace(artifact.historicalInfo) ? artifact.narration : artifact.historicalInfo, rightX, 90, ref y);
+        tagsBox = AddField(panel, "Tags (comma-separated)", artifact.tags, leftX, ref y);
+        periodBox = AddField(panel, "Date/Period", string.IsNullOrWhiteSpace(artifact.period) ? artifact.birthDate : artifact.period, rightX, ref y);
+        birthDateBox = AddField(panel, "Birth Date", artifact.birthDate, leftX, ref y);
+        eraBox = AddField(panel, "Era", artifact.era, rightX, ref y);
+        originBox = AddField(panel, "Origin", artifact.origin, leftX, ref y);
+        countryBox = AddField(panel, "Country", artifact.country, rightX, ref y);
+        objPathBox = AddField(panel, "Image/Model Path", artifact.objPath, leftX, ref y);
+        audioPathBox = AddField(panel, "Audio Path", artifact.audioPath, rightX, ref y);
+        colorBox = AddField(panel, "Theme Color", artifact.color, leftX, ref y);
+        narrationBox = AddMultiLineField(panel, "Narration", artifact.narration, rightX, 110, ref y);
+
+        var cancelButton = new Button
+        {
+            Text = "Cancel",
+            Width = 110,
+            Height = 34,
+            Location = new Point(590, 650),
+            DialogResult = DialogResult.Cancel,
+            FlatStyle = FlatStyle.Flat
+        };
+
+        var saveButton = new Button
+        {
+            Text = source == null ? "Create Artifact" : "Save Changes",
+            Width = 170,
+            Height = 34,
+            Location = new Point(686, 650),
+            DialogResult = DialogResult.None,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(18, 124, 255),
+            ForeColor = Color.White
+        };
+
+        saveButton.Click += (s, e) =>
+        {
+            int parsedId;
+            int parsedTuioId;
+            if (!int.TryParse(idBox.Text.Trim(), out parsedId))
+            {
+                MessageBox.Show(this, "Artifact ID must be a valid integer.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (!int.TryParse(tuioIdBox.Text.Trim(), out parsedTuioId))
+            {
+                MessageBox.Show(this, "TUIO ID must be a valid integer.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(nameBox.Text))
+            {
+                MessageBox.Show(this, "Title is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            Artifact = new AdminArtifact
+            {
+                id = parsedId,
+                tuioId = parsedTuioId,
+                name = nameBox.Text.Trim(),
+                description = descriptionBox.Text.Trim(),
+                category = categoryBox.Text.Trim(),
+                historicalInfo = historicalInfoBox.Text.Trim(),
+                tags = tagsBox.Text.Trim(),
+                period = periodBox.Text.Trim(),
+                birthDate = birthDateBox.Text.Trim(),
+                era = eraBox.Text.Trim(),
+                origin = originBox.Text.Trim(),
+                country = countryBox.Text.Trim(),
+                objPath = objPathBox.Text.Trim(),
+                audioPath = audioPathBox.Text.Trim(),
+                color = colorBox.Text.Trim(),
+                narration = narrationBox.Text.Trim()
+            };
+
+            DialogResult = DialogResult.OK;
+            Close();
+        };
+
+        panel.Controls.Add(cancelButton);
+        panel.Controls.Add(saveButton);
+    }
+
+    private static TextBox AddField(Control parent, string label, string value, int x, ref int y)
+    {
+        var labelControl = new Label { Text = label, AutoSize = true, Location = new Point(x, y), Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+        var box = new TextBox { Text = value ?? string.Empty, Width = 360, Location = new Point(x, y + 20), Font = new Font("Segoe UI", 9.5f) };
+        parent.Controls.Add(labelControl);
+        parent.Controls.Add(box);
+        if (x > 300) y += 58;
+        return box;
+    }
+
+    private static TextBox AddMultiLineField(Control parent, string label, string value, int x, int height, ref int y)
+    {
+        var labelControl = new Label { Text = label, AutoSize = true, Location = new Point(x, y), Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+        var box = new TextBox
+        {
+            Text = value ?? string.Empty,
+            Width = 360,
+            Height = height,
+            Multiline = true,
+            Location = new Point(x, y + 20),
+            Font = new Font("Segoe UI", 9.5f),
+            ScrollBars = ScrollBars.Vertical
+        };
+        parent.Controls.Add(labelControl);
+        parent.Controls.Add(box);
+        if (x > 300) y += height + 36;
+        return box;
+    }
+}
+
+internal sealed class ArtifactAnalytics
+{
+    public string Name { get; set; }
+    public int Views { get; set; }
+    public int Interactions { get; set; }
+    public double DurationScore { get; set; }
+    public double PositiveEmotionScore { get; set; }
+    public double FinalScore { get; set; }
+}
+
+public sealed class AdminDashboardForm : Form
+{
+    private readonly string artifactsPath;
+    private readonly string contextPath;
+    private readonly string reportsPath;
+    private readonly Action onArtifactsChanged;
+
+    private readonly DataGridView artifactGrid;
+    private readonly TextBox searchBox;
+    private readonly ComboBox categoryFilter;
+    private readonly Label favorableArtifactLabel;
+    private readonly Label scoreReasonLabel;
+    private readonly Label sessionsLabel;
+    private readonly Label usersLabel;
+    private readonly Label averageViewsLabel;
+    private readonly ListView analyticsList;
+
+    private List<AdminArtifact> artifacts = new List<AdminArtifact>();
+
+    public AdminDashboardForm(string artifactsPath, string contextPath, string reportsPath, Action onArtifactsChanged)
+    {
+        this.artifactsPath = artifactsPath;
+        this.contextPath = contextPath;
+        this.reportsPath = reportsPath;
+        this.onArtifactsChanged = onArtifactsChanged;
+
+        Text = "MuseSense Admin Management";
+        StartPosition = FormStartPosition.CenterParent;
+        WindowState = FormWindowState.Maximized;
+        BackColor = Color.FromArgb(241, 245, 250);
+
+        var topPanel = new Panel { Dock = DockStyle.Top, Height = 90, BackColor = Color.White };
+        var leftPanel = new Panel { Dock = DockStyle.Left, Width = 840, BackColor = Color.FromArgb(248, 252, 255) };
+        var rightPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(246, 249, 252) };
+
+        var title = new Label
+        {
+            Text = "Admin Dashboard",
+            Font = new Font("Segoe UI", 20f, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(24, 12)
+        };
+        var subtitle = new Label
+        {
+            Text = "Artifact CRUD, session analytics, and favorable artifact ranking",
+            Font = new Font("Segoe UI", 10f),
+            AutoSize = true,
+            Location = new Point(26, 52),
+            ForeColor = Color.FromArgb(88, 98, 112)
+        };
+        topPanel.Controls.Add(title);
+        topPanel.Controls.Add(subtitle);
+
+        Controls.Add(rightPanel);
+        Controls.Add(leftPanel);
+        Controls.Add(topPanel);
+
+        searchBox = new TextBox
+        {
+            Width = 320,
+            Location = new Point(24, 22),
+            Font = new Font("Segoe UI", 9.5f),
+            Text = "Search title, category, tags, era..."
+        };
+        searchBox.GotFocus += (s, e) =>
+        {
+            if (searchBox.Text == "Search title, category, tags, era...")
+            {
+                searchBox.Text = string.Empty;
+            }
+        };
+        searchBox.LostFocus += (s, e) =>
+        {
+            if (string.IsNullOrWhiteSpace(searchBox.Text))
+            {
+                searchBox.Text = "Search title, category, tags, era...";
+            }
+        };
+        searchBox.TextChanged += (s, e) => RefreshGrid();
+
+        categoryFilter = new ComboBox
+        {
+            Width = 190,
+            Location = new Point(356, 22),
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Font = new Font("Segoe UI", 9.5f)
+        };
+        categoryFilter.SelectedIndexChanged += (s, e) => RefreshGrid();
+
+        var addButton = BuildActionButton("Create Artifact", new Point(560, 20), Color.FromArgb(24, 147, 78));
+        addButton.Click += (s, e) => CreateArtifact();
+        var editButton = BuildActionButton("Edit Selected", new Point(692, 20), Color.FromArgb(18, 124, 255));
+        editButton.Click += (s, e) => EditSelectedArtifact();
+        var deleteButton = BuildActionButton("Delete", new Point(692, 58), Color.FromArgb(212, 69, 77));
+        deleteButton.Click += (s, e) => DeleteSelectedArtifact();
+        var refreshButton = BuildActionButton("Reload", new Point(560, 58), Color.FromArgb(95, 104, 121));
+        refreshButton.Click += (s, e) => ReloadAll();
+
+        artifactGrid = new DataGridView
+        {
+            Location = new Point(24, 100),
+            Width = 792,
+            Height = 690,
+            BackgroundColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
+            ReadOnly = true,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            MultiSelect = false,
+            AutoGenerateColumns = false,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            RowHeadersVisible = false,
+            Font = new Font("Segoe UI", 9f)
+        };
+        artifactGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "ID", DataPropertyName = "id", FillWeight = 12 });
+        artifactGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "TUIO", DataPropertyName = "tuioId", FillWeight = 12 });
+        artifactGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Title", DataPropertyName = "name", FillWeight = 34 });
+        artifactGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Category", DataPropertyName = "category", FillWeight = 20 });
+        artifactGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Period", DataPropertyName = "period", FillWeight = 18 });
+        artifactGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tags", DataPropertyName = "tags", FillWeight = 24 });
+
+        leftPanel.Controls.Add(searchBox);
+        leftPanel.Controls.Add(categoryFilter);
+        leftPanel.Controls.Add(addButton);
+        leftPanel.Controls.Add(editButton);
+        leftPanel.Controls.Add(deleteButton);
+        leftPanel.Controls.Add(refreshButton);
+        leftPanel.Controls.Add(artifactGrid);
+
+        favorableArtifactLabel = new Label
+        {
+            Text = "Most Favorable Artifact: -",
+            Font = new Font("Segoe UI", 15f, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(24, 24)
+        };
+        scoreReasonLabel = new Label
+        {
+            Text = "Ranking explanation will appear here.",
+            Font = new Font("Segoe UI", 9.5f),
+            AutoSize = true,
+            MaximumSize = new Size(620, 0),
+            Location = new Point(26, 58),
+            ForeColor = Color.FromArgb(73, 84, 99)
+        };
+        usersLabel = BuildMetricLabel("Total users: 0", new Point(24, 120));
+        sessionsLabel = BuildMetricLabel("Sessions analyzed: 0", new Point(24, 150));
+        averageViewsLabel = BuildMetricLabel("Avg views per artifact: 0", new Point(24, 180));
+
+        analyticsList = new ListView
+        {
+            Location = new Point(24, 230),
+            Width = 640,
+            Height = 560,
+            View = View.Details,
+            FullRowSelect = true,
+            GridLines = true,
+            Font = new Font("Segoe UI", 9f)
+        };
+        analyticsList.Columns.Add("Artifact", 210);
+        analyticsList.Columns.Add("Views", 70);
+        analyticsList.Columns.Add("Interactions", 90);
+        analyticsList.Columns.Add("Positivity", 90);
+        analyticsList.Columns.Add("Duration", 80);
+        analyticsList.Columns.Add("Final Score", 90);
+
+        rightPanel.Controls.Add(favorableArtifactLabel);
+        rightPanel.Controls.Add(scoreReasonLabel);
+        rightPanel.Controls.Add(usersLabel);
+        rightPanel.Controls.Add(sessionsLabel);
+        rightPanel.Controls.Add(averageViewsLabel);
+        rightPanel.Controls.Add(analyticsList);
+
+        ReloadAll();
+    }
+
+    private static Label BuildMetricLabel(string text, Point point)
+    {
+        return new Label
+        {
+            Text = text,
+            Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+            AutoSize = true,
+            Location = point,
+            ForeColor = Color.FromArgb(32, 52, 75)
+        };
+    }
+
+    private static Button BuildActionButton(string text, Point location, Color backColor)
+    {
+        return new Button
+        {
+            Text = text,
+            Width = 124,
+            Height = 30,
+            Location = location,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = backColor,
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold)
+        };
+    }
+
+    private void ReloadAll()
+    {
+        artifacts = LoadArtifacts();
+        RefreshCategoryFilter();
+        RefreshGrid();
+        RefreshAnalytics();
+    }
+
+    private List<AdminArtifact> LoadArtifacts()
+    {
+        if (string.IsNullOrWhiteSpace(artifactsPath) || !File.Exists(artifactsPath))
+        {
+            return new List<AdminArtifact>();
+        }
+
+        try
+        {
+            var serializer = new JavaScriptSerializer();
+            var json = File.ReadAllText(artifactsPath);
+            var root = serializer.Deserialize<AdminArtifactRoot>(json);
+            if (root == null || root.artifacts == null)
+            {
+                return new List<AdminArtifact>();
+            }
+
+            foreach (var artifact in root.artifacts)
+            {
+                if (artifact == null) continue;
+                if (string.IsNullOrWhiteSpace(artifact.category)) artifact.category = !string.IsNullOrWhiteSpace(artifact.country) ? artifact.country : artifact.era;
+                if (string.IsNullOrWhiteSpace(artifact.period)) artifact.period = artifact.birthDate;
+                if (string.IsNullOrWhiteSpace(artifact.historicalInfo)) artifact.historicalInfo = artifact.narration;
+            }
+
+            return root.artifacts.OrderBy(a => a.id).ToList();
+        }
+        catch
+        {
+            return new List<AdminArtifact>();
+        }
+    }
+
+    private void SaveArtifacts()
+    {
+        var root = new AdminArtifactRoot { artifacts = artifacts.OrderBy(a => a.id).ToList() };
+        var serializer = new JavaScriptSerializer();
+        var json = serializer.Serialize(root).Replace("\"artifacts\":[", "\"artifacts\": [");
+        File.WriteAllText(artifactsPath, json);
+        onArtifactsChanged?.Invoke();
+    }
+
+    private void RefreshCategoryFilter()
+    {
+        var selected = categoryFilter.SelectedItem as string;
+        var categories = artifacts.Select(a => string.IsNullOrWhiteSpace(a.category) ? "Uncategorized" : a.category.Trim())
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => c)
+            .ToList();
+
+        categoryFilter.Items.Clear();
+        categoryFilter.Items.Add("All Categories");
+        foreach (var category in categories) categoryFilter.Items.Add(category);
+        categoryFilter.SelectedItem = categories.Contains(selected) ? selected : "All Categories";
+    }
+
+    private void RefreshGrid()
+    {
+        var query = (searchBox.Text ?? string.Empty).Trim().ToLowerInvariant();
+        if (query == "search title, category, tags, era...") query = string.Empty;
+        var category = (categoryFilter.SelectedItem as string) ?? "All Categories";
+
+        var filtered = artifacts.Where(a =>
+        {
+            var categoryValue = string.IsNullOrWhiteSpace(a.category) ? "Uncategorized" : a.category;
+            bool categoryMatch = category == "All Categories" || string.Equals(categoryValue, category, StringComparison.OrdinalIgnoreCase);
+            if (!categoryMatch) return false;
+            if (string.IsNullOrWhiteSpace(query)) return true;
+
+            var haystack = string.Join(" ", new[] { a.name, a.description, a.category, a.tags, a.period, a.era, a.origin, a.country }).ToLowerInvariant();
+            return haystack.Contains(query);
+        }).ToList();
+
+        artifactGrid.DataSource = filtered;
+    }
+
+    private AdminArtifact GetSelectedArtifact()
+    {
+        if (artifactGrid.SelectedRows.Count == 0) return null;
+        return artifactGrid.SelectedRows[0].DataBoundItem as AdminArtifact;
+    }
+
+    private void CreateArtifact()
+    {
+        int nextId = artifacts.Count == 0 ? 0 : artifacts.Max(a => a.id) + 1;
+        int nextTuioId = artifacts.Count == 0 ? 0 : artifacts.Max(a => a.tuioId) + 1;
+        var initial = new AdminArtifact { id = nextId, tuioId = nextTuioId, color = "#A0A0A0" };
+
+        using (var form = new AdminArtifactEditorForm(initial))
+        {
+            if (form.ShowDialog(this) != DialogResult.OK || form.Artifact == null) return;
+            if (artifacts.Any(a => a.id == form.Artifact.id)) { MessageBox.Show(this, "Artifact ID already exists.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            if (artifacts.Any(a => a.tuioId == form.Artifact.tuioId)) { MessageBox.Show(this, "TUIO ID already exists.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            artifacts.Add(form.Artifact);
+            SaveArtifacts();
+            ReloadAll();
+        }
+    }
+
+    private void EditSelectedArtifact()
+    {
+        var selected = GetSelectedArtifact();
+        if (selected == null) { MessageBox.Show(this, "Select an artifact to edit.", "Edit Artifact", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+
+        var workingCopy = new AdminArtifact
+        {
+            id = selected.id,
+            tuioId = selected.tuioId,
+            name = selected.name,
+            birthDate = selected.birthDate,
+            era = selected.era,
+            origin = selected.origin,
+            description = selected.description,
+            narration = selected.narration,
+            objPath = selected.objPath,
+            audioPath = selected.audioPath,
+            color = selected.color,
+            country = selected.country,
+            category = selected.category,
+            tags = selected.tags,
+            historicalInfo = selected.historicalInfo,
+            period = selected.period
+        };
+
+        using (var form = new AdminArtifactEditorForm(workingCopy))
+        {
+            if (form.ShowDialog(this) != DialogResult.OK || form.Artifact == null) return;
+            if (artifacts.Any(a => a != selected && a.id == form.Artifact.id)) { MessageBox.Show(this, "Artifact ID already exists.", "Edit Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            if (artifacts.Any(a => a != selected && a.tuioId == form.Artifact.tuioId)) { MessageBox.Show(this, "TUIO ID already exists.", "Edit Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            selected.id = form.Artifact.id;
+            selected.tuioId = form.Artifact.tuioId;
+            selected.name = form.Artifact.name;
+            selected.birthDate = form.Artifact.birthDate;
+            selected.era = form.Artifact.era;
+            selected.origin = form.Artifact.origin;
+            selected.description = form.Artifact.description;
+            selected.narration = form.Artifact.narration;
+            selected.objPath = form.Artifact.objPath;
+            selected.audioPath = form.Artifact.audioPath;
+            selected.color = form.Artifact.color;
+            selected.country = form.Artifact.country;
+            selected.category = form.Artifact.category;
+            selected.tags = form.Artifact.tags;
+            selected.historicalInfo = form.Artifact.historicalInfo;
+            selected.period = form.Artifact.period;
+
+            SaveArtifacts();
+            ReloadAll();
+        }
+    }
+
+    private void DeleteSelectedArtifact()
+    {
+        var selected = GetSelectedArtifact();
+        if (selected == null) { MessageBox.Show(this, "Select an artifact to delete.", "Delete Artifact", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+
+        var result = MessageBox.Show(this, "Delete artifact '" + selected.name + "'? This action cannot be undone.", "Confirm Deletion", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        if (result != DialogResult.Yes) return;
+
+        artifacts.Remove(selected);
+        SaveArtifacts();
+        ReloadAll();
+    }
+
+    private void RefreshAnalytics()
+    {
+        var analytics = BuildAnalytics();
+        analyticsList.Items.Clear();
+
+        foreach (var item in analytics)
+        {
+            var row = new ListViewItem(item.Name);
+            row.SubItems.Add(item.Views.ToString());
+            row.SubItems.Add(item.Interactions.ToString());
+            row.SubItems.Add(item.PositiveEmotionScore.ToString("0.00"));
+            row.SubItems.Add(item.DurationScore.ToString("0.00"));
+            row.SubItems.Add(item.FinalScore.ToString("0.000"));
+            analyticsList.Items.Add(row);
+        }
+
+        if (analytics.Count > 0)
+        {
+            var top = analytics[0];
+            favorableArtifactLabel.Text = "Most Favorable Artifact: " + top.Name;
+            scoreReasonLabel.Text = "Selected because it leads with strong composite engagement: positivity=" + top.PositiveEmotionScore.ToString("0.00") + ", views=" + top.Views + ", duration score=" + top.DurationScore.ToString("0.00") + ", interactions=" + top.Interactions + ", final=" + top.FinalScore.ToString("0.000") + ".";
+        }
+        else
+        {
+            favorableArtifactLabel.Text = "Most Favorable Artifact: -";
+            scoreReasonLabel.Text = "No artifact analytics data has been captured yet.";
+        }
+    }
+
+    private List<ArtifactAnalytics> BuildAnalytics()
+    {
+        var analyticsMap = new Dictionary<string, ArtifactAnalytics>(StringComparer.OrdinalIgnoreCase);
+        foreach (var artifact in artifacts)
+        {
+            var name = string.IsNullOrWhiteSpace(artifact.name) ? "Artifact " + artifact.id : artifact.name.Trim();
+            if (!analyticsMap.ContainsKey(name)) analyticsMap[name] = new ArtifactAnalytics { Name = name };
+        }
+
+        int totalUsers = 0;
+        if (File.Exists(contextPath))
+        {
+            try
+            {
+                var serializer = new JavaScriptSerializer();
+                var root = serializer.DeserializeObject(File.ReadAllText(contextPath)) as Dictionary<string, object>;
+                if (root != null && root.ContainsKey("users"))
+                {
+                    var users = root["users"] as Dictionary<string, object>;
+                    if (users != null)
+                    {
+                        totalUsers = users.Count;
+                        foreach (var userEntry in users)
+                        {
+                            var userData = userEntry.Value as Dictionary<string, object>;
+                            if (userData == null) continue;
+
+                            if (userData.ContainsKey("opened_artifacts"))
+                            {
+                                var opened = userData["opened_artifacts"] as Dictionary<string, object>;
+                                if (opened != null)
+                                {
+                                    foreach (var openedEntry in opened)
+                                    {
+                                        var name = MatchArtifactName(openedEntry.Key);
+                                        if (name == null) continue;
+                                        analyticsMap[name].Views += 1;
+                                        analyticsMap[name].Interactions += 1;
+                                    }
+                                }
+                            }
+
+                            if (userData.ContainsKey("artifact_scores"))
+                            {
+                                var scores = userData["artifact_scores"] as Dictionary<string, object>;
+                                if (scores != null)
+                                {
+                                    foreach (var scoreEntry in scores)
+                                    {
+                                        var name = MatchArtifactName(scoreEntry.Key);
+                                        if (name == null) continue;
+                                        double value;
+                                        if (double.TryParse(Convert.ToString(scoreEntry.Value), out value))
+                                        {
+                                            analyticsMap[name].DurationScore += Math.Max(0.0, value);
+                                            analyticsMap[name].Interactions += Math.Abs(value) >= 0.5 ? 1 : 0;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (userData.ContainsKey("context"))
+                            {
+                                var context = userData["context"] as Dictionary<string, object>;
+                                if (context != null)
+                                {
+                                    string artifactName = Convert.ToString(context.ContainsKey("current_artifact") ? context["current_artifact"] : "");
+                                    string emotion = Convert.ToString(context.ContainsKey("last_emotion") ? context["last_emotion"] : "neutral").Trim().ToLowerInvariant();
+                                    var name = MatchArtifactName(artifactName);
+                                    if (name != null) analyticsMap[name].PositiveEmotionScore += EmotionWeight(emotion);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        int sessionsCount = 0;
+        if (!string.IsNullOrWhiteSpace(reportsPath) && Directory.Exists(reportsPath))
+        {
+            try
+            {
+                foreach (var summaryPath in Directory.GetFiles(reportsPath, "session_summary.json", SearchOption.AllDirectories))
+                {
+                    sessionsCount += 1;
+                    try
+                    {
+                        var serializer = new JavaScriptSerializer();
+                        var root = serializer.DeserializeObject(File.ReadAllText(summaryPath)) as Dictionary<string, object>;
+                        if (root == null || !root.ContainsKey("reports")) continue;
+                        var reports = root["reports"] as Dictionary<string, object>;
+                        if (reports == null || !reports.ContainsKey("artifacts")) continue;
+                        var artifactsReport = reports["artifacts"] as Dictionary<string, object>;
+                        if (artifactsReport == null || !artifactsReport.ContainsKey("summary")) continue;
+                        var summary = artifactsReport["summary"] as Dictionary<string, object>;
+                        if (summary == null || !summary.ContainsKey("ranked_artifacts")) continue;
+
+                        var rankedList = summary["ranked_artifacts"] as ArrayList;
+                        if (rankedList == null) continue;
+
+                        foreach (var itemObj in rankedList)
+                        {
+                            var item = itemObj as Dictionary<string, object>;
+                            if (item == null) continue;
+
+                            var name = MatchArtifactName(Convert.ToString(item.ContainsKey("name") ? item["name"] : ""));
+                            if (name == null) continue;
+
+                            double score;
+                            if (double.TryParse(Convert.ToString(item.ContainsKey("score") ? item["score"] : 0.0), out score))
+                            {
+                                analyticsMap[name].DurationScore += Math.Max(0.0, score);
+                            }
+
+                            bool opened;
+                            if (bool.TryParse(Convert.ToString(item.ContainsKey("opened") ? item["opened"] : "false"), out opened) && opened)
+                            {
+                                analyticsMap[name].Views += 1;
+                                analyticsMap[name].Interactions += 1;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        usersLabel.Text = "Total users: " + totalUsers;
+        sessionsLabel.Text = "Sessions analyzed: " + sessionsCount;
+
+        var analytics = analyticsMap.Values.ToList();
+        NormalizeAndScore(analytics);
+
+        double avgViews = analytics.Count == 0 ? 0.0 : analytics.Average(a => a.Views);
+        averageViewsLabel.Text = "Avg views per artifact: " + avgViews.ToString("0.00");
+
+        return analytics.OrderByDescending(a => a.FinalScore).ThenByDescending(a => a.Views).ThenByDescending(a => a.Interactions).ToList();
+    }
+
+    private string MatchArtifactName(string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate)) return null;
+
+        var clean = candidate.Trim();
+        var direct = artifacts.FirstOrDefault(a => string.Equals(a.name, clean, StringComparison.OrdinalIgnoreCase));
+        if (direct != null) return direct.name;
+
+        var normalized = clean.ToLowerInvariant();
+        foreach (var artifact in artifacts)
+        {
+            if (string.IsNullOrWhiteSpace(artifact.name)) continue;
+            if (artifact.name.Trim().ToLowerInvariant() == normalized) return artifact.name;
+        }
+
+        return null;
+    }
+
+    private static double EmotionWeight(string emotion)
+    {
+        switch ((emotion ?? string.Empty).Trim().ToLowerInvariant())
+        {
+            case "happy": return 1.0;
+            case "surprised": return 0.75;
+            case "neutral": return 0.35;
+            case "sad": return -0.4;
+            default: return 0.1;
+        }
+    }
+
+    private static void NormalizeAndScore(List<ArtifactAnalytics> analytics)
+    {
+        if (analytics == null || analytics.Count == 0) return;
+
+        double minPos = analytics.Min(a => a.PositiveEmotionScore);
+        double maxPos = analytics.Max(a => a.PositiveEmotionScore);
+        double minViews = analytics.Min(a => (double)a.Views);
+        double maxViews = analytics.Max(a => (double)a.Views);
+        double minDur = analytics.Min(a => a.DurationScore);
+        double maxDur = analytics.Max(a => a.DurationScore);
+        double minInter = analytics.Min(a => (double)a.Interactions);
+        double maxInter = analytics.Max(a => (double)a.Interactions);
+
+        foreach (var item in analytics)
+        {
+            double posNorm = Normalize(item.PositiveEmotionScore, minPos, maxPos);
+            double viewsNorm = Normalize(item.Views, minViews, maxViews);
+            double durNorm = Normalize(item.DurationScore, minDur, maxDur);
+            double interNorm = Normalize(item.Interactions, minInter, maxInter);
+
+            item.FinalScore = (0.35 * posNorm) + (0.30 * viewsNorm) + (0.25 * durNorm) + (0.10 * interNorm);
+        }
+    }
+
+    private static double Normalize(double value, double min, double max)
+    {
+        if (Math.Abs(max - min) < 0.000001) return 0.5;
+        return (value - min) / (max - min);
+    }
+}
