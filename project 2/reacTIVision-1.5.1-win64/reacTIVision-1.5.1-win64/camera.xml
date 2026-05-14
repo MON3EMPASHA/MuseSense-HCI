@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="ISO-8859-1" ?>
-<portvideo>
-    <camera id="1">
-        <capture width="max" height="max" fps="max" compress="false" />
-        <frame width="max" height="max" xoff="0" yoff="0" />
-    </camera>
-</portvideo>

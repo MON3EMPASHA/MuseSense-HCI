@@ -2,16 +2,21 @@ import logging
 import os
 import sys
 import warnings
+from pathlib import Path
 
 # If launched with anything other than the project's venv interpreter, re-launch
-# with the venv python so dependencies resolve correctly. We use subprocess
+# with the repo-root .venv python so dependencies resolve correctly. We keep the
+# older nested venv as a fallback for existing local setups. We use subprocess
 # instead of os.execv because os.execv mishandles Windows paths containing
 # spaces (e.g. "project 2").
-_VENV_PY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "Scripts", "python.exe")
-if os.path.exists(_VENV_PY) and os.path.normcase(sys.executable) != os.path.normcase(_VENV_PY):
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_ROOT_VENV_PY = _SCRIPT_DIR.parent / ".venv" / "Scripts" / "python.exe"
+_LOCAL_VENV_PY = _SCRIPT_DIR / "venv" / "Scripts" / "python.exe"
+_VENV_PY = _ROOT_VENV_PY if _ROOT_VENV_PY.exists() else _LOCAL_VENV_PY
+if _VENV_PY.exists() and os.path.normcase(sys.executable) != os.path.normcase(str(_VENV_PY)):
     import subprocess
     print(f"[BOOT] Re-launching under venv python: {_VENV_PY}")
-    sys.exit(subprocess.call([_VENV_PY, "-u", os.path.abspath(__file__), *sys.argv[1:]]))
+    sys.exit(subprocess.call([str(_VENV_PY), "-u", os.path.abspath(__file__), *sys.argv[1:]]))
 
 # Suppress MediaPipe / absl C++ stderr noise before any imports load the libs.
 os.environ.setdefault("GLOG_minloglevel", "3")          # suppress glog INFO/WARNING/ERROR

@@ -1,0 +1,9 @@
+{
+  "type": "emotion_session_report",
+  "user": "guest",
+  "started_at": "2026-05-14 15:41:40",
+  "sample_count": 0,
+  "emotion_counts": {},
+  "emotion_percent": {},
+  "dominant_emotion": "unknown"
+}
