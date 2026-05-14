@@ -56,3 +56,8 @@ Thumbs.db
 # Python cache files
 __pycache__/
 *.pyc
+
+#Yolo Folder
+raw_frames
+raw_videos
+dataset
