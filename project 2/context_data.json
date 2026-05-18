@@ -106,17 +106,24 @@
             "source": "gesture",
             "timestamp": 1778634881,
             "gesture": "Circle"
+          },
+          {
+            "item_id": "Mask of Tutankhamun",
+            "category": "Egypt",
+            "source": "gesture",
+            "timestamp": 1779121199,
+            "gesture": "Circle"
           }
         ],
         "explore_later": [],
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 51.4,
-        "favorites": 5.0
+        "Egypt": 135.1,
+        "favorites": 6.0
       },
       "artifact_scores": {
-        "Mask of Tutankhamun": 30.9,
+        "Mask of Tutankhamun": 114.6,
         "Ramses II Statue": 8.3,
         "Sacred Scarab Beetle": 12.2
       },
@@ -132,11 +139,11 @@
         "current_artifact": "Mask of Tutankhamun",
         "current_category": "Egypt",
         "last_object": "Mask of Tutankhamun",
-        "last_gesture": "edit_artifact",
+        "last_gesture": "AdminDeleteArtifact",
         "last_emotion": "neutral",
-        "last_gaze": "center"
+        "last_gaze": "center_center"
       },
-      "updated_at": 1779118116
+      "updated_at": 1779121887
     },
     "guest_5C56A471B0DA": {
       "profile": "",
@@ -497,11 +504,37 @@
         "last_gaze": "center_left"
       },
       "updated_at": 1779113522
+    },
+    "VVVVP": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {
+        "Egypt": -0.8
+      },
+      "artifact_scores": {
+        "Mask of Tutankhamun": -0.8
+      },
+      "opened_artifacts": {
+        "mask of tutankhamun": 1779122814.4901428
+      },
+      "context": {
+        "current_artifact": "Mask of Tutankhamun",
+        "current_category": "Egypt",
+        "last_object": "Mask of Tutankhamun",
+        "last_gesture": "Mute",
+        "last_emotion": "sad",
+        "last_gaze": "center_right"
+      },
+      "updated_at": 1779122824
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1779110443
+    "updated_at": 1779122824
   }
 }

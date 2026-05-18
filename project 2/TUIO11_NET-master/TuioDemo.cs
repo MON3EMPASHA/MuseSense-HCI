@@ -5165,7 +5165,6 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
 
         foreach (var field in editableFields)
         {
-            field.ReadOnly = true;
             field.BackColor = Color.White;
         }
 
@@ -5730,7 +5729,7 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
 
         using (var form = new AdminArtifactEditorForm(initial))
         {
-            if (form.ShowDialog(this) != DialogResult.OK || form.Artifact == null) return;
+            if (form.ShowDialog() != DialogResult.OK || form.Artifact == null) return;
             if (artifacts.Any(a => a.id == form.Artifact.id)) { MessageBox.Show(this, "Artifact ID already exists.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             if (artifacts.Any(a => a.tuioId == form.Artifact.tuioId)) { MessageBox.Show(this, "TUIO ID already exists.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
@@ -5767,7 +5766,7 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
 
         using (var form = new AdminArtifactEditorForm(workingCopy))
         {
-            if (form.ShowDialog(this) != DialogResult.OK || form.Artifact == null) return;
+            if (form.ShowDialog() != DialogResult.OK || form.Artifact == null) return;
             if (artifacts.Any(a => a != selected && a.id == form.Artifact.id)) { MessageBox.Show(this, "Artifact ID already exists.", "Edit Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             if (artifacts.Any(a => a != selected && a.tuioId == form.Artifact.tuioId)) { MessageBox.Show(this, "TUIO ID already exists.", "Edit Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
@@ -5851,7 +5850,7 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
             return true;
         }
 
-        if (gesture == "AdminDeleteArtifact")
+        if (gesture == "AdminDeleteArtifact" || gesture == "Delete" || gesture == "DeleteArtifact")
         {
             DeleteSelectedArtifact();
             return true;
