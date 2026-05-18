@@ -327,18 +327,16 @@
       },
       "category_scores": {},
       "artifact_scores": {},
-      "opened_artifacts": {
-        "mask of tutankhamun": 1779108525.4599726
-      },
+      "opened_artifacts": {},
       "context": {
-        "current_artifact": "Mask of Tutankhamun",
-        "current_category": "Egypt",
-        "last_object": "Mask of Tutankhamun",
-        "last_gesture": "SwipeRight",
-        "last_emotion": "neutral",
-        "last_gaze": "center"
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "",
+        "last_emotion": "",
+        "last_gaze": ""
       },
-      "updated_at": 1779108525
+      "updated_at": 0
     },
     "Andrew Talaat": {
       "profile": "",
@@ -383,10 +381,10 @@
         "current_category": "",
         "last_object": "",
         "last_gesture": "",
-        "last_emotion": "",
-        "last_gaze": ""
+        "last_emotion": "happy",
+        "last_gaze": "center"
       },
-      "updated_at": 0
+      "updated_at": 1779109645
     },
     "BBKKLL": {
       "profile": "visitor",
@@ -422,49 +420,31 @@
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 5.0
+        "Egypt": 6.8
       },
       "artifact_scores": {
         "Ramses II Statue": 2.1,
-        "Mask of Tutankhamun": 2.3,
-        "Bust of Nefertiti": 0.6
+        "Mask of Tutankhamun": 2.0,
+        "Bust of Nefertiti": 1.6,
+        "King Senwosret III": 1.1
       },
       "opened_artifacts": {
-        "bust of nefertiti": 1779066466.366436,
+        "bust of nefertiti": 1779068948.125051,
         "ramses ii statue": 1779065845.964163,
-        "mask of tutankhamun": 1779066252.1330745
+        "mask of tutankhamun": 1779067286.5660121,
+        "king senwosret iii": 1779068957.8334246
       },
-      "context": {
-        "current_artifact": "Bust of Nefertiti",
-        "current_category": "Egypt",
-        "last_object": "Bust of Nefertiti",
-        "last_gesture": "",
-        "last_emotion": "neutral",
-        "last_gaze": "left"
-      },
-      "updated_at": 1779066482
-    },
-    "guest_D028BA7D41AC": {
-      "profile": "",
-      "lists": {
-        "favorites": [],
-        "explore_later": [],
-        "good_to_see": []
-      },
-      "category_scores": {},
-      "artifact_scores": {},
-      "opened_artifacts": {},
       "context": {
         "current_artifact": "",
         "current_category": "",
-        "last_object": "",
+        "last_object": "King Senwosret III",
         "last_gesture": "",
-        "last_emotion": "",
-        "last_gaze": ""
+        "last_emotion": "surprised",
+        "last_gaze": "center"
       },
-      "updated_at": 0
+      "updated_at": 1779069011
     },
-    "MMM": {
+    "JNK": {
       "profile": "visitor",
       "lists": {
         "favorites": [],
@@ -472,28 +452,54 @@
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 1.1
+        "Egypt": 0.6
       },
       "artifact_scores": {
-        "Mask of Tutankhamun": 1.1
+        "Mask of Tutankhamun": 0.6
       },
       "opened_artifacts": {
-        "mask of tutankhamun": 1779110185.247101
+        "mask of tutankhamun": 1779109919.5785868
       },
       "context": {
-        "current_artifact": "Mask of Tutankhamun",
-        "current_category": "Egypt",
+        "current_artifact": "",
+        "current_category": "",
         "last_object": "Mask of Tutankhamun",
+        "last_gesture": "Mute",
+        "last_emotion": "neutral",
+        "last_gaze": "left"
+      },
+      "updated_at": 1779109932
+    },
+    "BGTTTUIO": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {
+        "Egypt": -1.3
+      },
+      "artifact_scores": {
+        "Bust of Nefertiti": -1.3
+      },
+      "opened_artifacts": {
+        "bust of nefertiti": 1779110421.0090075
+      },
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "Bust of Nefertiti",
         "last_gesture": "",
         "last_emotion": "neutral",
-        "last_gaze": "center"
+        "last_gaze": "left"
       },
-      "updated_at": 1779110238
+      "updated_at": 1779110443
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1779110238
+    "updated_at": 1779110443
   }
 }
