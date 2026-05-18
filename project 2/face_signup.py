@@ -31,23 +31,13 @@ from hand_keyboard import (
 from face_recognizer import FaceRecognizer
 
 # ── tunables ──────────────────────────────────────────────────────────────────
-SCAN_TIMEOUT       = 8.0
-SCAN_INTERVAL_FR   = 20
-PROMPT_DURATION    = 2.5
-CAPTURE_COUNTDOWN  = 4
-CAPTURE_SNAP_TIMES = [1.0, 2.0, 3.0]
-FACE_CROP_PAD      = 0.30
+SCAN_TIMEOUT       = 8.0    # seconds to try face recognition before giving up
+SCAN_INTERVAL_FR   = 20     # run DeepFace every N frames during scanning
+PROMPT_DURATION    = 2.5    # seconds to show the "let's register" message
+CAPTURE_COUNTDOWN  = 4      # total seconds for capture phase
+CAPTURE_SNAP_TIMES = [1.0, 2.0, 3.0]  # snap 3 images at these elapsed-second marks
+FACE_CROP_PAD      = 0.30   # fractional padding around detected face bbox
 MIN_NAME_LEN       = 2
-
-# ── step indicator config ─────────────────────────────────────────────────────
-SCAN_TIMEOUT      = 8.0    # seconds to try face recognition before giving up
-SCAN_INTERVAL_FR  = 20     # run DeepFace every N frames during scanning
-PROMPT_DURATION   = 2.5    # seconds to show the "let's register" message
-CAPTURE_COUNTDOWN = 4      # total seconds for capture phase
-# Snap 3 images at these elapsed-second marks within the capture phase
-CAPTURE_SNAP_TIMES = [1.0, 2.0, 3.0]
-FACE_CROP_PAD     = 0.30   # fractional padding around detected face bbox
-MIN_NAME_LEN      = 2
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

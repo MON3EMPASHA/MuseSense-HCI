@@ -11,6 +11,17 @@ import cv2
 import numpy as np
 
 
+# Zone lookup for heatmap rendering (col, row, h_dir, v_dir)
+_HEATMAP_ZONES: dict[str, tuple[int, int, float, float]] = {
+    "top_left":      (0, 0, -1, -1), "top_center":      (1, 0,  0, -1), "top_right":      (2, 0,  1, -1),
+    "center_left":   (0, 1, -1,  0), "center_center":   (1, 1,  0,  0), "center_right":   (2, 1,  1,  0),
+    "bottom_left":   (0, 2, -1,  1), "bottom_center":   (1, 2,  0,  1), "bottom_right":   (2, 2,  1,  1),
+}
+
+_B = .25   # column/row centre base offsets
+_D = .25   # max push from delta
+
+
 def _safe_filename(value: str) -> str:
     value = value.strip() or "guest"
     value = re.sub(r"[^\w\- ]+", "", value, flags=re.UNICODE)
@@ -765,20 +776,9 @@ class GazeSessionLogger:
 
         rng = np.random.default_rng(seed=42)
 
-        # Normalised centre positions for each zone (col, row in [0,2])
-        # Columns: 0 = left, 1 = center, 2 = right
-        # Rows:    0 = top, 1 = center, 2 = bottom
-        _B = .25   # column/row centre base offsets
-        _D = .25   # max push from delta
-        _ZONES: dict[str, tuple[int, int, float, float]] = {
-            "top_left":      (0, 0, -1, -1), "top_center":      (1, 0,  0, -1), "top_right":      (2, 0,  1, -1),
-            "center_left":   (0, 1, -1,  0), "center_center":   (1, 1,  0,  0), "center_right":   (2, 1,  1,  0),
-            "bottom_left":   (0, 2, -1,  1), "bottom_center":   (1, 2,  0,  1), "bottom_right":   (2, 2,  1,  1),
-        }
-
         for sample in self.samples:
             zone = sample.gaze_zone
-            info = _ZONES.get(zone)
+            info = _HEATMAP_ZONES.get(zone)
             if info is None:
                 col, row, h_dir, v_dir = 1, 1, 0, 0
             else:
@@ -858,15 +858,10 @@ class GazeSessionLogger:
 
         # Scan path
         if len(self.samples) >= 2:
-            _ZONES2: dict[str, tuple[int, int, float, float]] = {
-                "top_left":      (0, 0, -1, -1), "top_center":      (1, 0,  0, -1), "top_right":      (2, 0,  1, -1),
-                "center_left":   (0, 1, -1,  0), "center_center":   (1, 1,  0,  0), "center_right":   (2, 1,  1,  0),
-                "bottom_left":   (0, 2, -1,  1), "bottom_center":   (1, 2,  0,  1), "bottom_right":   (2, 2,  1,  1),
-            }
             pts: list[tuple[int, int]] = []
             for sample in self.samples:
                 zone = sample.gaze_zone
-                info = _ZONES2.get(zone)
+                info = _HEATMAP_ZONES.get(zone)
                 if info is None:
                     col, row, h_dir, v_dir = 1, 1, 0, 0
                 else:

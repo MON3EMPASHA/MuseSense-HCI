@@ -279,9 +279,8 @@ def wait_for_csharp_client(server_socket: socket.socket) -> tuple[socket.socket,
             if time.monotonic() - last_wait_log >= 5.0:
                 print("[SOCKET] Still waiting for C# GUI on port 5000...")
                 last_wait_log = time.monotonic()
-        # Keep the OpenCV message pump alive so the "Output" window
-        # doesn't freeze or close while we wait for C# to connect.
-        cv2.waitKey(1)
+        # Small sleep to avoid busy-waiting before camera is initialized.
+        time.sleep(0.05)
 
 
 print(f"[SOCKET] Python socket server listening on {hostname}:{port}")
@@ -493,7 +492,7 @@ def set_camera_window(visible: bool) -> None:
     camera_window_visible = visible
 
 
-set_camera_window(True)
+# Don't create the window until C# sends CAMERA:ON (matches child-mode default).
 
 
 def emit_transcription(connection, text: str) -> None:

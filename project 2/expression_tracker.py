@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections import Counter, deque
 
 import cv2
@@ -151,8 +152,6 @@ class ExpressionTracker:
         return latest
 
     def analyze(self, frame_rgb) -> dict | None:
-        import time
-
         results = self.face_mesh.process(frame_rgb)
         if not results.multi_face_landmarks:
             return None
