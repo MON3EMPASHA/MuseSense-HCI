@@ -7,24 +7,6 @@ import cv2
 import mediapipe as mp
 
 
-# MediaPipe FaceMesh canonical landmark indices used by this tracker.
-# (Both "image-left" and "image-right" refer to the eye as it appears in the
-# raw camera image. Image-left = the user's right eye, etc.)
-#
-# Iris landmarks (require refine_landmarks=True):
-#   Image-left iris  (user's right eye): 468..472
-#   Image-right iris (user's left  eye): 473..477
-#
-# Eye corners:
-#   Image-left eye:  33 = outer (far-left), 133 = inner (nose-side)
-#   Image-right eye: 362 = inner (nose-side), 263 = outer (far-right)
-#
-# Eye top/bottom lids (for openness):
-#   Image-left eye:  159 = top,  145 = bottom
-#   Image-right eye: 386 = top,  374 = bottom
-#
-# Nose tip (head-motion proxy): 1
-
 
 class ExpressionTracker:
     def __init__(self):
@@ -38,12 +20,8 @@ class ExpressionTracker:
         self.mp_face_mesh = mp.solutions.face_mesh
         self._recent_results: deque[dict] = deque(maxlen=5)
 
-        # === Emotion detection state (rewritten) ===
-        # Per-feature rolling baselines (samples taken when classification is
-        # "neutral" — self-reinforcing). Bootstrap fills these unconditionally
-        # for the first ~2 seconds so we get a usable initial baseline.
         self._emo_feature_keys = (
-            "smile_curve",   # corners-above-midline / face_height (smile = +)
+            "smile_curve",   # corners-above-midline / face_height
             "mouth_open",    # mouth_h / face_h
             "mouth_wide",    # mouth_w / face_w
             "brow_height",   # brow-to-eye-top gap / face_h
@@ -55,10 +33,10 @@ class ExpressionTracker:
         self._emo_baselines: dict[str, float] = {}
         self._emo_bootstrap_count: int = 0
         self._emo_bootstrap_target: int = 30   # ~2 s before we trust baselines
-        # Hysteresis: state-of-last classification keeps it stable between frames.
+
         self._emo_last_classified: str = "neutral"
 
-        # === Gaze state (horizontal) ===
+        #Gaze state (horizontal)
         self._gaze_h_samples: deque[float] = deque(maxlen=200)
         self._gaze_h_baseline: float | None = None
         self._gaze_h_bootstrap_count: int = 0
@@ -82,7 +60,7 @@ class ExpressionTracker:
 
         self._gaze_invert_lr: bool = True
 
-        # === Gaze state (vertical) ===
+        # Gaze state (vertical)
         self._gaze_v_samples: deque[float] = deque(maxlen=200)
         self._gaze_v_baseline: float | None = None
         self._gaze_v_bootstrap_count: int = 0
@@ -118,18 +96,13 @@ class ExpressionTracker:
         self._gaze_neg_peaks.clear()
         self._gaze_pos_threshold = self._gaze_threshold
         self._gaze_neg_threshold = self._gaze_threshold
-        # Emotion baselines reset too — they're per-user.
+        # Emotion baselines reset too they're per-user.
         for d in self._emo_samples.values():
             d.clear()
         self._emo_baselines.clear()
         self._emo_bootstrap_count = 0
         self._emo_last_classified = "neutral"
 
-    # ------------------------------------------------------------------
-    # Smoothing helper (unchanged — final 5-frame stabilizer over emotion +
-    # gaze). It still has an effect on gaze but the upstream computation is now
-    # accurate enough that the majority vote no longer hides the signal.
-    # ------------------------------------------------------------------
     def _smooth_analysis(self) -> dict | None:
         if len(self._recent_results) < 3:
             return None
@@ -162,31 +135,7 @@ class ExpressionTracker:
         def point(index: int) -> tuple[float, float]:
             landmark = face_landmarks[index]
             return landmark.x * image_width, landmark.y * image_height
-
-        # =====================================================================
-        #                       EMOTION (rewritten)
-        # =====================================================================
-        # Strategy:
-        #   1) Compute five normalized facial features (mouth shape +
-        #      eyebrow height + eye openness), all divided by face scale so
-        #      the absolute pixel size of the face does not affect results.
-        #   2) Maintain a per-feature rolling baseline (median over 150
-        #      samples ≈ 5–6 s). Bootstrap: first ~2 s feeds the baseline
-        #      unconditionally; after that, only "neutral" frames update it,
-        #      so a smile (or shock) won't drift the baseline.
-        #   3) Compute deltas from baseline, then classify with simple rules
-        #      that combine mouth + eyebrow + eye signals. Each emotion has
-        #      its own specific pattern (not just "mouth wide = happy").
-        #   4) Hysteresis: small slack on the "stay in current emotion" path
-        #      so single-frame jitter doesn't flip the label.
-        #
-        # Landmarks used (MediaPipe FaceMesh canonical, refine_landmarks=True):
-        #   Mouth:    61 (L corner), 291 (R corner), 13 (top), 14 (bottom)
-        #   Face:     10 (forehead), 152 (chin), 234 / 454 (L / R cheek)
-        #   Brows:    105 (image-L brow centre), 334 (image-R brow centre)
-        #   Eyes:     159 / 145 (image-L eye top / bottom)
-        #             386 / 374 (image-R eye top / bottom)
-
+        
         mouth_left   = point(61)
         mouth_right  = point(291)
         mouth_top    = point(13)
@@ -199,7 +148,7 @@ class ExpressionTracker:
         face_width  = max(abs(right_cheek[0] - left_cheek[0]), 1.0)
         face_height = max(abs(chin[1] - forehead[1]), 1.0)
 
-        # --- mouth ---
+        # mouth
         mouth_w_px   = max(mouth_right[0] - mouth_left[0], 1.0)
         mouth_h_px   = max(mouth_bottom[1] - mouth_top[1], 0.0)
         mouth_mid_y  = (mouth_top[1] + mouth_bottom[1]) / 2.0
@@ -209,7 +158,7 @@ class ExpressionTracker:
         mouth_open_v = mouth_h_px / face_height
         mouth_wide_v = mouth_w_px / face_width
 
-        # --- eyebrows (brow centre to eye-top gap, averaged across both brows) ---
+        # eyebrows (brow centre to eye-top gap, averaged across both brows)
         try:
             right_brow    = point(105)
             left_brow     = point(334)
@@ -221,7 +170,7 @@ class ExpressionTracker:
         except Exception:
             brow_height_v = 0.07
 
-        # --- eye openness (lid-to-lid gap, averaged across both eyes) ---
+        # eye openness (lid-to-lid gap, averaged across both eyes)
         try:
             right_eye_bot = point(145)
             left_eye_bot  = point(374)
@@ -239,7 +188,7 @@ class ExpressionTracker:
             "eye_open":    eye_open_v,
         }
 
-        # --- update baselines: bootstrap or only-when-neutral ---
+        # update baselines: bootstrap or only-when-neutra
         update_baseline_now = (
             self._emo_bootstrap_count < self._emo_bootstrap_target
             or self._emo_last_classified == "neutral"
@@ -250,7 +199,7 @@ class ExpressionTracker:
             if self._emo_bootstrap_count < self._emo_bootstrap_target:
                 self._emo_bootstrap_count += 1
 
-        # --- recompute medians ---
+        # recompute medians
         for k in self._emo_feature_keys:
             d = self._emo_samples[k]
             if len(d) >= 6:
@@ -270,11 +219,9 @@ class ExpressionTracker:
         d_brow  = cur_features["brow_height"] - b("brow_height")
         d_eye   = cur_features["eye_open"]    - b("eye_open")
 
-        # --- classify ---
-        # Hysteresis: thresholds for entering a new emotion are stricter than
-        # for staying in the current one (loosen by 30 %).
+        # classify
         loosen = 0.7 if self._emo_last_classified != "neutral" else 1.0
-        # Standard thresholds (deltas from baseline, in face-normalized units)
+        # Standard thresholds
         TH_SMILE_HAPPY  = 0.011 * loosen   # corners 1.1% face_h above baseline
         TH_WIDE_HAPPY   = 0.012 * loosen   # mouth 1.2% face_w wider
         TH_SMILE_SAD    = 0.009 * loosen   # corners 0.9% below baseline
@@ -283,19 +230,18 @@ class ExpressionTracker:
         TH_BROW_SURPR   = 0.006 * loosen   # brows raised
         TH_EYE_SURPR    = 0.005 * loosen   # eyes wider open
 
-        # Only classify once we have a real baseline (post-bootstrap)
         if self._emo_bootstrap_count < self._emo_bootstrap_target:
             emotion = "neutral"
-        # SURPRISED — mouth wide-open + raised brows (mouth_open is the dominant cue)
+        # SURPRISED mouth wide-open + raised brows
         elif d_open > TH_OPEN_SURPR and (d_brow > TH_BROW_SURPR or d_eye > TH_EYE_SURPR):
             emotion = "surprised"
-        # HAPPY — corners up + mouth widened
+        # HAPPY corners up + mouth widened
         elif d_smile > TH_SMILE_HAPPY and d_wide > TH_WIDE_HAPPY:
             emotion = "happy"
-        # SAD — corners down (negative smile_curve delta) + brows lowered
+        # SAD corners down (negative smile_curve delta) + brows lowered
         elif d_smile < -TH_SMILE_SAD and d_brow < -TH_BROW_SAD:
             emotion = "sad"
-        # SAD (looser) — strong corner-down even without brow signal
+        # SAD (looser) strong corner-down even without brow signal
         elif d_smile < -TH_SMILE_SAD * 1.3:
             emotion = "sad"
         else:
@@ -303,9 +249,8 @@ class ExpressionTracker:
 
         self._emo_last_classified = emotion
 
-        # =====================================================================
-        #                          GAZE (rewritten)
-        # =====================================================================
+        # GAZE
+
         now = time.monotonic()
 
         def safe_points(indices: list[int]) -> list[tuple[float, float]]:
@@ -397,12 +342,6 @@ class ExpressionTracker:
         )
         provisional_delta = (h_ratio - h_baseline) if h_ratio is not None else 0.0
 
-        # ---- Baseline sampling rules ----
-        # During bootstrap (first N clean frames) take ANY clean sample.
-        # After bootstrap, only take samples that look like "looking at screen"
-        # (|provisional_delta| < center-capture-threshold). This keeps the
-        # baseline locked on the centered gaze instead of drifting toward
-        # whatever the user is currently looking at.
         frame_clean = (
             h_ratio is not None
             and not head_moved
@@ -434,12 +373,6 @@ class ExpressionTracker:
         )
         h_delta = self._gaze_h_ema
 
-        # ---- Per-side adaptive thresholds ----
-        # Record peak excursions on each side (positive/negative). When the
-        # user genuinely looks off-centre, their delta exceeds the noise floor
-        # — we collect those peaks and set the threshold to a fraction of the
-        # median peak. Handles anatomic asymmetry (e.g. user can flick right
-        # only ~0.04 but flick left a full 0.08).
         if h_delta > self._gaze_peak_noise_floor:
             self._gaze_pos_peaks.append(h_delta)
         elif h_delta < -self._gaze_peak_noise_floor:
@@ -459,7 +392,7 @@ class ExpressionTracker:
         self._gaze_pos_threshold = _peak_thresh(self._gaze_pos_peaks)
         self._gaze_neg_threshold = _peak_thresh(self._gaze_neg_peaks)
 
-        # ---- Vertical tracking (up/down) ----
+        # Vertical tracking (up/down)
         v_baseline = (
             self._gaze_v_baseline if self._gaze_v_baseline is not None else 0.5
         )
@@ -483,7 +416,7 @@ class ExpressionTracker:
         )
         v_delta = self._gaze_v_ema
 
-        # ---- Combined 3x3 Classification ----
+        #Combined 3x3 Classification
         valid = (
             h_ratio is not None
             and v_ratio is not None
@@ -528,7 +461,6 @@ class ExpressionTracker:
             )
             self._last_logged_gaze_zone = gaze_zone
 
-        # =====================================================================
         if emotion == "happy":
             valence = 0.9
         elif emotion == "surprised":
@@ -589,7 +521,7 @@ class ExpressionTracker:
             f"Emotion: {analysis['emotion']} | Gaze: {analysis['gaze_zone']}"
             f" | Window: {analysis.get('window_size', 1)}"
         )
-        # Emotion debug — show per-baseline deltas (the values the rules use)
+        # Emotion debug show per-baseline deltas (the values the rules use)
         baseline_tag = "" if analysis.get("emo_baseline_ok", False) else " [BOOT]"
         detail_text = (
             f"EMO {analysis.get('emotion')}{baseline_tag} "

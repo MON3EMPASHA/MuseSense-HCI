@@ -19,22 +19,25 @@
         "sink": 0.2,
         "knife": 0.2,
         "favorites": 1.0,
-        "suitcase": -0.6
+        "suitcase": -0.6,
+        "giraffe": 3.2
       },
       "artifact_scores": {
         "sink": 0.2,
         "knife": 0.2,
-        "suitcase": -0.6
+        "suitcase": -0.6,
+        "giraffe": 3.2
       },
       "context": {
         "current_artifact": "giraffe",
         "current_category": "giraffe",
         "last_object": "giraffe",
-        "last_gesture": "Circle",
-        "last_emotion": "neutral",
-        "last_gaze": "center"
+        "last_gesture": "AdminPrevArtifact",
+        "last_emotion": "sad",
+        "last_gaze": "center_right"
       },
-      "updated_at": 1778277059
+      "updated_at": 1779132359,
+      "opened_artifacts": {}
     },
     "Mohamed Ibrahim": {
       "profile": "objects/Soltan.png",
@@ -338,16 +341,18 @@
       },
       "category_scores": {},
       "artifact_scores": {},
-      "opened_artifacts": {},
+      "opened_artifacts": {
+        "marker_110": 1779134001.1452136
+      },
       "context": {
-        "current_artifact": "",
-        "current_category": "",
-        "last_object": "",
+        "current_artifact": "marker_110",
+        "current_category": "general",
+        "last_object": "marker_110",
         "last_gesture": "",
         "last_emotion": "",
         "last_gaze": ""
       },
-      "updated_at": 0
+      "updated_at": 1779134001
     },
     "Andrew Talaat": {
       "profile": "",
@@ -554,11 +559,31 @@
         "last_gaze": ""
       },
       "updated_at": 0
+    },
+    "admin": {
+      "profile": "admin",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "opened_artifacts": {},
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "AdminPrevArtifact",
+        "last_emotion": "neutral",
+        "last_gaze": "center_left"
+      },
+      "updated_at": 1779134055
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1779125425
+    "updated_at": 1779134055
   }
 }

@@ -194,7 +194,7 @@ public class TuioDemo : Form , TuioListener
 
         static AgeProfile ResolveAgeProfile(int age)
         {
-                // Transcription panel intentionally disabled for all ages — the
+                // Transcription panel intentionally disabled for all ages the
                 // event log (gestures / expressions / TUIO markers) still gets
                 // collected internally, just not rendered.
                 if (age <= 12) return new AgeProfile {
@@ -267,6 +267,7 @@ public class TuioDemo : Form , TuioListener
         Rectangle audioToggleButtonRect = Rectangle.Empty;
         Rectangle favoriteToggleButtonRect = Rectangle.Empty;
         Rectangle themeToggleButtonRect = Rectangle.Empty;
+        Rectangle adminLoginBtnRect = Rectangle.Empty;
 
         const int ADMIN_AUTH_MARKER_ID = 110;
         
@@ -434,6 +435,12 @@ public class TuioDemo : Form , TuioListener
             if (themeToggleButtonRect.Contains(e.Location))
             {
                 ToggleThemeMode();
+                return;
+            }
+
+            if (!adminLoginBtnRect.IsEmpty && adminLoginBtnRect.Contains(e.Location))
+            {
+                TryOpenAdminPortal();
                 return;
             }
 
@@ -717,9 +724,7 @@ public class TuioDemo : Form , TuioListener
                 {
                     foreach (UserRecord user in userList)
                     {
-                        // Preserve blank/empty as-is so ApplyUserTheme can apply
-                        // the gender-default (e.g. female → pink). Only normalize
-                        // values the user has actually chosen.
+
                         if (!string.IsNullOrWhiteSpace(user.themeMode))
                             user.themeMode = NormalizeThemeMode(user.themeMode);
                     }
@@ -913,7 +918,7 @@ public class TuioDemo : Form , TuioListener
     private void ApplyUserTheme(UserRecord user)
     {
         // Default theme rule: female users with no explicit themeMode → pink.
-        // Anyone else with no explicit themeMode → light. Explicit setting wins.
+        // Anyone else with no explicit themeMode → light.
         string mode = user != null ? user.themeMode : null;
         if (string.IsNullOrWhiteSpace(mode))
         {
@@ -1258,7 +1263,7 @@ public class TuioDemo : Form , TuioListener
 
     private void TryOpenAdminPortal()
     {
-        bool adminExists = false;
+        UserRecord adminUser = null;
         foreach (UserRecord user in allUsers)
         {
             if (user == null)
@@ -1269,16 +1274,33 @@ public class TuioDemo : Form , TuioListener
             string userRole = string.IsNullOrWhiteSpace(user.role) ? string.Empty : user.role.Trim().ToLowerInvariant();
             if (userRole == "admin")
             {
-                adminExists = true;
+                adminUser = user;
                 break;
             }
         }
 
-        if (!adminExists)
+        if (adminUser == null)
         {
             MessageBox.Show(this, "No admin user found in users.json.", "Admin Authentication", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
+
+        // Set C# login state immediately so the login card disappears and UI switches to logged-in mode
+        uname = adminUser.name ?? "admin";
+        currentUser = adminUser;
+        login = 1;
+        btStatus = "Matched";
+        if (currentUser != null) ApplyUserTheme(currentUser);
+        ApplyAgeProfile();
+
+        // Notify Python to skip face signup and mark admin as logged in
+        if (socketClient != null)
+        {
+            socketClient.sendMessage("TUIO:" + ADMIN_AUTH_MARKER_ID);
+            socketClient.sendMessage("{\"type\":\"admin_login\",\"name\":\"" + uname + "\"}");
+        }
+
+        Invalidate();
 
         string artifactsPath = ResolveArtifactsPath();
         if (string.IsNullOrWhiteSpace(artifactsPath))
@@ -1301,6 +1323,88 @@ public class TuioDemo : Form , TuioListener
             }))
         {
             dashboard.ShowDialog(this);
+        }
+    }
+
+    private void PromptAdminLogin()
+    {
+        using (var passwordForm = new Form())
+        {
+            passwordForm.Text = "Admin Login";
+            passwordForm.Size = new Size(320, 180);
+            passwordForm.StartPosition = FormStartPosition.CenterParent;
+            passwordForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+            passwordForm.MaximizeBox = false;
+            passwordForm.MinimizeBox = false;
+            passwordForm.BackColor = Color.FromArgb(241, 245, 250);
+
+            var lbl = new Label
+            {
+                Text = "Enter admin password:",
+                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+                Location = new Point(24, 20),
+                Size = new Size(260, 24),
+                ForeColor = Color.FromArgb(24, 31, 42)
+            };
+
+            var txt = new TextBox
+            {
+                Location = new Point(24, 52),
+                Size = new Size(250, 24),
+                PasswordChar = '*',
+                Font = new Font("Segoe UI", 11f)
+            };
+
+            var btnLogin = new Button
+            {
+                Text = "Login",
+                Location = new Point(24, 90),
+                Size = new Size(110, 32),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(18, 124, 255),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                DialogResult = DialogResult.OK
+            };
+
+            var btnCancel = new Button
+            {
+                Text = "Cancel",
+                Location = new Point(146, 90),
+                Size = new Size(110, 32),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(218, 226, 238),
+                ForeColor = Color.FromArgb(24, 31, 42),
+                Font = new Font("Segoe UI", 10f),
+                DialogResult = DialogResult.Cancel
+            };
+
+            passwordForm.Controls.Add(lbl);
+            passwordForm.Controls.Add(txt);
+            passwordForm.Controls.Add(btnLogin);
+            passwordForm.Controls.Add(btnCancel);
+            passwordForm.AcceptButton = btnLogin;
+            passwordForm.CancelButton = btnCancel;
+
+            if (passwordForm.ShowDialog(this) == DialogResult.OK)
+            {
+                string password = txt.Text;
+                if (string.IsNullOrWhiteSpace(password))
+                {
+                    MessageBox.Show(this, "Password cannot be empty.", "Admin Login", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                UserRecord admin = FindAdminUserByPassword(password);
+                if (admin != null)
+                {
+                    TryOpenAdminPortal();
+                }
+                else
+                {
+                    MessageBox.Show(this, "Invalid admin password.", "Admin Login", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
         }
     }
 
@@ -1686,8 +1790,6 @@ public class TuioDemo : Form , TuioListener
                             transcriptionLog.RemoveAt(0);
                     }
 
-                    // Hook for the emotion-effects engine: parse expression events
-                    // like "Expression: happy (gaze: center)" and route the emotion.
                     if (entry.StartsWith("Expression: ", StringComparison.OrdinalIgnoreCase))
                     {
                         try
@@ -1717,7 +1819,7 @@ public class TuioDemo : Form , TuioListener
                                     lastGazeZone = zone;
                                 }
                             }
-                            // If an effect was spawned (engine now has live effects), start
+                            // If an effect was spawned, start
                             // the 30 fps repaint timer.
                             if (emotionEngine.HasActiveEffects)
                             {
@@ -1766,7 +1868,7 @@ public class TuioDemo : Form , TuioListener
                     btStatus = "Matched";
                     currentUser = GetUserByName(uname);
                     
-                    // load the user's saved light/dark theme
+                    // load the user saved light/dark theme
                     if (currentUser != null)
                     {
                         ApplyUserTheme(currentUser);
@@ -1791,33 +1893,28 @@ public class TuioDemo : Form , TuioListener
                     continue;
                 }
 
-                // SwipeRight: navigate next artifact (on detail page) or next menu page
                 if (gesture == "SwipeRight")
                 {
                     if (page == 5 && selectedArtifactId >= 0) NavigateNextArtifact();
                     else NavigateNextPage();
                 }
 
-                // SwipeLeft: navigate previous artifact (on detail page) or previous menu page
                 if (gesture == "SwipeLeft")
                 {
                     if (page == 5 && selectedArtifactId >= 0) NavigatePreviousArtifact();
                     else NavigatePreviousPage();
                 }
 
-                // Circle: toggle favourite for the currently open artifact
                 if (gesture == "Circle" && page == 5 && selectedArtifactId >= 0)
                 {
                     ToggleFavoriteForSelectedArtifact();
                 }
 
-                // Mute: toggle audio narration
                 if (gesture == "Mute")
                 {
                     ToggleNarration();
                 }
 
-                // DarkMode: toggle light/dark theme
                 if (gesture == "DarkMode")
                 {
                     ToggleThemeMode();
@@ -1853,6 +1950,7 @@ public class TuioDemo : Form , TuioListener
         audioToggleButtonRect = Rectangle.Empty;
         favoriteToggleButtonRect = Rectangle.Empty;
         themeToggleButtonRect = Rectangle.Empty;
+        adminLoginBtnRect = Rectangle.Empty;
 
         // Getting the graphics object
         Graphics g = pevent.Graphics;
@@ -1864,8 +1962,6 @@ public class TuioDemo : Form , TuioListener
         
         // === Adaptive header sizing driven by the active age profile ===
         float fs = activeProfile != null ? activeProfile.FontScale : 1.0f;
-        // Cap header chrome scaling so it doesn't overflow the fixed 105-px header
-        // band on Senior mode (FontScale 1.55 was blowing the nav off-screen).
         float hdrFs = Math.Min(fs, 1.18f);
         bool bigIcons = activeProfile != null && activeProfile.LargeIcons;
         bool showStatusIndicators = activeProfile == null
@@ -1918,7 +2014,7 @@ public class TuioDemo : Form , TuioListener
             SizeF userSize = g.MeasureString(userText, userFont);
             g.DrawString(userText, userFont, fntBrush, (this.ClientSize.Width - userSize.Width) / 2, 15);
 
-            // Bluetooth line: hidden for Child mode (declutter), shown otherwise.
+            // Bluetooth line: hidden for Child mode, shown otherwise.
             if (activeProfile == null || activeProfile.Mode != UIMode.Child)
             {
                 string btText = "Bluetooth Connected";
@@ -1928,7 +2024,7 @@ public class TuioDemo : Form , TuioListener
             }
         }
 
-        // Draw System Status on Right — hidden in Child/Senior to reduce noise.
+        // Draw System Status on Right hidden in Child/Senior to reduce noise.
         if (showStatusIndicators)
         {
             int statusX = this.ClientSize.Width - 250;
@@ -1996,7 +2092,7 @@ public class TuioDemo : Form , TuioListener
                 new Font("Segoe UI", 11f, FontStyle.Regular),
                 new SolidBrush(Color.FromArgb(220, 255, 255, 255)), cX + 28, cY + 58);
 
-            // Avatar — overlapping the header
+            // Avatar overlapping the header
             int av = 132;
             Rectangle avR = new Rectangle(cX + (cw - av) / 2, cY + 110 - av / 2, av, av);
             FillRoundedRect(g, currentTheme.cardBackground, avR, av / 2);
@@ -2014,7 +2110,6 @@ public class TuioDemo : Form , TuioListener
                 g.Clip = prev;
             }
 
-            // "Hello, …"
             string greet = "Hello, " + uname;
             Font greetFont = new Font("Segoe UI", 22f, FontStyle.Bold);
             SizeF gs = g.MeasureString(greet, greetFont);
@@ -2036,8 +2131,21 @@ public class TuioDemo : Form , TuioListener
             FillRoundedRect(g, blbBrush, pill, pillH / 2);
             DrawStringCentered(g, btStatus, pillFont, accentBrush, pill);
 
+            // Admin login button
+            string adminBtnLabel = "Admin Login";
+            Font adminBtnFont = new Font("Segoe UI", 10f, FontStyle.Bold);
+            SizeF adminBtnSize = g.MeasureString(adminBtnLabel, adminBtnFont);
+            int adminBtnW = (int)adminBtnSize.Width + 30;
+            int adminBtnH = 30;
+            adminLoginBtnRect = new Rectangle(cX + (cw - adminBtnW) / 2, pill.Bottom + 12, adminBtnW, adminBtnH);
+            FillRoundedRect(g, blbBrush, adminLoginBtnRect, adminBtnH / 2);
+            DrawRoundedRect(g, borderPen, adminLoginBtnRect, adminBtnH / 2);
+            g.DrawString(adminBtnLabel, adminBtnFont, accentBrush,
+                adminLoginBtnRect.X + (adminLoginBtnRect.Width - adminBtnSize.Width) / 2,
+                adminLoginBtnRect.Y + (adminLoginBtnRect.Height - adminBtnSize.Height) / 2);
+
         }
-        else if (page == 0) // Home — dispatched per age mode
+        else if (page == 0) // Home dispatched per age mode
         {
             UIMode mode = activeProfile != null ? activeProfile.Mode : UIMode.Adult;
             switch (mode)
@@ -2107,7 +2215,7 @@ public class TuioDemo : Form , TuioListener
             g.DrawRectangle(borderPen, matRect);
             g.DrawString("All Materials", new Font("Segoe UI", 9f), textLightBrush, matRect.X + 8, matRect.Y + 6);
 
-            // Right column - Live feed (hidden in modes that asked for no camera)
+            // Right column Live feed (hidden in modes that asked for no camera)
             int liveH = 260;
             Rectangle liveRect = Rectangle.Empty;
             if (showRightPanel)
@@ -2122,7 +2230,7 @@ public class TuioDemo : Form , TuioListener
                 g.DrawString("Camera preview", new Font("Segoe UI", 9f), textLightBrush, liveInner.X + 10, liveInner.Y + 10);
             }
 
-            // Right column - Selected artifact details (only when right panel is shown)
+            // Right column Selected artifact details (only when right panel is shown)
             int detailsY = (showRightPanel ? liveRect.Bottom : rightPanelY) + 18;
             int detailsH = 260;
             Rectangle detailsRect = new Rectangle(rightPanelX, detailsY, rightPanelW, detailsH);
@@ -2167,7 +2275,7 @@ public class TuioDemo : Form , TuioListener
             }
             } // end if (showRightPanel)
 
-            // Artifacts grid — when the right panel is collapsed, take full width
+            // Artifacts grid when the right panel is collapsed, take full width
             // and switch to bigger cards (better for Child + Senior modes).
             int gridStartX = 40;
             int gridStartY = contentY + 130;
@@ -2326,7 +2434,7 @@ public class TuioDemo : Form , TuioListener
                 }
             }
         }
-        else if (page == 4) // Explore — dispatched per age mode
+        else if (page == 4) // Explore dispatched per age mode
         {
             UIMode emode = activeProfile != null ? activeProfile.Mode : UIMode.Adult;
             if (emode == UIMode.Child)  { DrawExploreChild(g, contentY);  return; }
@@ -2502,7 +2610,7 @@ public class TuioDemo : Form , TuioListener
                 RectangleF descRect = new RectangleF(metaRect.X + 12, lineY + 26, metaRect.Width - 24, 200);
                 g.DrawString(artifact.description, valFont, textLightBrush, descRect);
 
-                // Right column - Live feed
+                // Right column Live feed
                 Rectangle liveRect = new Rectangle(rightX, contentY, rightW, 260);
                 g.FillRectangle(cardBsh_dynamic, liveRect);
                 g.DrawRectangle(borderPen, liveRect);
@@ -2511,7 +2619,7 @@ public class TuioDemo : Form , TuioListener
                 g.FillRectangle(bgrBrush, liveInner);
                 g.DrawRectangle(borderPen, liveInner);
 
-                // Right column - Gesture Recognition
+                // Right column Gesture Recognition
                 Rectangle gestureRect = new Rectangle(rightX, liveRect.Bottom + 18, rightW, 180);
                 g.FillRectangle(cardBsh_dynamic, gestureRect);
                 g.DrawRectangle(borderPen, gestureRect);
@@ -2527,29 +2635,22 @@ public class TuioDemo : Form , TuioListener
         
 
 
-        // Draw Navigation hint
         g.DrawString("Circle gesture: Open Menu   |   Swipe Left/Right: Navigate", new Font("Segoe UI", 11f, FontStyle.Italic), textLightBrush, 40, this.ClientSize.Height - 40);
-        
-        // Removed TUIO debug drawing for objects, cursors, and blobs to keep UI clean.
 
-        // Draw the circular menu
         DrawCircularMenu(g, this.ClientSize.Width, this.ClientSize.Height);
 
-        // === Adaptive overlays driven by the active age profile ===
         DrawAdaptiveOverlays(g);
     }
 
-    // Renders age-profile-dependent UI: mode badge (top-right), transcription
-    // panel (bottom-right), and a large accessible caption for Senior mode.
     private void DrawAdaptiveOverlays(Graphics g)
     {
         if (activeProfile == null) return;
 
-        // (0) Gaze spotlight — rendered first so the badge / transcription
+        // Gaze spotlight rendered first so the badge / transcription
         // panel / effects sit on top of it.
         DrawGazeSpotlight(g);
 
-        // (1) Profile badge — small chip below the status block, top-right.
+        // Profile badge small chip below the status block, top-right.
         try
         {
             string badge = "Mode: " + activeProfile.Label;
@@ -2565,7 +2666,7 @@ public class TuioDemo : Form , TuioListener
         }
         catch { }
 
-        // (2) Transcription panel — only when the profile asks for it.
+        // Transcription panel only when the profile asks for it.
         // For Senior we leave more bottom margin so it doesn't collide with the
         // big caption strip; for Adult/Teen it tucks under the bottom navigation.
         if (activeProfile.ShowTranscription)
@@ -2613,8 +2714,6 @@ public class TuioDemo : Form , TuioListener
             catch { }
         }
 
-        // (3) Senior mode "new idea": persistent big-text caption strip across
-        // the bottom of the screen showing the currently focused artifact.
         if (activeProfile.Mode == UIMode.Senior)
         {
             try
@@ -2642,8 +2741,6 @@ public class TuioDemo : Form , TuioListener
             catch { }
         }
 
-        // (4) Emotion-reactive effects (balloons, ring, drops, calming overlay,
-        // toasts). Drawn last so they sit on top of every other overlay.
         try
         {
             emotionEngine.DrawAll(g, new Rectangle(0, 0, this.ClientSize.Width, this.ClientSize.Height));
@@ -2656,10 +2753,6 @@ public class TuioDemo : Form , TuioListener
         foreach (var a in artifacts) if (a.id == id) return a.name ?? ("#" + id);
         return "#" + id;
     }
-
-    // Soft radial glow that follows the user's gaze across a 3×3 grid.
-    // Eased X/Y interpolation per paint, fade-in alpha, sits below all other
-    // overlays so the badge / transcription / effects remain legible.
     private void DrawGazeSpotlight(Graphics g)
     {
         if (string.IsNullOrEmpty(lastGazeZone)) return;
@@ -2690,11 +2783,11 @@ public class TuioDemo : Form , TuioListener
             default:       gazeSpotlightTargetY = (int)(H * 0.50f) + 40; break;
         }
 
-        // Snap directly to target (no easing — gaze needs to be instant).
+        // Snap directly to target (no easing gaze needs to be instant).
         gazeSpotlightX = gazeSpotlightTargetX;
         gazeSpotlightY = gazeSpotlightTargetY;
 
-        // Fade in over ~20 paints.
+        // Fade in over 20 paints.
         gazeSpotlightAlpha = Math.Min(1.0f, gazeSpotlightAlpha + 0.05f);
 
         // Per-age intensity.
@@ -2736,11 +2829,9 @@ public class TuioDemo : Form , TuioListener
         catch { }
     }
 
-    // =====================================================================
-    //                        HOME PAGE — per-age layouts
-    // =====================================================================
+    //HOME PAGE per-age layouts
 
-    // -------------- CHILD (≤12): playful 2x2 tile dashboard --------------
+    // CHILD (≤12): playful 2x2 tile dashboard
     // Big rounded coloured tiles, friendly hero banner, no jargon.
     private void DrawHomeChild(Graphics g, int contentY)
     {
@@ -2748,11 +2839,11 @@ public class TuioDemo : Form , TuioListener
         int padX = 40;
         int innerW = W - padX * 2;
 
-        // Hero banner — bright gradient with a giant friendly title
+        // Hero banner bright gradient with a giant friendly title
         Rectangle hero = new Rectangle(padX, contentY, innerW, 130);
         FillRoundedGradient(g, hero,
-            Color.FromArgb(255, 184, 76),  // sun-orange
-            Color.FromArgb(255, 110, 175), // hot-pink
+            Color.FromArgb(255, 184, 76),  
+            Color.FromArgb(255, 110, 175), 
             22);
         Font heroTitle = new Font("Segoe UI", 30f, FontStyle.Bold);
         Font heroSub   = new Font("Segoe UI", 16f, FontStyle.Bold);
@@ -2801,7 +2892,7 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
-    // -------------- TEEN (13–19): showy dashboard, hero + carousel --------------
+    //TEEN (13–19): showy dashboard, hero + carousel
     private void DrawHomeTeen(Graphics g, int contentY)
     {
         int W = this.ClientSize.Width;
@@ -2881,7 +2972,7 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
-    // -------------- ADULT (20–49): dense, professional dashboard --------------
+    //ADULT (20–49): dense, professional dashboard
     private void DrawHomeAdult(Graphics g, int contentY)
     {
         int W = this.ClientSize.Width;
@@ -2894,7 +2985,7 @@ public class TuioDemo : Form , TuioListener
         g.DrawString("Adaptive interface · " + (activeProfile != null ? activeProfile.Label : "Adult"),
             new Font("Segoe UI", 11f, FontStyle.Italic), textLightBrush, padX, contentY + 34);
 
-        // KPI strip — 4 narrow cards
+        // KPI strip 4 narrow cards
         int kpiY = contentY + 64;
         int kpiH = 86;
         int kpiGap = 14;
@@ -2973,7 +3064,7 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
-    // -------------- SENIOR (50+): one big artifact, two big buttons --------------
+    // SENIOR (50+): one big artifact, two big buttons
     private void DrawHomeSenior(Graphics g, int contentY)
     {
         // Senior layout reserves room on the right for the transcription panel
@@ -3067,9 +3158,7 @@ public class TuioDemo : Form , TuioListener
         pageClickTargets.Add(new PageClickTarget { Bounds = btnNext, PageIndex = 2 });
     }
 
-    // =====================================================================
-    //                      DETAILS PAGE — per-age layouts
-    // =====================================================================
+    // DETAILS PAGE per-age layouts
 
     private void DrawDetailsChild(Graphics g, int contentY, ArtifactRecord a)
     {
@@ -3187,9 +3276,7 @@ public class TuioDemo : Form , TuioListener
         pageClickTargets.Add(new PageClickTarget { Bounds = btnNext, PageIndex = 2 });
     }
 
-    // =====================================================================
-    //                     EXPLORE PAGE — per-age layouts
-    // =====================================================================
+    //EXPLORE PAGE per-age layouts
 
     private void DrawExploreChild(Graphics g, int contentY)
     {
@@ -3258,9 +3345,7 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
-    // =====================================================================
-    //                    FAVOURITES PAGE — per-age layouts
-    // =====================================================================
+    // FAVOURITES PAGE — per-age layouts
 
     private void DrawFavouritesChild(Graphics g, int contentY)
     {
@@ -3394,10 +3479,8 @@ public class TuioDemo : Form , TuioListener
             artifactClickTargets.Add(new ArtifactClickTarget { Bounds = r, ArtifactId = a.id });
         }
     }
-
-    // =====================================================================
-    //                      ARTIFACTS PAGE — per-age layouts
-    // =====================================================================
+    
+    //ARTIFACTS PAGE — per-age layouts
 
     private void DrawArtifactsChild(Graphics g, int contentY)
     {
@@ -3412,7 +3495,7 @@ public class TuioDemo : Form , TuioListener
         g.DrawString("Look at all the things! 🏺",
             new Font("Segoe UI", 24f, FontStyle.Bold), Brushes.White, hero.X + 24, hero.Y + 24);
 
-        // 2×3 grid of bright square cards (only 6 — kids don't want to scroll)
+        // 2×3 grid of bright square cards
         int top = hero.Bottom + 20;
         int gap = 18;
         int cols = 3;
@@ -3497,7 +3580,7 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
-    // PROFILE PAGE — per-age layouts
+    //PROFILE PAGE — per-age layouts
 
     private void DrawProfileChild(Graphics g, int contentY)
     {
@@ -3668,7 +3751,7 @@ public class TuioDemo : Form , TuioListener
         FillRoundedRect(g, cardBsh_dynamic, card, 22);
         DrawRoundedRect(g, borderPen, card, 22);
 
-        // Avatar large, centered horizontally
+        // Avatar — large, centered horizontally
         int av = 200;
         Rectangle avR = new Rectangle(card.X + (card.Width - av) / 2, card.Y + 30, av, av);
         FillRoundedRect(g, avatarBrush, avR, av / 2);
@@ -3690,7 +3773,7 @@ public class TuioDemo : Form , TuioListener
         g.DrawString(uname, nameFont, fntBrush,
             card.X + (card.Width - nSize.Width) / 2, avR.Bottom + 20);
 
-        // Big readable info rows full width, generous line height
+        // Big readable info rows — full width, generous line height
         Font keyF = new Font("Segoe UI", 18f, FontStyle.Bold);
         Font valF = new Font("Segoe UI", 18f, FontStyle.Regular);
         int rowsY = avR.Bottom + 90;
@@ -3718,6 +3801,7 @@ public class TuioDemo : Form , TuioListener
     }
 
     //Drawing primitives (rounded corners, gradients)
+
     private static GraphicsPath BuildRoundedRectPath(Rectangle r, int radius)
     {
         int d = Math.Max(0, radius * 2);
@@ -3756,7 +3840,7 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
-    //center and draw a string inside a rectangle.
+    // Center-and-draw a string inside a rectangle.
     private void DrawStringCentered(Graphics g, string text, Font font, Brush brush, Rectangle r)
     {
         SizeF sz = g.MeasureString(text, font);
@@ -3808,9 +3892,7 @@ public class TuioDemo : Form , TuioListener
             this.pnlCard.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             this.SuspendLayout();
-            // 
-            // pnlCard
-            // 
+
             this.pnlCard.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(30)))), ((int)(((byte)(60)))));
             this.pnlCard.Controls.Add(this.lblStatus);
             this.pnlCard.Controls.Add(this.lblHello);
@@ -3820,7 +3902,7 @@ public class TuioDemo : Form , TuioListener
             this.pnlCard.Size = new System.Drawing.Size(500, 500);
             this.pnlCard.TabIndex = 0;
             this.pnlCard.Paint += new System.Windows.Forms.PaintEventHandler(this.panel1_Paint);
-      
+   
             this.pictureBox1.Location = new System.Drawing.Point(190, 101);
             this.pictureBox1.Name = "pictureBox1";
             this.pictureBox1.Size = new System.Drawing.Size(120, 120);
@@ -3836,7 +3918,7 @@ public class TuioDemo : Form , TuioListener
             this.lblHello.TabIndex = 1;
             this.lblHello.Text = "Hello, Visitor";
             this.lblHello.Click += new System.EventHandler(this.lblHello_Click);
-      
+
             this.lblStatus.AutoSize = true;
             this.lblStatus.Font = new System.Drawing.Font("Arial", 18F);
             this.lblStatus.ForeColor = System.Drawing.Color.Cornsilk;
@@ -3846,7 +3928,7 @@ public class TuioDemo : Form , TuioListener
             this.lblStatus.TabIndex = 2;
             this.lblStatus.Text = "Waiting...";
             this.lblStatus.Click += new System.EventHandler(this.label1_Click);
-       
+
             this.ClientSize = new System.Drawing.Size(1564, 743);
             this.Controls.Add(this.pnlCard);
             this.Name = "TuioDemo";
@@ -3943,11 +4025,7 @@ public class TuioDemo : Form , TuioListener
 
     }
 
-    // emotion reactive effects
-    // Listens for Python "TRANS:Expression: <emotion>" lines. Spawns short
-    // visual reactions on the GUI, throttled with confirmation + cooldowns so
-    // the user is never carpet-bombed. Each age mode gets a different
-    // intensity (Child = playful balloons; Senior = gentle text toast only).
+    //EMOTION-REACTIVE EFFECTS (balloons, ring, etc.)
 
     private abstract class Effect
     {
@@ -4008,7 +4086,7 @@ public class TuioDemo : Form , TuioListener
         {
             LifetimeSec = 7.0;
 
-            // ---- Balloons: rise from both bottom corners, varied sizes ----
+            // Balloons: rise from both bottom corners, varied sizes
             for (int i = 0; i < count; i++)
             {
                 bool leftSide = (i % 2) == 0;
@@ -4031,7 +4109,7 @@ public class TuioDemo : Form , TuioListener
                 });
             }
 
-            // ---- Confetti: fall from top, tumble, scattered across width ----
+            // Confetti: fall from top, tumble, scattered across width
             int confettiCount = (int)(count * 2.2);
             for (int i = 0; i < confettiCount; i++)
             {
@@ -4053,7 +4131,7 @@ public class TuioDemo : Form , TuioListener
                 });
             }
 
-            // ---- Sparkles: tiny twinkling glints scattered in the upper half ----
+            //Sparkles: tiny twinkling glints scattered in the upper half
             int sparkleCount = count * 2 + 12;
             for (int i = 0; i < sparkleCount; i++)
             {
@@ -4112,10 +4190,10 @@ public class TuioDemo : Form , TuioListener
                 float sway = (float)Math.Sin(t / b.SwayPeriod * Math.PI * 2 + b.SwayPhase) * b.SwayAmp;
                 float x = b.StartX + sway;
 
-                // Subtle scale "bob" — breathes 3% in and out, period ~1.6 s
+                // Subtle scale bob — breathes 3% in and out, period 1.6 s
                 float scale = 1f + 0.03f * (float)Math.Sin(t * 4.2);
 
-                // Tilt oscillates ±5°
+                // Tilt oscillates
                 float tilt = b.Tilt + (float)Math.Sin(t * b.TiltSpeed) * 5f;
 
                 int alpha = Fade(localProgress, 0.05, 0.78);
@@ -4123,15 +4201,14 @@ public class TuioDemo : Form , TuioListener
 
                 float radius = b.Radius * scale;
 
-                // Save state, then translate+rotate so the balloon's "knot point"
-                // sits at (x, y + radius * 1.05).
+                // Save state, then translate+rotate so the balloon knot point
                 GraphicsState state = g.Save();
                 try
                 {
                     g.TranslateTransform(x, y);
                     g.RotateTransform(tilt);
 
-                    // Curved string drawn from knot down ~28-36 px
+                    // Curved string drawn from knot down 28-36 px
                     int stringAlpha = Math.Min(180, alpha);
                     using (var pen = new Pen(Color.FromArgb(stringAlpha, 60, 60, 60), 1.5f))
                     {
@@ -5351,28 +5428,26 @@ public sealed class AdminTemplateBrowserForm : Form, IAdminGestureReceiver
     public bool HandleGestureCommand(string gesture)
     {
         if (string.IsNullOrWhiteSpace(gesture)) return false;
-        string g = gesture.Trim();
-        string gl = g.ToLowerInvariant();
 
-        if (gl == "adminnextartifact" || gl == "adminnext" || gl == "nextartifact" || gl == "swipeleft")
+        if (gesture == "AdminNextArtifact" || gesture == "SwipeLeft")
         {
             MoveTemplate(1);
             return true;
         }
 
-        if (gl == "adminprevartifact" || gl == "adminprev" || gl == "prevartifact" || gl == "swiperight")
+        if (gesture == "AdminPrevArtifact" || gesture == "SwipeRight")
         {
             MoveTemplate(-1);
             return true;
         }
 
-        if (gl == "admincreateartifact" || gl == "admincreate" || gl == "createartifact" || gl == "circle")
+        if (gesture == "AdminCreateArtifact" || gesture == "Circle")
         {
             ConfirmTemplate();
             return true;
         }
 
-        if (gl == "admindeleteartifact" || gl == "admindelete" || gl == "deleteartifact" || gl == "mute")
+        if (gesture == "AdminDeleteArtifact" || gesture == "Mute")
         {
             WasCancelled = true;
             DialogResult = DialogResult.Cancel;
@@ -5636,9 +5711,6 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
         {
             return false;
         }
-
-        string g = gesture.Trim();
-        string gl = g.ToLowerInvariant();
 
         if (gesture == "SwipeRight")
         {
@@ -6045,27 +6117,31 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
     {
         var browser = new AdminTemplateBrowserForm();
         activeTemplateBrowser = browser;
-        if (browser.ShowDialog(this) != DialogResult.OK || browser.ResultArtifact == null)
+        browser.StartPosition = FormStartPosition.CenterScreen;
+        browser.FormClosed += (s, e) =>
         {
             activeTemplateBrowser = null;
+            if (browser.ResultArtifact == null || browser.WasCancelled)
+            {
+                browser.Dispose();
+                return;
+            }
+
+            var templateArtifact = browser.ResultArtifact;
+            int nextId = artifacts.Count == 0 ? 0 : artifacts.Max(a => a.id) + 1;
+            int nextTuioId = artifacts.Count == 0 ? 0 : artifacts.Max(a => a.tuioId) + 1;
+            templateArtifact.id = nextId;
+            templateArtifact.tuioId = nextTuioId;
+
+            if (artifacts.Any(a => a.id == templateArtifact.id)) { MessageBox.Show(this, "Artifact ID conflict.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); browser.Dispose(); return; }
+            if (artifacts.Any(a => a.tuioId == templateArtifact.tuioId)) { MessageBox.Show(this, "TUIO ID conflict.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); browser.Dispose(); return; }
+
+            artifacts.Add(templateArtifact);
+            SaveArtifacts();
+            ReloadAll();
             browser.Dispose();
-            return;
-        }
-        activeTemplateBrowser = null;
-        browser.Dispose();
-
-        var templateArtifact = browser.ResultArtifact;
-        int nextId = artifacts.Count == 0 ? 0 : artifacts.Max(a => a.id) + 1;
-        int nextTuioId = artifacts.Count == 0 ? 0 : artifacts.Max(a => a.tuioId) + 1;
-        templateArtifact.id = nextId;
-        templateArtifact.tuioId = nextTuioId;
-
-        if (artifacts.Any(a => a.id == templateArtifact.id)) { MessageBox.Show(this, "Artifact ID conflict.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-        if (artifacts.Any(a => a.tuioId == templateArtifact.tuioId)) { MessageBox.Show(this, "TUIO ID conflict.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-
-        artifacts.Add(templateArtifact);
-        SaveArtifacts();
-        ReloadAll();
+        };
+        browser.Show();
     }
 
     private void EditSelectedArtifact()
@@ -6169,61 +6245,61 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
             return true;
         }
 
-        if (gl == "adminnextartifact" || gl == "adminnext" || gl == "nextartifact")
+        if (gesture == "AdminNextArtifact")
         {
             MoveSelection(1);
             return true;
         }
 
-        if (gl == "adminprevartifact" || gl == "adminprev" || gl == "prevartifact")
+        if (gesture == "AdminPrevArtifact")
         {
             MoveSelection(-1);
             return true;
         }
 
-        if (gl == "admineditartifact" || gl == "adminedit" || gl == "editartifact")
+        if (gesture == "AdminEditArtifact")
         {
             EditSelectedArtifact();
             return true;
         }
 
-        if (gl == "admindeleteartifact" || gl == "admindelete" || gl == "delete" || gl == "deleteartifact")
+        if (gesture == "AdminDeleteArtifact" || gesture == "Delete" || gesture == "DeleteArtifact")
         {
             DeleteSelectedArtifact();
             return true;
         }
 
-        if (gl == "admincreateartifact" || gl == "admincreate" || gl == "createartifact")
+        if (gesture == "AdminCreateArtifact")
         {
             CreateArtifact();
             return true;
         }
 
-        if (gl == "swiperight")
+        if (gesture == "SwipeRight")
         {
             MoveSelection(1);
             return true;
         }
 
-        if (gl == "swipeleft")
+        if (gesture == "SwipeLeft")
         {
             MoveSelection(-1);
             return true;
         }
 
-        if (gl == "circle")
+        if (gesture == "Circle")
         {
             EditSelectedArtifact();
             return true;
         }
 
-        if (gl == "mute")
+        if (gesture == "Mute")
         {
             DeleteSelectedArtifact();
             return true;
         }
 
-        if (gl == "darkmode")
+        if (gesture == "DarkMode")
         {
             CreateArtifact();
             return true;

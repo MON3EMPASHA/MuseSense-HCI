@@ -681,6 +681,12 @@ while cap.isOpened():
                             print(
                                 f"[CONTEXT] Focus -> {artifact_name} ({category or 'general'})"
                             )
+                    elif msg_type in {"admin_login"}:
+                        signup_flow = None
+                        user_login = 1
+                        active_user_name = str(msg_obj.get("name", "admin")).strip()
+                        context_store.ensure_user(active_user_name, "admin")
+                        print(f"[LOGIN] Admin login via C# button — {active_user_name}")
                     elif msg_type in {"context_update"}:
                         artifact_name = str(msg_obj.get("current_artifact", "")).strip()
                         category = str(msg_obj.get("current_category", "")).strip()
@@ -1028,7 +1034,7 @@ while cap.isOpened():
                 # separate admin-only mode.
                 # Try matching the normalized points as-is
                 admin_shape_name, admin_shape_score = recognize_hand_shape(
-                    norm, admin_hand_shapes, threshold=0.45
+                    norm, admin_hand_shapes, threshold=0.55
                 )
                 # Also try a mirrored (x-flipped) version to accept left/right
                 # handedness differences coming from camera perspective.
@@ -1038,7 +1044,7 @@ while cap.isOpened():
                         mirrored.append(-norm[i])
                         mirrored.append(norm[i + 1])
                     m_name, m_score = recognize_hand_shape(
-                        mirrored, admin_hand_shapes, threshold=0.45
+                        mirrored, admin_hand_shapes, threshold=0.55
                     )
                     if m_name and m_score > admin_shape_score:
                         admin_shape_name = m_name
