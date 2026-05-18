@@ -65,7 +65,7 @@ class FaceRecognizer:
         if self.enabled:
             self._load()
 
-    # ── loading ───────────────────────────────────────────────────────────────
+    #loading
 
     def _load(self) -> None:
         """
@@ -170,7 +170,7 @@ class FaceRecognizer:
             print(f"[FACE] Failed {Path(img_path).name}: {exc}")
             return None
 
-    # ── runtime enroll ────────────────────────────────────────────────────────
+    #runtime enroll
 
     def enroll_image(self, img_path: str, display_name: str) -> None:
         """Add or update a person from a saved image at runtime."""
@@ -185,7 +185,7 @@ class FaceRecognizer:
         self.known[display_name] = emb
         print(f"[FACE] Enrolled '{display_name}'")
 
-    # ── identification ────────────────────────────────────────────────────────
+    #identification
 
     def identify_faces(self, frame_rgb: np.ndarray) -> list[dict]:
         """

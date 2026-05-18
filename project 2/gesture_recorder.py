@@ -13,10 +13,7 @@ mp_drawing = mp.solutions.drawing_utils
 holistic = mp_holistic.Holistic(min_detection_confidence=0.65, min_tracking_confidence=0.65)
 cap = cv2.VideoCapture(0)
 
-# ── Gesture list ────────────────────────────────────────────────────────────
-# Pair: (name, type)   type = "draw" | "hold"
-# "draw"  → records index-finger trajectory  → saved in test_movements.py
-# "hold"  → snapshots all 21 finger joints   → saved in hand_shapes.json
+# Gesture list
 GESTURES = [
     ("SwipeLeft",  "draw"),
     ("SwipeRight", "draw"),
@@ -28,7 +25,7 @@ GESTURES = [
 ]
 current_idx = 0
 
-# ── Load existing data ───────────────────────────────────────────────────────
+#Load existing data
 draw_templates = {}   # name → list[Point]
 hold_shapes    = load_hand_shapes()
 
@@ -51,7 +48,7 @@ def _load_existing_draw():
 draw_templates = _load_existing_draw()
 print(f"Loaded {len(draw_templates)} draw templates, {len(hold_shapes)} hold shapes.")
 
-# ── Save helpers ─────────────────────────────────────────────────────────────
+#Save helpers
 def save_all():
     # Save draw templates
     with open(MOVEMENTS_FILE, "w") as f:
@@ -68,7 +65,7 @@ def save_all():
         json.dump(hold_shapes, f, indent=4)
     print(f"Auto-saved: {len(draw_templates)} draw templates, {len(hold_shapes)} hold shapes.")
 
-# ── State ────────────────────────────────────────────────────────────────────
+#state
 recording      = False
 current_points = []
 status_msg     = ""
@@ -119,7 +116,7 @@ while cap.isOpened():
             else:
                 cv2.circle(f_frame, (fx, fy), 8, (0, 0, 255), -1)
 
-    # ── Display ──────────────────────────────────────────────────────────────
+    #Display
     display = cv2.resize(f_frame, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_LINEAR)
 
     g_name, g_type = GESTURES[current_idx]
@@ -140,7 +137,7 @@ while cap.isOpened():
 
     cv2.imshow("Gesture Recorder", display)
 
-    # ── Key handling ──────────────────────────────────────────────────────────
+    #Key handling
     key = cv2.waitKey(1) & 0xFF
 
     if key == ord('q') or key == ord('s'):

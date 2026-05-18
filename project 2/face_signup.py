@@ -30,7 +30,7 @@ from hand_keyboard import (
 )
 from face_recognizer import FaceRecognizer
 
-# ── tunables ──────────────────────────────────────────────────────────────────
+#tunables
 SCAN_TIMEOUT       = 8.0    # seconds to try face recognition before giving up
 SCAN_INTERVAL_FR   = 20     # run DeepFace every N frames during scanning
 PROMPT_DURATION    = 2.5    # seconds to show the "let's register" message
@@ -40,7 +40,7 @@ FACE_CROP_PAD      = 0.30   # fractional padding around detected face bbox
 MIN_NAME_LEN       = 2
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+#helpers
 
 def _finger_tip(hand_landmarks, lm_id: int, w: int, h: int) -> tuple[int, int] | None:
     if hand_landmarks is None:
@@ -124,7 +124,7 @@ def _save_user_to_json(
         json.dump(users, f, indent=2, ensure_ascii=False)
 
 
-# ── main class ────────────────────────────────────────────────────────────────
+#main class
 
 class FaceSignupFlow:
     """
@@ -178,7 +178,7 @@ class FaceSignupFlow:
         self.done   = False
         self.result: dict = {}
 
-    # ── public entry point ────────────────────────────────────────────────────
+    #public entry point
 
     def process(
         self,
@@ -207,7 +207,7 @@ class FaceSignupFlow:
         elif self._state == "CAPTURE":
             self._do_capture(frame_rgb, annotated)
 
-    # ── state handlers ────────────────────────────────────────────────────────
+    #state handlers
 
     def _do_scanning(self, frame_rgb: np.ndarray, annotated: np.ndarray) -> None:
         elapsed   = time.monotonic() - self._state_start
@@ -319,7 +319,7 @@ class FaceSignupFlow:
 
         h, w = annotated.shape[:2]
 
-        # ── layout ────────────────────────────────────────────────────────
+        #layout
         btn_w, btn_h = 100, 44
         gap          = 20
         gender_opts  = self._gender_options   # ["Male", "Female"]
@@ -342,7 +342,7 @@ class FaceSignupFlow:
         all_rects  = gender_rects + [(conf_x1, conf_y1, conf_x2, conf_y2)]
         CONFIRM_IDX = len(gender_opts)
 
-        # ── nearest-key hover ────────────────────────────────────────────
+        # nearest-key hover
         self._gender_hovered = None
         if index_tip is not None:
             ix, iy = index_tip
@@ -355,7 +355,7 @@ class FaceSignupFlow:
                     best_dsq = dsq
                     self._gender_hovered = i
 
-        # ── pinch click ───────────────────────────────────────────────────
+        #pinch click
         clicked_idx = None
         if (index_tip is not None and middle_tip is not None
                 and self._gender_hovered is not None):
@@ -374,7 +374,7 @@ class FaceSignupFlow:
                 if self._gender_selected is not None:
                     self._gender_confirmed = True
 
-        # ── draw ──────────────────────────────────────────────────────────
+        #draw
         _center_text(annotated, "Select your gender",
                      btn_y - 18, 0.6, (0, 220, 255), 2)
 
@@ -425,7 +425,7 @@ class FaceSignupFlow:
             cv2.circle(annotated, middle_tip, 4, (255, 120, 0), -1)
             cv2.circle(annotated, middle_tip, 5, (0, 0, 0), 1)
 
-        # ── transitions ───────────────────────────────────────────────────
+        #transitions
         if self._gender_confirmed:
             gender = (gender_opts[self._gender_selected]
                       if self._gender_selected is not None else "")
@@ -460,7 +460,7 @@ class FaceSignupFlow:
             _center_text(annotated, f"Photos: {snaps_taken}/{len(CAPTURE_SNAP_TIMES)}",
                          annotated.shape[0] // 2 + 40, 0.45, (0, 200, 120), 1)
         else:
-            # Only call once — _saving guard prevents re-entry on subsequent frames
+            # Only call once — saving guard prevents re-entry on subsequent frames
             if not self._saving:
                 self._saving = True
                 if not self._captured_frames:
@@ -527,7 +527,7 @@ class FaceSignupFlow:
         except Exception as exc:
             print(f"[SIGNUP] Error during save/enroll (login payload still sent): {exc}")
 
-    # ── helpers ───────────────────────────────────────────────────────────────
+    #helpers
 
     def _transition(self, new_state: str) -> None:
         self._state       = new_state
@@ -535,7 +535,7 @@ class FaceSignupFlow:
         print(f"[SIGNUP] -> {new_state}")
 
 
-# ── drawing util ──────────────────────────────────────────────────────────────
+# drawing util
 
 def _center_text(
     frame: np.ndarray,
