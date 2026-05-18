@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [
   {
     "name": "admin",
@@ -139,3 +140,6 @@
     "themeMode": "light"
   }
 ]
+=======
+[{"name":"admin","age":"25","gender":"Male","mac":null,"Profile":"","favorites":[],"themeMode":"dark","role":"admin","password":"pass1234"},{"name":"Ayad Zewail","age":"999","gender":"non-binary","mac":["43:6F:AB:C8:FA:F6"],"Profile":"","favorites":[],"themeMode":"light","role":null,"password":null},{"name":"Youssef Abdulghany","age":"12","gender":"female","mac":["54:C4:E5:20:E2:C8"],"Profile":"","favorites":[],"themeMode":"light","role":null,"password":null},{"name":"Mohamed Taha","age":"21","gender":"male","mac":["9C:6B:72:01:A3:DA"],"Profile":"objects/Taha.png","favorites":[],"themeMode":"light","role":null,"password":null},{"name":"Abdelmonem Hatem","age":"21","gender":"male","mac":["64:D0:D6:AE:32:C1","64:D0:D6:58:C3:09","10:EC:81:8F:FD:BB","F4:B6:2D:FD:64:03","10:5B:AD:2C:59:6C"],"Profile":"objects/Monem.png","favorites":[3],"themeMode":"light","role":null,"password":null},{"name":"Andrew Talaat","age":"30","gender":"female","mac":["4E:2F:0E:9E:E2:88","5C:6B:16:79:91:66","A4:15:66:55:2F:34","08:EB:ED:0C:FB:11","64:D0:D6:3B:C3:F5"],"Profile":"","favorites":[2,1,0],"themeMode":"","role":null,"password":null},{"name":"JNK","age":"336","gender":"Female","mac":[],"Profile":"objects/JNK.jpg","favorites":null,"themeMode":"light","role":null,"password":null},{"name":"Mohamed Ibrahim","age":"25","gender":"Male","mac":["18:9C:2C:3E:8D:DE","5C:56:A4:71:B0:DA","43:D5:F9:A1:62:7A","34:09:C9:79:22:B4"],"Profile":"objects/BGTTTUIO.jpg","favorites":[3,1],"themeMode":"light","role":null,"password":null}]
+>>>>>>> 836fda21407d6844c89953d70bad38e963ae5b81
