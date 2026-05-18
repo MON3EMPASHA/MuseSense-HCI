@@ -19,22 +19,25 @@
         "sink": 0.2,
         "knife": 0.2,
         "favorites": 1.0,
-        "suitcase": -0.6
+        "suitcase": -0.6,
+        "giraffe": 3.2
       },
       "artifact_scores": {
         "sink": 0.2,
         "knife": 0.2,
-        "suitcase": -0.6
+        "suitcase": -0.6,
+        "giraffe": 3.2
       },
       "context": {
         "current_artifact": "giraffe",
         "current_category": "giraffe",
         "last_object": "giraffe",
-        "last_gesture": "Circle",
-        "last_emotion": "neutral",
-        "last_gaze": "center"
+        "last_gesture": "AdminPrevArtifact",
+        "last_emotion": "sad",
+        "last_gaze": "center_right"
       },
-      "updated_at": 1778277059
+      "updated_at": 1779132359,
+      "opened_artifacts": {}
     },
     "Mohamed Ibrahim": {
       "profile": "objects/Soltan.png",
@@ -120,31 +123,34 @@
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 51.4,
-        "favorites": 5.0
+        "Egypt": 203.1,
+        "favorites": 6.0
       },
       "artifact_scores": {
-        "Mask of Tutankhamun": 30.9,
+        "Mask of Tutankhamun": 144.1,
         "Ramses II Statue": 8.3,
-        "Sacred Scarab Beetle": 12.2
+        "Sacred Scarab Beetle": 12.2,
+        "Bust of Nefertiti": 32.8,
+        "Pyramids of Giza": 5.7
       },
       "opened_artifacts": {
-        "mask of tutankhamun": 1779116050.8931649,
+        "mask of tutankhamun": 1779125373.138943,
         "ramses ii statue": 1778634913.3271995,
         "king senwosret iii": 1778634458.1357987,
-        "bust of nefertiti": 1778634462.7229955,
+        "bust of nefertiti": 1779125369.982437,
         "horus": 1778634471.7910998,
-        "sacred scarab beetle": 1778634478.8173847
+        "sacred scarab beetle": 1778634478.8173847,
+        "pyramids of giza": 1779125224.3031282
       },
       "context": {
         "current_artifact": "Mask of Tutankhamun",
         "current_category": "Egypt",
         "last_object": "Mask of Tutankhamun",
-        "last_gesture": "edit_artifact",
-        "last_emotion": "neutral",
-        "last_gaze": "center"
+        "last_gesture": "AdminDeleteArtifact",
+        "last_emotion": "happy",
+        "last_gaze": "bottom_center"
       },
-      "updated_at": 1779118116
+      "updated_at": 1779125425
     },
     "guest_5C56A471B0DA": {
       "profile": "",
@@ -335,16 +341,18 @@
       },
       "category_scores": {},
       "artifact_scores": {},
-      "opened_artifacts": {},
+      "opened_artifacts": {
+        "marker_110": 1779134001.1452136
+      },
       "context": {
-        "current_artifact": "",
-        "current_category": "",
-        "last_object": "",
+        "current_artifact": "marker_110",
+        "current_category": "general",
+        "last_object": "marker_110",
         "last_gesture": "",
         "last_emotion": "",
         "last_gaze": ""
       },
-      "updated_at": 0
+      "updated_at": 1779134001
     },
     "Andrew Talaat": {
       "profile": "",
@@ -505,11 +513,77 @@
         "last_gaze": "center_left"
       },
       "updated_at": 1779113522
+    },
+    "VVVVP": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {
+        "Egypt": -0.8
+      },
+      "artifact_scores": {
+        "Mask of Tutankhamun": -0.8
+      },
+      "opened_artifacts": {
+        "mask of tutankhamun": 1779122814.4901428
+      },
+      "context": {
+        "current_artifact": "Mask of Tutankhamun",
+        "current_category": "Egypt",
+        "last_object": "Mask of Tutankhamun",
+        "last_gesture": "Mute",
+        "last_emotion": "sad",
+        "last_gaze": "center_right"
+      },
+      "updated_at": 1779122824
+    },
+    "guest_105BAD2C596C": {
+      "profile": "",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "opened_artifacts": {},
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "",
+        "last_emotion": "",
+        "last_gaze": ""
+      },
+      "updated_at": 0
+    },
+    "admin": {
+      "profile": "admin",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "opened_artifacts": {},
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "AdminPrevArtifact",
+        "last_emotion": "neutral",
+        "last_gaze": "center_left"
+      },
+      "updated_at": 1779134055
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1779110443
+    "updated_at": 1779134055
   }
 }

@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 import warnings
+import math
 from pathlib import Path
 
 # If launched with anything other than the project's venv interpreter, re-launch
@@ -680,6 +681,12 @@ while cap.isOpened():
                             print(
                                 f"[CONTEXT] Focus -> {artifact_name} ({category or 'general'})"
                             )
+                    elif msg_type in {"admin_login"}:
+                        signup_flow = None
+                        user_login = 1
+                        active_user_name = str(msg_obj.get("name", "admin")).strip()
+                        context_store.ensure_user(active_user_name, "admin")
+                        print(f"[LOGIN] Admin login via C# button — {active_user_name}")
                     elif msg_type in {"context_update"}:
                         artifact_name = str(msg_obj.get("current_artifact", "")).strip()
                         category = str(msg_obj.get("current_category", "")).strip()
@@ -999,24 +1006,69 @@ while cap.isOpened():
                 norm, hand_shapes, threshold=0.45
             )
 
+            # Diagnostic: compute best-match distances even if they don't
+            # meet the recognition threshold so we can see how close the
+            # current hand is to any admin/user template.
+            def _best_dist(points, templates):
+                best = float("inf")
+                if not points or not templates:
+                    return best
+                for t in templates.values():
+                    if len(t) != len(points):
+                        continue
+                    d = 0.0
+                    for a, b in zip(points, t):
+                        d += (a - b) ** 2
+                    d = math.sqrt(d)
+                    if d < best:
+                        best = d
+                return best
+
+            best_user_dist = _best_dist(norm, hand_shapes)
+
             admin_shape_name = None
             admin_shape_score = 0.0
-            if active_user_name == "admin":
-                # Admin shapes should trigger easily when performed correctly.
+            if admin_hand_shapes:
+                # Admin gestures are recognized alongside the normal bank so
+                # the dashboard can react even when the user is not in a
+                # separate admin-only mode.
+                # Try matching the normalized points as-is
                 admin_shape_name, admin_shape_score = recognize_hand_shape(
-                    norm, admin_hand_shapes, threshold=9999.0
+                    norm, admin_hand_shapes, threshold=0.55
                 )
+                # Also try a mirrored (x-flipped) version to accept left/right
+                # handedness differences coming from camera perspective.
+                if norm:
+                    mirrored = []
+                    for i in range(0, len(norm), 2):
+                        mirrored.append(-norm[i])
+                        mirrored.append(norm[i + 1])
+                    m_name, m_score = recognize_hand_shape(
+                        mirrored, admin_hand_shapes, threshold=0.55
+                    )
+                    if m_name and m_score > admin_shape_score:
+                        admin_shape_name = m_name
+                        admin_shape_score = m_score
+
+                best_admin_dist = _best_dist(norm, admin_hand_shapes)
+                # Print diagnostic when the hand is somewhat similar to any
+                # template (avoid flooding by only printing reasonably close
+                # matches).
+                if best_admin_dist < 1.5 or best_user_dist < 1.5:
+                    print(
+                        f"[GESTURE-DEBUG] best_user_dist={best_user_dist:.3f} best_admin_dist={best_admin_dist:.3f} user_match={user_shape_name}:{user_shape_score:.3f} admin_match={admin_shape_name}:{admin_shape_score:.3f}"
+                    )
 
             chosen_kind = None
             chosen_name = None
             chosen_score = 0.0
 
-            if user_shape_name and user_shape_score > 0.55:
+            if user_shape_name and user_shape_score > 0.35:
                 chosen_kind = "user"
                 chosen_name = user_shape_name
                 chosen_score = user_shape_score
 
-            if admin_shape_name and active_user_name == "admin":
+            if admin_shape_name and admin_shape_score > 0.25 and admin_shape_score >= chosen_score:
                 chosen_kind = "admin"
                 chosen_name = admin_shape_name
                 chosen_score = admin_shape_score
@@ -1081,9 +1133,10 @@ while cap.isOpened():
             gesture_points.clear()
             circle_points.clear()
 
-            # Update top-right feedback label for any gesture that fired
-            if msg:
-                show_gesture_feedback(msg, duration=3.0)
+        # Update top-right feedback label for any gesture or hand shape that fired
+        if msg:
+            show_gesture_feedback(msg, duration=3.0)
+
         mp_drawing.draw_landmarks(
             annotated_image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS
         )

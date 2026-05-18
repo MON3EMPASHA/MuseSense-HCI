@@ -212,7 +212,7 @@ def apply_gesture_action(
     resolved_category = category or "general"
 
     # Keep action mapping procedural and explicit to match lab style.
-    if gesture_key == "create_artifact":
+    if gesture_key in {"create_artifact", "admincreateartifact"}:
         return {
             "action": "open_create_artifact",
             "result": "opened",
@@ -220,7 +220,7 @@ def apply_gesture_action(
             "category": resolved_category,
         }
 
-    if gesture_key == "edit_artifact":
+    if gesture_key in {"edit_artifact", "admineditartifact"}:
         return {
             "action": "open_edit_artifact",
             "result": "opened",
@@ -228,7 +228,7 @@ def apply_gesture_action(
             "category": resolved_category,
         }
 
-    if gesture_key == "delete_artifact":
+    if gesture_key in {"delete_artifact", "admindeleteartifact", "delete", "mute"}:
         return {
             "action": "open_delete_artifact",
             "result": "opened",
@@ -236,7 +236,7 @@ def apply_gesture_action(
             "category": resolved_category,
         }
 
-    if gesture_key == "next_artifact":
+    if gesture_key in {"next_artifact", "adminnextartifact"}:
         return {
             "action": "open_next_artifact",
             "result": "opened",
@@ -244,7 +244,7 @@ def apply_gesture_action(
             "category": resolved_category,
         }
 
-    if gesture_key == "prev_artifact":
+    if gesture_key in {"prev_artifact", "adminprevartifact"}:
         return {
             "action": "open_prev_artifact",
             "result": "opened",
