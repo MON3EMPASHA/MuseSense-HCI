@@ -163,7 +163,7 @@ public class TuioDemo : Form , TuioListener
 
         class UserRoot
         {
-                public List<UserRecord> artifacts { get; set; } // Keep the same property name for JSON compatibility
+                public List<UserRecord> users { get; set; }
         }
 
         class ArtifactClickTarget
@@ -448,9 +448,9 @@ public class TuioDemo : Form , TuioListener
 
 		private void Form_Closing(object sender, System.ComponentModel.CancelEventArgs e)
 		{
-			client.removeTuioListener(this);
+			tuioClient.removeTuioListener(this);
 
-			client.disconnect();
+			tuioClient.disconnect();
 			System.Environment.Exit(0);
 		}
 
@@ -665,26 +665,34 @@ public class TuioDemo : Form , TuioListener
     // load artifacts text/image data from artifacts.json
     void LoadArtifacts()
     {
-        string path = @"..\..\artifacts.json";
+        string exeDir = AppDomain.CurrentDomain.BaseDirectory;
+        string[] candidates = {
+            Path.Combine(exeDir, @"..\..\artifacts.json"),
+            Path.Combine(exeDir, @"artifacts.json"),
+        };
 
-        if (File.Exists(path))
+        foreach (string path in candidates)
         {
-            try
+            string fullPath = Path.GetFullPath(path);
+            if (File.Exists(fullPath))
             {
-                string json = File.ReadAllText(path);
-                JavaScriptSerializer serializer = new JavaScriptSerializer();
-                ArtifactRoot root = serializer.Deserialize<ArtifactRoot>(json);
-                if (root != null && root.artifacts != null && root.artifacts.Count > 0)
+                try
                 {
-                    artifacts = root.artifacts;
-                    artifactsJsonPath = Path.GetFullPath(path);
-                    Console.WriteLine("Loaded artifacts from: " + artifactsJsonPath + " (count=" + artifacts.Count + ")");
-                    return;
+                    string json = File.ReadAllText(fullPath);
+                    JavaScriptSerializer serializer = new JavaScriptSerializer();
+                    ArtifactRoot root = serializer.Deserialize<ArtifactRoot>(json);
+                    if (root != null && root.artifacts != null && root.artifacts.Count > 0)
+                    {
+                        artifacts = root.artifacts;
+                        artifactsJsonPath = fullPath;
+                        Console.WriteLine("Loaded artifacts from: " + fullPath + " (count=" + artifacts.Count + ")");
+                        return;
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Failed loading artifacts from " + Path.GetFullPath(path) + ": " + ex.Message);
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Failed loading artifacts from " + fullPath + ": " + ex.Message);
+                }
             }
         }
 
@@ -1547,7 +1555,12 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
-    public void stream()
+	public void SafeInvalidate()
+	{
+		try { Invoke((Action)(Invalidate)); } catch { }
+	}
+
+     public void stream()
     {
 		
         Client c = new Client();
@@ -1555,7 +1568,7 @@ public class TuioDemo : Form , TuioListener
         {
             Console.WriteLine("Could not connect.");
             btStatus = "Vision Engine Offline";
-            Invoke((Action)(Invalidate));
+            SafeInvalidate();
             return;
         }
 
@@ -1563,7 +1576,7 @@ public class TuioDemo : Form , TuioListener
         
         cameraStatusStr = "Online";
         btStatus = "Waiting for Bluetooth Device...";
-        Invoke((Action)(Invalidate));
+        SafeInvalidate();
 
         // Ensure the vision engine starts with no selected artifact until the user opens one.
         SendContextClear("startup");
@@ -1577,7 +1590,7 @@ public class TuioDemo : Form , TuioListener
                 Console.WriteLine("[STREAM] recieveMessage returned null — connection dropped");
                 cameraStatusStr = "Offline";
                 btStatus = "Vision Engine Offline";
-                Invoke((Action)(Invalidate));
+                SafeInvalidate();
                 break;
             }
             if (string.IsNullOrWhiteSpace(msg))
@@ -1660,7 +1673,7 @@ public class TuioDemo : Form , TuioListener
                 if (TryHandleLoginPayload(msg))
                 {
                     Console.WriteLine("[STREAM] Login payload handled successfully, uname=" + uname);
-                    Invoke((Action)(Invalidate));
+                    SafeInvalidate();
                     continue;
                 }
                 Console.WriteLine("[STREAM] TryHandleLoginPayload returned false");
@@ -1685,7 +1698,7 @@ public class TuioDemo : Form , TuioListener
                 {
                     btStatus = "No match for this device in the system";
                 }
-                Invoke((Action)(Invalidate));
+                SafeInvalidate();
 
             }
            
@@ -1725,7 +1738,7 @@ public class TuioDemo : Form , TuioListener
                     ToggleThemeMode();
                 }
 
-                Invoke((Action)(Invalidate));
+                SafeInvalidate();
             }
 
             oldmsg = msg;

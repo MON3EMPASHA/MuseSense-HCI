@@ -59,9 +59,12 @@ _C = {
 }
 
 # ── Timing ────────────────────────────────────────────────────────────────────
-CLICK_COOLDOWN = 0.45   # seconds between key presses
-PINCH_DIST_PX  = 22     # index-middle distance threshold for a click
-OPEN_HAND_HOLD = 1.0    # seconds open-hand must be held to confirm
+CLICK_COOLDOWN   = 0.30   # seconds between key presses (faster = smoother typing)
+PINCH_DIST_PX    = 30     # index-middle distance threshold for a click
+OPEN_HAND_HOLD   = 1.0    # seconds open-hand must be held to confirm
+
+# ── Cursor smoothing ──────────────────────────────────────────────────────────
+CURSOR_EMA_ALPHA = 0.45   # lower = smoother but more lag (0..1)
 
 # ── MediaPipe landmark indices ────────────────────────────────────────────────
 _FINGER_TIPS = [8, 12, 16, 20]
@@ -155,6 +158,11 @@ class HandKeyboard:
         self._open_hand_since: float | None = None
         self._confirm_flash_until: float    = 0.0
 
+        # cursor smoothing state
+        self._smooth_cx: float | None = None
+        self._smooth_cy: float | None = None
+        self._cursor_valid: bool = False
+
     # ── layout ────────────────────────────────────────────────────────────────
 
     def _compute_layout(self) -> None:
@@ -163,11 +171,11 @@ class HandKeyboard:
 
         if self._mode == "alpha":
             cols = 10
-            # keyboard occupies ~88% of frame width
-            total_w = int(fw * 0.88)
-            pad     = max(3, total_w // 120)
+            # keyboard occupies ~94% of frame width (was 88%) for bigger keys
+            total_w = int(fw * 0.94)
+            pad     = max(4, total_w // 100)   # bigger gap to reduce adjacent mis-hits
             self._kw  = (total_w - (cols - 1) * pad) // cols
-            self._kh  = max(36, int(fh * 0.085))
+            self._kh  = max(42, int(fh * 0.105))  # taller keys (was max(36, fh*0.085))
             self._pad = pad
             rows      = len(self._rows)
             kb_w      = cols * (self._kw + pad) - pad
@@ -178,9 +186,9 @@ class HandKeyboard:
         else:
             # numeric pad: 3 columns, 4 rows, large keys
             cols = 3
-            self._kw  = int(fw * 0.12)
-            self._kh  = int(fh * 0.12)
-            self._pad = 8
+            self._kw  = int(fw * 0.18)   # bigger num keys (was 0.12)
+            self._kh  = int(fh * 0.14)   # taller num keys (was 0.12)
+            self._pad = 10
             rows      = len(self._rows)
             kb_w      = cols * (self._kw + self._pad) - self._pad
             kb_h      = rows * (self._kh + self._pad) - self._pad
@@ -202,21 +210,37 @@ class HandKeyboard:
         clicked       = False
 
         if index_tip is not None:
-            ix, iy = index_tip
+            ix_raw, iy_raw = index_tip
+
+            # ── EMA cursor smoothing ────────────────────────────────────
+            if self._smooth_cx is None:
+                self._smooth_cx = float(ix_raw)
+                self._smooth_cy = float(iy_raw)
+            else:
+                self._smooth_cx += (ix_raw - self._smooth_cx) * CURSOR_EMA_ALPHA
+                self._smooth_cy += (iy_raw - self._smooth_cy) * CURSOR_EMA_ALPHA
+            ix = int(round(self._smooth_cx))
+            iy = int(round(self._smooth_cy))
+            self._cursor_valid = True
+
             for r, row in enumerate(self._rows):
                 for c in range(len(row)):
                     x1, y1, x2, y2 = self._key_rect(r, c)
-                    if x1 <= ix <= x2 and y1 <= iy <= y2:
+                    # Expand hit-box by 3px on each side for easier targeting
+                    if x1 - 3 <= ix <= x2 + 3 and y1 - 3 <= iy <= y2 + 3:
                         self._hovered = (r, c)
 
             if middle_tip is not None:
                 mx, my = middle_tip
+                # Use smoothed cursor for pinch distance too
                 dist = ((ix - mx)**2 + (iy - my)**2) ** 0.5
                 if dist < PINCH_DIST_PX:
                     now = time.monotonic()
                     if now - self._last_click_time > CLICK_COOLDOWN:
                         clicked = True
                         self._last_click_time = now
+        else:
+            self._cursor_valid = False
 
         if clicked and self._hovered is not None:
             r, c  = self._hovered
@@ -320,6 +344,20 @@ class HandKeyboard:
                     bg, border = _C["key_bg"], _C["key_border"]
 
                 _draw_key_box(frame, x1, y1, x2, y2, bg, border, key)
+
+        # ── smoothed cursor crosshair ────────────────────────────────────
+        if self._cursor_valid and self._smooth_cx is not None:
+            cx = int(round(self._smooth_cx))
+            cy = int(round(self._smooth_cy))
+            # outer glow
+            cv2.circle(frame, (cx, cy), 14, (0, 0, 0), 2)
+            cv2.circle(frame, (cx, cy), 10, (0, 200, 255), 2)
+            cv2.circle(frame, (cx, cy), 4, (0, 255, 255), -1)
+            # crosshair lines
+            cv2.line(frame, (cx - 18, cy), (cx - 8, cy), (255, 255, 255), 1)
+            cv2.line(frame, (cx + 8, cy), (cx + 18, cy), (255, 255, 255), 1)
+            cv2.line(frame, (cx, cy - 18), (cx, cy - 8), (255, 255, 255), 1)
+            cv2.line(frame, (cx, cy + 8), (cx, cy + 18), (255, 255, 255), 1)
 
         # open-hand confirm progress
         bar_y1 = py1 - 14

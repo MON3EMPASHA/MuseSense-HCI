@@ -365,11 +365,87 @@
         "last_gaze": "right"
       },
       "updated_at": 1778785504
+    },
+    "guest_189C2C3E8DDE": {
+      "profile": "",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {},
+      "artifact_scores": {},
+      "opened_artifacts": {},
+      "context": {
+        "current_artifact": "",
+        "current_category": "",
+        "last_object": "",
+        "last_gesture": "",
+        "last_emotion": "",
+        "last_gaze": ""
+      },
+      "updated_at": 0
+    },
+    "BBKKLL": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {
+        "Egypt": 0.9
+      },
+      "artifact_scores": {
+        "Mask of Tutankhamun": 0.9
+      },
+      "opened_artifacts": {
+        "mask of tutankhamun": 1779065594.7739892
+      },
+      "context": {
+        "current_artifact": "Mask of Tutankhamun",
+        "current_category": "Egypt",
+        "last_object": "Mask of Tutankhamun",
+        "last_gesture": "",
+        "last_emotion": "neutral",
+        "last_gaze": "center"
+      },
+      "updated_at": 1779065606
+    },
+    "7Y": {
+      "profile": "visitor",
+      "lists": {
+        "favorites": [],
+        "explore_later": [],
+        "good_to_see": []
+      },
+      "category_scores": {
+        "Egypt": 5.0
+      },
+      "artifact_scores": {
+        "Ramses II Statue": 2.1,
+        "Mask of Tutankhamun": 2.3,
+        "Bust of Nefertiti": 0.6
+      },
+      "opened_artifacts": {
+        "bust of nefertiti": 1779066466.366436,
+        "ramses ii statue": 1779065845.964163,
+        "mask of tutankhamun": 1779066252.1330745
+      },
+      "context": {
+        "current_artifact": "Bust of Nefertiti",
+        "current_category": "Egypt",
+        "last_object": "Bust of Nefertiti",
+        "last_gesture": "",
+        "last_emotion": "neutral",
+        "last_gaze": "left"
+      },
+      "updated_at": 1779066482
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1778785504
+    "updated_at": 1779066482
   }
 }

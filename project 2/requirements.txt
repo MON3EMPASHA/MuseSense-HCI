@@ -6,4 +6,4 @@ pybluez-updated==0.31
 dollarpy>=0.1.1
 ultralytics>=8.2.0
 pillow>=12.1.1
-face-recognition>=1.3.0
+deepface>=0.0.79

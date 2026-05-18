@@ -158,7 +158,9 @@ class FaceSignupFlow:
         self._state        = "SCANNING"
         self._state_start  = time.monotonic()
         self._scan_counter = 0
-        self._keyboard     = HandKeyboard(frame_w=480, frame_h=320)
+        self._frame_w      = 640   # will be updated from process()
+        self._frame_h      = 480
+        self._keyboard     = HandKeyboard(frame_w=self._frame_w, frame_h=self._frame_h)
         self._countdown_start: float | None = None
         self._pending_name: str = ""
         self._pending_age: str = ""
@@ -193,6 +195,9 @@ class FaceSignupFlow:
     ) -> None:
         if self.done:
             return
+
+        self._frame_w = frame_w
+        self._frame_h = frame_h
 
         if self._state == "SCANNING":
             self._do_scanning(frame_rgb, annotated)
@@ -260,14 +265,6 @@ class FaceSignupFlow:
         index_tip  = _finger_tip(hand, self._IDX_TIP, frame_w, frame_h)
         middle_tip = _finger_tip(hand, self._MID_TIP, frame_w, frame_h)
 
-        # draw cursor dots with outline for visibility on any background
-        if index_tip is not None:
-            cv2.circle(annotated, index_tip, 5, (0, 255, 255), -1)
-            cv2.circle(annotated, index_tip, 6, (0, 0, 0), 1)
-        if middle_tip is not None:
-            cv2.circle(annotated, middle_tip, 4, (255, 120, 0), -1)
-            cv2.circle(annotated, middle_tip, 5, (0, 0, 0), 1)
-
         self._keyboard.update(annotated, index_tip, middle_tip,
                               left_hand_landmarks=holistic_results.left_hand_landmarks)
 
@@ -283,7 +280,7 @@ class FaceSignupFlow:
             name = self._keyboard.text.strip()
             if len(name) >= MIN_NAME_LEN:
                 self._pending_name = name
-                self._keyboard = HandKeyboard(mode="num", frame_w=480, frame_h=320)   # fresh keyboard for age
+                self._keyboard = HandKeyboard(mode="num", frame_w=self._frame_w, frame_h=self._frame_h)
                 self._transition("KEYBOARD_AGE")
             else:
                 self._keyboard.confirmed = False
@@ -300,13 +297,6 @@ class FaceSignupFlow:
 
         index_tip  = _finger_tip(hand, self._IDX_TIP, frame_w, frame_h)
         middle_tip = _finger_tip(hand, self._MID_TIP, frame_w, frame_h)
-
-        if index_tip is not None:
-            cv2.circle(annotated, index_tip, 5, (0, 255, 255), -1)
-            cv2.circle(annotated, index_tip, 6, (0, 0, 0), 1)
-        if middle_tip is not None:
-            cv2.circle(annotated, middle_tip, 4, (255, 120, 0), -1)
-            cv2.circle(annotated, middle_tip, 5, (0, 0, 0), 1)
 
         self._keyboard.update(annotated, index_tip, middle_tip,
                               left_hand_landmarks=holistic_results.left_hand_landmarks)

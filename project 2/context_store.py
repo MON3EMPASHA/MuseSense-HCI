@@ -343,10 +343,3 @@ def toggle_favorite(
         "item_id": resolved_item_id,
         "category": resolved_category,
     }
-
-    return {
-        "action": "none",
-        "result": "no_mapping",
-        "item_id": resolved_item_id,
-        "category": resolved_category,
-    }

@@ -10,10 +10,19 @@ from pathlib import Path
 # instead of os.execv because os.execv mishandles Windows paths containing
 # spaces (e.g. "project 2").
 _SCRIPT_DIR = Path(__file__).resolve().parent
+
+def _is_valid_venv(py_path: Path) -> bool:
+    """Return True only if python.exe exists AND pyvenv.cfg is present."""
+    return py_path.exists() and (py_path.parent.parent / "pyvenv.cfg").exists()
+
+_LOCAL_VENV_PY = _SCRIPT_DIR / ".venv" / "Scripts" / "python.exe"
 _ROOT_VENV_PY = _SCRIPT_DIR.parent / ".venv" / "Scripts" / "python.exe"
-_LOCAL_VENV_PY = _SCRIPT_DIR / "venv" / "Scripts" / "python.exe"
-_VENV_PY = _LOCAL_VENV_PY if _LOCAL_VENV_PY.exists() else _ROOT_VENV_PY
-if _VENV_PY.exists() and os.path.normcase(sys.executable) != os.path.normcase(str(_VENV_PY)):
+# Also check "venv" (hidden-less) for setups that predate the rename.
+_OLD_VENV_PY = _SCRIPT_DIR / "venv" / "Scripts" / "python.exe"
+_VENV_PY = _OLD_VENV_PY if _is_valid_venv(_OLD_VENV_PY) else (
+    _LOCAL_VENV_PY if _is_valid_venv(_LOCAL_VENV_PY) else _ROOT_VENV_PY
+)
+if _is_valid_venv(_VENV_PY) and os.path.normcase(sys.executable) != os.path.normcase(str(_VENV_PY)):
     import subprocess
     print(f"[BOOT] Re-launching under venv python: {_VENV_PY}")
     sys.exit(subprocess.call([str(_VENV_PY), "-u", os.path.abspath(__file__), *sys.argv[1:]]))
@@ -23,8 +32,6 @@ os.environ.setdefault("GLOG_minloglevel", "3")          # suppress glog INFO/WAR
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 os.environ.setdefault("MEDIAPIPE_DISABLE_GPU", "1")
-
-import io
 
 logging.getLogger("tensorflow").setLevel(logging.ERROR)
 logging.getLogger("absl").setLevel(logging.ERROR)
@@ -50,7 +57,6 @@ try:
     import mediapipe as mp
     import numpy as np
     import socket
-    import pickle
     import json
     import bluetooth
     import time
@@ -63,11 +69,10 @@ try:
     )
     from pathlib import Path
     from users import normalize_mac, load_users_by_mac
-    from movements import recognizer as _movements_recognizer  # kept for fallback
     from test_movements import recognizer
     from hand_shape_recognizer import normalize_landmarks, load_hand_shapes, recognize_hand_shape
     from context_store import ContextStore, apply_gesture_action
-    from event_protocol import build_event, event_to_console, to_pretty_json
+    from event_protocol import build_event, event_to_console
 
     from expression_tracker import ExpressionTracker
     from gaze_tracker import GazeTracker
@@ -88,9 +93,6 @@ finally:
         pass
     sys.stderr = _real_stderr
 
-SERVER_HOST = "0.0.0.0"
-SERVER_PORT = 5001
-TUIO_NOTE = "Remember to start your TUIO simulator/tracker on port 3333"
 PHONE_CAMERA_URL = ""
 PHONE_BT_NAME = "Phone"
 USERS_JSON_PATH = Path("TUIO11_NET-master") / "bin" / "Debug" / "users.json"
@@ -258,7 +260,6 @@ soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 soc.bind((hostname, port))
 soc.listen(5)
 soc.settimeout(1.0)
-Allpoints = []
 mp_pose = mp.solutions.pose
 
 
@@ -278,6 +279,9 @@ def wait_for_csharp_client(server_socket: socket.socket) -> tuple[socket.socket,
             if time.monotonic() - last_wait_log >= 5.0:
                 print("[SOCKET] Still waiting for C# GUI on port 5000...")
                 last_wait_log = time.monotonic()
+        # Keep the OpenCV message pump alive so the "Output" window
+        # doesn't freeze or close while we wait for C# to connect.
+        cv2.waitKey(1)
 
 
 conn, addr = wait_for_csharp_client(soc)
@@ -290,7 +294,6 @@ holistic = mp_holistic.Holistic(
     static_image_mode=False, min_detection_confidence=0.65, model_complexity=1
 )
 
-face_ids = {}
 frame_count = 0
 analysis_frame_counter = 0
 last_emotion = ""
@@ -316,18 +319,7 @@ all_macs = []
 
 
 class HCIServer:
-    """Main server class — one thread per connected client."""
-
-    def __init__(self):
-        self.face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._sock.bind((SERVER_HOST, SERVER_PORT))
-        self._sock.listen(5)
-        print(f"[SERVER] Listening on {SERVER_HOST}:{SERVER_PORT}")
-        print(f"[SERVER] {TUIO_NOTE}\n")
+    """Orchestrates Bluetooth discovery and user matching."""
 
     # Step 2 · Bluetooth Scan
 
@@ -490,18 +482,12 @@ _camera_window_created = False
 
 
 def set_camera_window(visible: bool) -> None:
-    """Show or hide the OpenCV live-feed window."""
+    """Toggle whether the camera feed is shown on the Output window."""
     global camera_window_visible, _camera_window_created
     if visible and not _camera_window_created:
         cv2.namedWindow("Output", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Output", 960, 640)
         _camera_window_created = True
-    elif not visible and _camera_window_created:
-        try:
-            cv2.destroyWindow("Output")
-        except Exception:
-            pass
-        _camera_window_created = False
     camera_window_visible = visible
 
 
@@ -720,7 +706,7 @@ while cap.isOpened():
 
     # ── Face login / signup flow (runs when BT found no known user) ───────────
     if signup_flow is not None and not signup_flow.done:
-        f_frame_signup = cv2.resize(frame, (480, 320))
+        f_frame_signup = cv2.resize(frame, (640, 480))
         frame_rgb_signup = cv2.cvtColor(f_frame_signup, cv2.COLOR_BGR2RGB)
         results_signup = holistic.process(frame_rgb_signup)
         annotated_signup = f_frame_signup.copy()
@@ -735,14 +721,11 @@ while cap.isOpened():
         )
 
         display_signup = cv2.resize(
-            annotated_signup, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_LINEAR
+            annotated_signup, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR
         )
-        if camera_window_visible:
-            cv2.imshow("Output", display_signup)
-            if cv2.waitKey(1) == ord("q"):
-                break
-        else:
-            time.sleep(0.005)
+        cv2.imshow("Output", display_signup)
+        if cv2.waitKey(1) == ord("q"):
+            break
 
         # Handle completion immediately — don't wait for next iteration
         if not signup_flow.done:
@@ -810,26 +793,6 @@ while cap.isOpened():
         f_frame = cv2.resize(frame, (480, 320))
         frame_rgb = cv2.cvtColor(f_frame, cv2.COLOR_BGR2RGB)
         frame_count += 1
-        # if frame_count % 60 == 0:
-        #     face_encodings = DeepFace.represent(
-        #         f_frame,
-        #         model_name="Facenet",
-        #         enforce_detection=False
-        #     )
-        #     if len(face_encodings) > 0:
-        #         face_id = tuple(face_encodings[0]["embedding"])
-        #         match = None
-        #         for k in face_ids:
-        #             if np.linalg.norm(np.array(face_id) - np.array(k)) < 15:
-        #                 match = face_ids[k]
-        #                 msg = "Known face recognized: " + match
-        #                 break
-        #         if match is None:
-        #             face_ids[face_id] = "Person " + str(len(face_ids) + 1)
-        #             msg = "New face detected: " + face_ids[face_id]
-        #             print("New face detected: " + face_ids[face_id])
-        #         else:
-        #             print("Known face recognized: " + match)
         results = holistic.process(frame_rgb)
         annotated_image = f_frame.copy()
         image_height, image_width, _ = frame_rgb.shape
@@ -1043,18 +1006,6 @@ while cap.isOpened():
             # Update top-right feedback label for any gesture that fired
             if msg:
                 show_gesture_feedback(msg, duration=3.0)
-        # x=int(results.pose.landmark[mp_pose.PoseLandmark.RIGHT_WRIST].x * image_width)
-        # y=int(results.pose.landmark[mp_pose.PoseLandmark.RIGHT_WRIST].y * image_height)
-        for face_id_key, name in face_ids.items():
-            cv2.putText(
-                annotated_image,
-                name,
-                (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 255, 0),
-                2,
-            )
         mp_drawing.draw_landmarks(
             annotated_image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS
         )
@@ -1086,8 +1037,7 @@ while cap.isOpened():
             last_interest_emotion,
             last_interest_delta,
         )
-        if camera_window_visible:
-            cv2.imshow("Output", display_image)
+        cv2.imshow("Output", display_image)
         # logic to send msg to unity
         if msg != "" and msg != old_msg:  # only send when there's actually something
             emit_transcription(conn, f"Gesture: {msg}")
@@ -1133,17 +1083,12 @@ while cap.isOpened():
 
         old_msg = msg
 
-        if msg == pickle.dumps("exit"):
+        if msg == "exit":
             break
     except Exception as e:
         print(e)
-    if camera_window_visible:
-        if cv2.waitKey(1) == ord("q"):
-            break
-    else:
-        # No HighGUI window → cv2.waitKey would do nothing useful and the loop
-        # would burn CPU. Sleep briefly so the rest of the loop can breathe.
-        time.sleep(0.005)
+    if cv2.waitKey(1) == ord("q"):
+        break
 
 try:
     result = save_session_reports(

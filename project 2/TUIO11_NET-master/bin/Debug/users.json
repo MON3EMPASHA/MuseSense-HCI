@@ -14,7 +14,9 @@
     "name": "Ayad Zewail",
     "age": "999",
     "gender": "non-binary",
-    "mac": ["43:6F:AB:C8:FA:F6"],
+    "mac": [
+      "43:6F:AB:C8:FA:F6"
+    ],
     "Profile": "",
     "favorites": [],
     "themeMode": "light",
@@ -25,7 +27,9 @@
     "name": "Youssef Abdulghany",
     "age": "12",
     "gender": "female",
-    "mac": ["54:C4:E5:20:E2:C8"],
+    "mac": [
+      "54:C4:E5:20:E2:C8"
+    ],
     "Profile": "",
     "favorites": [],
     "themeMode": "light",
@@ -36,7 +40,9 @@
     "name": "Mohamed Taha",
     "age": "21",
     "gender": "male",
-    "mac": ["9C:6B:72:01:A3:DA"],
+    "mac": [
+      "9C:6B:72:01:A3:DA"
+    ],
     "Profile": "objects/Taha.png",
     "favorites": [],
     "themeMode": "light",
@@ -55,34 +61,10 @@
       "10:5B:AD:2C:59:6C"
     ],
     "Profile": "objects/Monem.png",
-    "favorites": [3],
-    "themeMode": "light"
-  },
-  {
-    "name": "Abdelmonem Hatem",
-    "age": "21",
-    "gender": "male",
-    "mac": [
-      "64:D0:D6:AE:32:C1",
-      "64:D0:D6:58:C3:09",
-      "10:EC:81:8F:FD:BB",
-      "F4:B6:2D:FD:64:03",
-      "10:5B:AD:2C:59:6C"
+    "favorites": [
+      3
     ],
-    "Profile": "objects/Monem.png",
-    "favorites": [3],
     "themeMode": "light",
-    "role": null,
-    "password": null
-  },
-  {
-    "name": "Mohamed Ibrahim",
-    "age": "21",
-    "gender": "male",
-    "mac": null,
-    "Profile": "objects/Soltan.png",
-    "favorites": [4, 1],
-    "themeMode": "dark",
     "role": null,
     "password": null
   },
@@ -98,16 +80,24 @@
       "64:D0:D6:3B:C3:F5"
     ],
     "Profile": "",
-    "favorites": [2, 1, 0],
+    "favorites": [
+      2,
+      1,
+      0
+    ],
     "themeMode": ""
   },
   {
-    "name": "BBKKLL",
-    "age": "9",
+    "name": "7Y",
+    "age": "8",
     "gender": "Male",
     "mac": [],
-    "Profile": "objects/Soltan.png",
-    "images": ["objects/Soltan.png"],
+    "Profile": "objects/7Y.jpg",
+    "images": [
+      "objects/7Y.jpg",
+      "objects/7Y_2.jpg",
+      "objects/7Y_3.jpg"
+    ],
     "themeMode": "light"
   }
 ]
