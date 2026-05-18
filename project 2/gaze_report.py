@@ -73,10 +73,15 @@ class GazeSessionLogger:
 
         t = monotonic_ts if monotonic_ts is not None else time.monotonic()
         gaze_zone = (
-            str(expression.get("gaze_zone", "center")).strip().lower() or "center"
+            str(expression.get("gaze_zone", "center_center")).strip().lower() or "center_center"
         )
-        if gaze_zone not in {"left", "center", "right"}:
-            gaze_zone = "center"
+        valid_zones = {
+            "top_left", "top_center", "top_right",
+            "center_left", "center_center", "center_right",
+            "bottom_left", "bottom_center", "bottom_right",
+        }
+        if gaze_zone not in valid_zones:
+            gaze_zone = "center_center"
 
         def to_float(v) -> float | None:
             try:
@@ -101,9 +106,15 @@ class GazeSessionLogger:
         )
 
     def _zone_counts(self) -> dict[str, int]:
-        counts = {"left": 0, "center": 0, "right": 0}
+        zones = [
+            "top_left", "top_center", "top_right",
+            "center_left", "center_center", "center_right",
+            "bottom_left", "bottom_center", "bottom_right",
+        ]
+        counts = {z: 0 for z in zones}
         for s in self.samples:
-            counts[s.gaze_zone] = counts.get(s.gaze_zone, 0) + 1
+            z = s.gaze_zone if s.gaze_zone in counts else "center_center"
+            counts[z] += 1
         return counts
 
     def save_report(self, out_dir: Path) -> dict:
@@ -187,34 +198,37 @@ class GazeSessionLogger:
         mean_delta = float(sum(deltas) / len(deltas)) if deltas else 0.0
         max_abs_delta = float(max((abs(d) for d in deltas), default=0.0))
 
+        all_zones = [
+            "top_left", "top_center", "top_right",
+            "center_left", "center_center", "center_right",
+            "bottom_left", "bottom_center", "bottom_right",
+        ]
+
         # Transition matrix: zone_i → zone_{i+1}
-        transitions: dict[str, dict[str, int]] = {
-            "left":   {"left": 0, "center": 0, "right": 0},
-            "center": {"left": 0, "center": 0, "right": 0},
-            "right":  {"left": 0, "center": 0, "right": 0},
-        }
+        transitions: dict[str, dict[str, int]] = {z: {zz: 0 for zz in all_zones} for z in all_zones}
         for prev, curr in zip(self.samples, self.samples[1:]):
             if prev.gaze_zone in transitions and curr.gaze_zone in transitions[prev.gaze_zone]:
                 transitions[prev.gaze_zone][curr.gaze_zone] += 1
 
-        # Dwell durations per zone (sum of time spent in each zone segment)
-        dwell_seconds: dict[str, float] = {"left": 0.0, "center": 0.0, "right": 0.0}
+        # Dwell durations per zone
+        dwell_seconds: dict[str, float] = {z: 0.0 for z in all_zones}
         if len(self.samples) >= 2:
             for prev, curr in zip(self.samples, self.samples[1:]):
                 dt = max(0.0, curr.t - prev.t)
                 dwell_seconds[prev.gaze_zone] = dwell_seconds.get(prev.gaze_zone, 0.0) + dt
 
-        dominant_zone = max(counts, key=counts.get) if counts else "center"
+        dominant_zone = max(counts, key=counts.get) if counts else "center_center"
 
         # Per-zone average |gaze_delta|
-        zone_delta_sums: dict[str, float] = {"left": 0.0, "center": 0.0, "right": 0.0}
-        zone_delta_n:    dict[str, int]   = {"left": 0,   "center": 0,   "right": 0}
+        zone_delta_sums: dict[str, float] = {z: 0.0 for z in all_zones}
+        zone_delta_n:    dict[str, int]   = {z: 0   for z in all_zones}
         for s in self.samples:
-            zone_delta_sums[s.gaze_zone] = zone_delta_sums.get(s.gaze_zone, 0.0) + abs(s.gaze_delta or 0.0)
-            zone_delta_n[s.gaze_zone]    = zone_delta_n.get(s.gaze_zone, 0) + 1
+            z = s.gaze_zone if s.gaze_zone in zone_delta_sums else "center_center"
+            zone_delta_sums[z] += abs(s.gaze_delta or 0.0)
+            zone_delta_n[z] += 1
         zone_mean_abs_delta = {
             z: round(zone_delta_sums[z] / zone_delta_n[z], 4) if zone_delta_n.get(z, 0) else 0.0
-            for z in ("left", "center", "right")
+            for z in all_zones
         }
 
         started = time.strftime(
@@ -736,20 +750,12 @@ class GazeSessionLogger:
     def _render_heatmap(self, path: Path) -> None:
         """Render a 2-D gaze heatmap overlaid on a virtual-screen frame.
 
-        X axis = horizontal gaze direction in user-perspective ("left" gazes
-        land on the left third, "right" gazes on the right third, "center"
-        gazes in the middle). Within each zone we offset further toward the
-        edge proportionally to |gaze_delta| (stronger gaze → further edge).
-
-        Y axis = deterministic Gaussian-jitter around screen-center, so each
-        sample becomes a small splat rather than collapsing onto one line.
-        This avoids a featureless horizontal stripe and produces a real 2-D
-        density distribution.
+        Maps the 9 gaze zones (3×3 grid) onto the virtual screen.
+        Within each cell, |gaze_delta| pushes the point toward the edge.
         """
         width, height = 1280, 720
-        canvas = np.full((height, width, 3), 18, dtype=np.uint8)  # near-black bg
+        canvas = np.full((height, width, 3), 18, dtype=np.uint8)
 
-        # Virtual "screen" frame the user was looking at
         margin_x, margin_y = 90, 110
         sx1, sy1 = margin_x, margin_y
         sx2, sy2 = width - margin_x, height - margin_y
@@ -759,25 +765,34 @@ class GazeSessionLogger:
 
         rng = np.random.default_rng(seed=42)
 
+        # Normalised centre positions for each zone (col, row in [0,2])
+        # Columns: 0 = left, 1 = center, 2 = right
+        # Rows:    0 = top, 1 = center, 2 = bottom
+        _B = .25   # column/row centre base offsets
+        _D = .25   # max push from delta
+        _ZONES: dict[str, tuple[int, int, float, float]] = {
+            "top_left":      (0, 0, -1, -1), "top_center":      (1, 0,  0, -1), "top_right":      (2, 0,  1, -1),
+            "center_left":   (0, 1, -1,  0), "center_center":   (1, 1,  0,  0), "center_right":   (2, 1,  1,  0),
+            "bottom_left":   (0, 2, -1,  1), "bottom_center":   (1, 2,  0,  1), "bottom_right":   (2, 2,  1,  1),
+        }
+
         for sample in self.samples:
             zone = sample.gaze_zone
-            # Magnitude (clamped) controls how far the splat is pushed toward
-            # the edge of its zone. Mean delta on a strong look is ~0.10.
+            info = _ZONES.get(zone)
+            if info is None:
+                col, row, h_dir, v_dir = 1, 1, 0, 0
+            else:
+                col, row, h_dir, v_dir = info
             delta_mag = min(0.12, abs(sample.gaze_delta or 0.0))
 
-            if zone == "left":
-                base_x = 0.20 - delta_mag * 0.7   # pushes toward 0.12 max
-            elif zone == "right":
-                base_x = 0.80 + delta_mag * 0.7   # pushes toward 0.88 max
-            else:
-                base_x = 0.50
+            base_x = _B + col * (1.0 - 2 * _B) / 2 + _D * h_dir * delta_mag / 0.12 * _B
+            base_y = _B + row * (1.0 - 2 * _B) / 2 + _D * v_dir * delta_mag / 0.12 * _B
 
-            # Add a small natural jitter on both axes
-            jit_x = float(rng.normal(0.0, 0.018))
-            jit_y = float(rng.normal(0.0, 0.16))    # bigger to fill vertical
+            jit_x = float(rng.normal(0.0, 0.025))
+            jit_y = float(rng.normal(0.0, 0.025))
 
             fx = max(0.02, min(0.98, base_x + jit_x))
-            fy = max(0.05, min(0.95, 0.5 + jit_y))
+            fy = max(0.05, min(0.95, base_y + jit_y))
 
             x = int(fx * (sw - 1))
             y = int(fy * (sh - 1))
@@ -795,16 +810,17 @@ class GazeSessionLogger:
         # Virtual screen border
         cv2.rectangle(canvas, (sx1, sy1), (sx2, sy2), (190, 190, 190), 2)
 
-        # Zone-divider hairlines (visually mark the thirds)
-        third_l = sx1 + sw // 3
-        third_r = sx1 + 2 * sw // 3
-        for x in (third_l, third_r):
-            for y_seg in range(sy1, sy2, 16):
-                cv2.line(canvas, (x, y_seg), (x, y_seg + 8), (90, 90, 90), 1)
+        # Grid dividers (3x3)
+        xthirds = [sx1 + sw // 3, sx1 + 2 * sw // 3]
+        ythirds = [sy1 + sh // 3, sy1 + 2 * sh // 3]
+        for x in xthirds:
+            cv2.line(canvas, (x, sy1), (x, sy2), (90, 90, 90), 1)
+        for y in ythirds:
+            cv2.line(canvas, (sx1, y), (sx2, y), (90, 90, 90), 1)
 
         # Title block
         cv2.putText(
-            canvas, "Gaze Heatmap",
+            canvas, "Gaze Heatmap (3x3)",
             (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (240, 240, 240), 2,
         )
         cv2.putText(
@@ -812,62 +828,52 @@ class GazeSessionLogger:
             f"Samples: {len(self.samples)}",
             (30, 82), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 2,
         )
-        cv2.putText(
-            canvas,
-            "(X = gaze direction, user perspective)",
-            (30, height - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (140, 140, 140), 1,
-        )
 
-        # Zone labels with percentages directly under each third
+        # Zone labels with percentages
         counts = self._zone_counts()
         total = max(sum(counts.values()), 1)
-        zone_centers = [
-            sx1 + sw // 6,
-            sx1 + sw // 2,
-            sx1 + 5 * sw // 6,
-        ]
-        zone_colors = {
-            "left":   (90, 130, 255),
-            "center": (110, 220, 130),
-            "right":  (255, 140, 90),
-        }
-        label_y = sy2 + 42
-        for i, zone in enumerate(["left", "center", "right"]):
-            pct = (counts.get(zone, 0) / total) * 100.0
-            label = f"{zone.upper()}   {pct:.1f}%"
-            size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.72, 2)[0]
-            tx = zone_centers[i] - size[0] // 2
-            # Coloured dot
-            cv2.circle(canvas, (tx - 18, label_y - 8), 7, zone_colors[zone], -1)
-            cv2.putText(
-                canvas, label,
-                (tx, label_y),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.72, (235, 235, 235), 2,
-            )
-            sub = f"{counts.get(zone, 0)} samples"
-            sub_size = cv2.getTextSize(sub, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
-            cv2.putText(
-                canvas, sub,
-                (zone_centers[i] - sub_size[0] // 2, label_y + 24),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (160, 160, 160), 1,
-            )
+        col_centers = [sx1 + sw // 6, sx1 + sw // 2, sx1 + 5 * sw // 6]
+        row_centers = [sy1 + sh // 6, sy1 + sh // 2, sy1 + 5 * sh // 6]
 
-        # Scan path — connect consecutive samples in time order so the viewer
-        # can see how the gaze moved during the session. Drawn behind the
-        # heatmap for context; kept thin and translucent so it doesn't fight
-        # the density colours.
+        COLORS: dict[str, tuple] = {
+            "top_left": (90, 130, 255), "top_center": (110, 220, 130), "top_right": (255, 140, 90),
+            "center_left": (90, 130, 255), "center_center": (110, 220, 130), "center_right": (255, 140, 90),
+            "bottom_left": (90, 130, 255), "bottom_center": (110, 220, 130), "bottom_right": (255, 140, 90),
+        }
+        row_labels = ["top", "center", "bottom"]
+        col_labels = ["left", "center", "right"]
+
+        for ri, vname in enumerate(row_labels):
+            for ci, hname in enumerate(col_labels):
+                zone = f"{vname}_{hname}"
+                pct = (counts.get(zone, 0) / total) * 100.0
+                cx = col_centers[ci]
+                cy = row_centers[ri]
+                label = f"{pct:.1f}%"
+                size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0]
+                tx = cx - size[0] // 2
+                ty = cy + size[1] // 2
+                cv2.putText(canvas, label, (tx, ty),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLORS[zone], 2)
+
+        # Scan path
         if len(self.samples) >= 2:
+            _ZONES2: dict[str, tuple[int, int, float, float]] = {
+                "top_left":      (0, 0, -1, -1), "top_center":      (1, 0,  0, -1), "top_right":      (2, 0,  1, -1),
+                "center_left":   (0, 1, -1,  0), "center_center":   (1, 1,  0,  0), "center_right":   (2, 1,  1,  0),
+                "bottom_left":   (0, 2, -1,  1), "bottom_center":   (1, 2,  0,  1), "bottom_right":   (2, 2,  1,  1),
+            }
             pts: list[tuple[int, int]] = []
-            for i, sample in enumerate(self.samples):
+            for sample in self.samples:
                 zone = sample.gaze_zone
-                delta_mag = min(0.12, abs(sample.gaze_delta or 0.0))
-                if zone == "left":
-                    bx = 0.20 - delta_mag * 0.7
-                elif zone == "right":
-                    bx = 0.80 + delta_mag * 0.7
+                info = _ZONES2.get(zone)
+                if info is None:
+                    col, row, h_dir, v_dir = 1, 1, 0, 0
                 else:
-                    bx = 0.50
-                by = 0.5 + 0.32 * math.sin(i * 0.42)  # gentle vertical weave
+                    col, row, h_dir, v_dir = info
+                delta_mag = min(0.12, abs(sample.gaze_delta or 0.0))
+                bx = _B + col * (1.0 - 2 * _B) / 2 + _D * h_dir * delta_mag / 0.12 * _B
+                by = _B + row * (1.0 - 2 * _B) / 2 + _D * v_dir * delta_mag / 0.12 * _B
                 px = int(max(0.02, min(0.98, bx)) * (sw - 1)) + sx1
                 py = int(max(0.05, min(0.95, by)) * (sh - 1)) + sy1
                 pts.append((px, py))

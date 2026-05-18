@@ -244,10 +244,12 @@ public class TuioDemo : Form , TuioListener
         System.Timers.Timer effectsTimer;
 
         // Gaze spotlight (soft radial glow that follows the user's gaze across
-        // the three screen thirds).
+        // a 3×3 grid on screen).
         string lastGazeZone = "";          // raw zone from TRANS messages
-        float gazeSpotlightX = -1f;        // current animated centre X (negative = uninitialised)
-        float gazeSpotlightTargetX = -1f;  // where it should be (centre of the active third)
+        float gazeSpotlightX = -1f;        // current animated centre X
+        float gazeSpotlightTargetX = -1f;  // where it should be
+        float gazeSpotlightY = -1f;        // current animated centre Y
+        float gazeSpotlightTargetY = -1f;  // where it should be
         float gazeSpotlightAlpha = 0f;     // 0..1, fades in once we have a gaze fix
 
         // Circular menu control
@@ -1696,7 +1698,7 @@ public class TuioDemo : Form , TuioListener
                             emotionEngine.OnEmotionEvent(emotion);
 
                             // Extract gaze zone for the spotlight overlay.
-                            // Format: "happy (gaze: center)" — pull what's after "gaze:".
+                            // Format: "happy (gaze: center_center)" — pull what's after "gaze:".
                             int gIdx = rest.IndexOf("gaze:", StringComparison.OrdinalIgnoreCase);
                             if (gIdx >= 0)
                             {
@@ -1705,7 +1707,12 @@ public class TuioDemo : Form , TuioListener
                                 string zone =
                                     (zEnd > zStart ? rest.Substring(zStart, zEnd - zStart) : rest.Substring(zStart))
                                     .Trim().ToLowerInvariant();
-                                if (zone == "left" || zone == "right" || zone == "center")
+                                string[] parts = zone.Split('_');
+                                string vPart = parts.Length == 2 ? parts[0] : "center";
+                                string hPart = parts.Length == 2 ? parts[1] : "center";
+                                string[] validH = { "left", "center", "right" };
+                                string[] validV = { "top", "center", "bottom" };
+                                if (Array.IndexOf(validH, hPart) >= 0 && Array.IndexOf(validV, vPart) >= 0)
                                 {
                                     lastGazeZone = zone;
                                 }
@@ -2650,10 +2657,9 @@ public class TuioDemo : Form , TuioListener
         return "#" + id;
     }
 
-    // Soft accent-coloured radial glow that follows the user's gaze across the
-    // three screen thirds. Eased X-interpolation per paint, fade-in alpha, sits
-    // below all other overlays so the badge / transcription / effects remain
-    // legible on top of it.
+    // Soft radial glow that follows the user's gaze across a 3×3 grid.
+    // Eased X/Y interpolation per paint, fade-in alpha, sits below all other
+    // overlays so the badge / transcription / effects remain legible.
     private void DrawGazeSpotlight(Graphics g)
     {
         if (string.IsNullOrEmpty(lastGazeZone)) return;
@@ -2662,24 +2668,36 @@ public class TuioDemo : Form , TuioListener
         int W = this.ClientSize.Width;
         int H = this.ClientSize.Height;
 
-        // Target X is the centre of whichever third we're looking at.
-        switch (lastGazeZone)
+        // Parse zone: "top_left", "center_center", "bottom_right", etc.
+        string[] parts = lastGazeZone.Split('_');
+        string vPart = parts.Length == 2 ? parts[0] : "center";
+        string hPart = parts.Length == 2 ? parts[1] : "center";
+
+        // Target X: left = 1/6, center = 1/2, right = 5/6
+        switch (hPart)
         {
             case "left":   gazeSpotlightTargetX = W / 6f; break;
             case "right":  gazeSpotlightTargetX = 5 * W / 6f; break;
             default:       gazeSpotlightTargetX = W / 2f; break;
         }
+        // Target Y: top = 1/4, center = 1/2, bottom = 3/4
+        // (offset down by 40px so the glow sits over content rather than
+        //  the header band).
+        switch (vPart)
+        {
+            case "top":    gazeSpotlightTargetY = (int)(H * 0.25f) + 40; break;
+            case "bottom": gazeSpotlightTargetY = (int)(H * 0.75f) + 40; break;
+            default:       gazeSpotlightTargetY = (int)(H * 0.50f) + 40; break;
+        }
 
-        // First time we have a fix — snap to target instead of easing from 0.
-        if (gazeSpotlightX < 0f) gazeSpotlightX = gazeSpotlightTargetX;
+        // Snap directly to target (no easing — gaze needs to be instant).
+        gazeSpotlightX = gazeSpotlightTargetX;
+        gazeSpotlightY = gazeSpotlightTargetY;
 
-        // Ease toward the target (~18 % closer per paint).
-        gazeSpotlightX += (gazeSpotlightTargetX - gazeSpotlightX) * 0.18f;
-
-        // Fade in over the first ~20 paints.
+        // Fade in over ~20 paints.
         gazeSpotlightAlpha = Math.Min(1.0f, gazeSpotlightAlpha + 0.05f);
 
-        // Per-age intensity: subtler for Senior, brighter for Child.
+        // Per-age intensity.
         int peakAlpha;
         float radiusFactor;
         switch (activeProfile != null ? activeProfile.Mode : UIMode.Adult)
@@ -2691,13 +2709,11 @@ public class TuioDemo : Form , TuioListener
 
         int radius = (int)(Math.Min(W, H) * radiusFactor);
         int cx = (int)gazeSpotlightX;
-        // Push the glow centre down a bit so it sits over content (below the
-        // 105-px header band).
-        int cy = (H + 105) / 2;
+        int cy = (int)gazeSpotlightY;
 
         Rectangle rect = new Rectangle(cx - radius, cy - radius, radius * 2, radius * 2);
 
-        // GDI+ radial gradient: PathGradientBrush with an ellipse path.
+        // GDI+ radial gradient
         try
         {
             using (GraphicsPath path = new GraphicsPath())
@@ -2709,7 +2725,6 @@ public class TuioDemo : Form , TuioListener
                     int centreAlphaInt = (int)(peakAlpha * gazeSpotlightAlpha);
                     pgb.CenterColor = Color.FromArgb(centreAlphaInt, accentBrush.Color);
                     pgb.SurroundColors = new[] { Color.FromArgb(0, accentBrush.Color) };
-                    // Sharper falloff for a softer rim
                     pgb.FocusScales = new PointF(0.0f, 0.0f);
                     SmoothingMode prev = g.SmoothingMode;
                     g.SmoothingMode = SmoothingMode.AntiAlias;

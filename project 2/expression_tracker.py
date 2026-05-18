@@ -57,64 +57,48 @@ class ExpressionTracker:
         # Hysteresis: state-of-last classification keeps it stable between frames.
         self._emo_last_classified: str = "neutral"
 
-        # === Gaze state (rewritten v2) ===
-        # Rolling baseline samples. The baseline is the running median.
-        # Bigger window now (200 samples ≈ 30 s) so a few left/right glances
-        # don't shift the median. Window only grows past the bootstrap once
-        # the current classification is "center" (self-reinforcing — keeps
-        # the baseline locked onto looking-at-screen).
+        # === Gaze state (horizontal) ===
         self._gaze_h_samples: deque[float] = deque(maxlen=200)
         self._gaze_h_baseline: float | None = None
         self._gaze_h_bootstrap_count: int = 0
-        self._gaze_h_bootstrap_target: int = 30   # first 30 frames seed baseline unconditionally
+        self._gaze_h_bootstrap_target: int = 30
 
-        # Light EMA on the delta so the label doesn't flicker.
         self._gaze_h_ema: float = 0.0
-        self._gaze_ema_alpha: float = 0.65
+        self._gaze_ema_alpha: float = 0.80
 
-        # Need a minimum number of stable samples before we trust the baseline.
-        self._gaze_min_samples_to_classify: int = 15
-
-        # Default threshold floor in eye-bbox-ratio units (~5 % of eye width).
-        # Per-side adaptive thresholds below will override this once we have
-        # enough peak data.
+        self._gaze_min_samples_to_classify: int = 10
         self._gaze_threshold: float = 0.050
-        # Sample is "centered enough" to feed the baseline once |delta| below this:
-        self._gaze_center_capture_threshold: float = 0.040
+        self._gaze_center_capture_threshold: float = 0.020
 
-        # Per-side adaptive thresholds — handle anatomic / camera asymmetry
-        # where the user can deflect further on one side than the other.
-        # Updated continuously from the peak excursion histories below.
         self._gaze_pos_threshold: float = 0.050
         self._gaze_neg_threshold: float = 0.050
         self._gaze_pos_peaks: deque[float] = deque(maxlen=15)
         self._gaze_neg_peaks: deque[float] = deque(maxlen=15)
-        # |delta| has to clear this floor to be considered a "real" excursion
-        # worth recording in the peak history (filters jitter).
-        self._gaze_peak_noise_floor: float = 0.030
-        # Bound the adaptive threshold so it never gets ridiculous.
-        self._gaze_adapt_thresh_min: float = 0.025
-        self._gaze_adapt_thresh_max: float = 0.060
-        # Adaptive threshold = fraction × median peak.
-        self._gaze_adapt_thresh_factor: float = 0.45
+        self._gaze_peak_noise_floor: float = 0.015
+        self._gaze_adapt_thresh_min: float = 0.020
+        self._gaze_adapt_thresh_max: float = 0.055
+        self._gaze_adapt_thresh_factor: float = 0.50
 
-        # Camera mirror compensation. Many webcams (including most laptops)
-        # mirror the video before exposing it, so iris-moves-image-left in our
-        # ratio actually means the user is looking image-left = their right
-        # but the screen they look at is also flipped, so a screen-perspective
-        # mapping needs the labels swapped. True here = swap L/R.
         self._gaze_invert_lr: bool = True
 
-        # Head-motion detection: pause baseline updates briefly after a head
-        # turn so the median isn't polluted.
+        # === Gaze state (vertical) ===
+        self._gaze_v_samples: deque[float] = deque(maxlen=200)
+        self._gaze_v_baseline: float | None = None
+        self._gaze_v_bootstrap_count: int = 0
+        self._gaze_v_bootstrap_target: int = 30
+        self._gaze_v_ema: float = 0.0
+        self._gaze_v_threshold_up: float = 0.035
+        self._gaze_v_threshold_down: float = 0.035
+
+        # Head-motion detection
         self._last_nose_pos: tuple[float, float] | None = None
         self._head_motion_pause_until: float = 0.0
-        self._head_motion_threshold_px: float = 8.0   # frame-to-frame jump
+        self._head_motion_threshold_px: float = 8.0
 
-        # Blink filter — eye openness = vertical-extent / horizontal-extent.
+        # Blink filter
         self._min_eye_openness: float = 0.10
 
-        # Debug: log every zone transition to console for diagnosis.
+        # Debug: log every zone transition
         self._last_logged_gaze_zone: str = ""
 
     def reset_gaze_calibration(self) -> None:
@@ -122,6 +106,10 @@ class ExpressionTracker:
         self._gaze_h_baseline = None
         self._gaze_h_bootstrap_count = 0
         self._gaze_h_ema = 0.0
+        self._gaze_v_samples.clear()
+        self._gaze_v_baseline = None
+        self._gaze_v_bootstrap_count = 0
+        self._gaze_v_ema = 0.0
         self._last_nose_pos = None
         self._head_motion_pause_until = 0.0
         self._last_logged_gaze_zone = ""
@@ -363,23 +351,28 @@ class ExpressionTracker:
             x_b: float,
             y_top: float,
             y_bot: float,
-        ) -> tuple[float | None, float | None]:
-            """Return (horizontal_ratio_in_eye_bbox, openness_ratio) or (None, None)."""
+        ) -> tuple[float | None, float | None, float | None]:
+            """Return (horizontal_ratio, vertical_ratio, openness_ratio) or (None, None, None)."""
             if iris is None:
-                return None, None
+                return None, None, None
             x_min = min(x_a, x_b)
             x_max = max(x_a, x_b)
             eye_w = max(x_max - x_min, 1.0)
             eye_h = max(abs(y_bot - y_top), 1.0)
             h_r = (iris[0] - x_min) / eye_w
             h_r = max(0.0, min(1.0, h_r))
-            return h_r, eye_h / eye_w
+            v_r = (iris[1] - min(y_top, y_bot)) / eye_h
+            v_r = max(0.0, min(1.0, v_r))
+            return h_r, v_r, eye_h / eye_w
 
-        h_r_L, open_L = eye_metrics(iris_imgL, L_outer[0], L_inner[0], L_top[1], L_bot[1])
-        h_r_R, open_R = eye_metrics(iris_imgR, R_inner[0], R_outer[0], R_top[1], R_bot[1])
+        h_r_L, v_r_L, open_L = eye_metrics(iris_imgL, L_outer[0], L_inner[0], L_top[1], L_bot[1])
+        h_r_R, v_r_R, open_R = eye_metrics(iris_imgR, R_inner[0], R_outer[0], R_top[1], R_bot[1])
 
         h_ratios = [r for r in (h_r_L, h_r_R) if r is not None]
         h_ratio = sum(h_ratios) / len(h_ratios) if h_ratios else None
+
+        v_ratios = [r for r in (v_r_L, v_r_R) if r is not None]
+        v_ratio = sum(v_ratios) / len(v_ratios) if v_ratios else None
 
         opennesses = [o for o in (open_L, open_R) if o is not None]
         eye_openness = sum(opennesses) / len(opennesses) if opennesses else None
@@ -467,34 +460,72 @@ class ExpressionTracker:
         self._gaze_pos_threshold = _peak_thresh(self._gaze_pos_peaks)
         self._gaze_neg_threshold = _peak_thresh(self._gaze_neg_peaks)
 
-        # ---- Classification ----
-        # Mirror compensation: if _gaze_invert_lr is True (most laptop cameras
-        # mirror the video) positive delta means user-looked-screen-right.
-        # Otherwise positive delta means user-looked-screen-left.
-        if (
-            h_ratio is None
-            or n < self._gaze_min_samples_to_classify
-            or (eye_openness is not None and eye_openness < self._min_eye_openness)
-        ):
-            gaze_zone = "center"
-        elif h_delta > self._gaze_pos_threshold:
-            gaze_zone = "right" if self._gaze_invert_lr else "left"
-        elif h_delta < -self._gaze_neg_threshold:
-            gaze_zone = "left" if self._gaze_invert_lr else "right"
-        else:
-            gaze_zone = "center"
+        # ---- Vertical tracking (up/down) ----
+        v_baseline = (
+            self._gaze_v_baseline if self._gaze_v_baseline is not None else 0.5
+        )
+        if frame_clean:
+            if self._gaze_v_bootstrap_count < self._gaze_v_bootstrap_target:
+                self._gaze_v_samples.append(v_ratio)
+                self._gaze_v_bootstrap_count += 1
+            elif v_ratio is not None and abs(v_ratio - v_baseline) < self._gaze_center_capture_threshold:
+                self._gaze_v_samples.append(v_ratio)
+        nv = len(self._gaze_v_samples)
+        if nv >= 5:
+            sorted_v = sorted(self._gaze_v_samples)
+            self._gaze_v_baseline = sorted_v[nv // 2]
+        v_baseline = (
+            self._gaze_v_baseline if self._gaze_v_baseline is not None else 0.5
+        )
+        v_delta_raw = (v_ratio - v_baseline) if v_ratio is not None else 0.0
+        self._gaze_v_ema = (
+            self._gaze_ema_alpha * v_delta_raw
+            + (1.0 - self._gaze_ema_alpha) * self._gaze_v_ema
+        )
+        v_delta = self._gaze_v_ema
 
-        # Log a console line on every zone change so diagnosis is possible even
-        # when the camera preview is hidden (Child / Senior modes).
+        # ---- Combined 3x3 Classification ----
+        valid = (
+            h_ratio is not None
+            and v_ratio is not None
+            and n >= self._gaze_min_samples_to_classify
+            and nv >= self._gaze_min_samples_to_classify
+            and (eye_openness is None or eye_openness >= self._min_eye_openness)
+        )
+
+        if not valid:
+            h_zone = "center"
+            v_zone = "center"
+        else:
+            # Horizontal
+            if h_delta > self._gaze_pos_threshold:
+                h_zone = "right" if self._gaze_invert_lr else "left"
+            elif h_delta < -self._gaze_neg_threshold:
+                h_zone = "left" if self._gaze_invert_lr else "right"
+            else:
+                h_zone = "center"
+            # Vertical
+            if v_delta < -self._gaze_v_threshold_up:
+                v_zone = "top"
+            elif v_delta > self._gaze_v_threshold_down:
+                v_zone = "bottom"
+            else:
+                v_zone = "center"
+
+        gaze_zone = f"{v_zone}_{h_zone}"
+
+        # Log on every zone change
         if gaze_zone != self._last_logged_gaze_zone:
             print(
                 f"[GAZE] {self._last_logged_gaze_zone or '-'} -> {gaze_zone}  "
-                f"ratio={None if h_ratio is None else round(h_ratio, 3)} "
-                f"base={round(h_baseline, 3)} delta={round(h_delta, 4)} "
+                f"h_ratio={None if h_ratio is None else round(h_ratio, 3)} "
+                f"h_base={round(h_baseline, 3)} h_delta={round(h_delta, 4)} "
+                f"v_ratio={None if v_ratio is None else round(v_ratio, 3)} "
+                f"v_base={round(v_baseline, 3)} v_delta={round(v_delta, 4)} "
                 f"thr+={round(self._gaze_pos_threshold, 3)} "
                 f"thr-={round(self._gaze_neg_threshold, 3)} "
-                f"peaks=+{len(self._gaze_pos_peaks)}/-{len(self._gaze_neg_peaks)} "
-                f"samples={n} open={None if eye_openness is None else round(eye_openness, 3)}"
+                f"samples_h={n} samples_v={nv} "
+                f"open={None if eye_openness is None else round(eye_openness, 3)}"
             )
             self._last_logged_gaze_zone = gaze_zone
 
@@ -527,6 +558,9 @@ class ExpressionTracker:
             "gaze_ratio": None if h_ratio is None else round(h_ratio, 3),
             "gaze_baseline_ratio": round(h_baseline, 3),
             "gaze_delta": round(h_delta, 4),
+            "gaze_v_ratio": None if v_ratio is None else round(v_ratio, 3),
+            "gaze_v_baseline_ratio": round(v_baseline, 3),
+            "gaze_v_delta": round(v_delta, 4),
             "gaze_threshold_pos": round(self._gaze_pos_threshold, 4),
             "gaze_threshold_neg": round(self._gaze_neg_threshold, 4),
             "gaze_pos_peaks_n": len(self._gaze_pos_peaks),
