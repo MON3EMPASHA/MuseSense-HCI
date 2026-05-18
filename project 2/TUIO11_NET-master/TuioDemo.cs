@@ -5833,6 +5833,36 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
             return false;
         }
 
+        if (gesture == "AdminNextArtifact")
+        {
+            MoveSelection(1);
+            return true;
+        }
+
+        if (gesture == "AdminPrevArtifact")
+        {
+            MoveSelection(-1);
+            return true;
+        }
+
+        if (gesture == "AdminEditArtifact")
+        {
+            EditSelectedArtifact();
+            return true;
+        }
+
+        if (gesture == "AdminDeleteArtifact")
+        {
+            DeleteSelectedArtifact();
+            return true;
+        }
+
+        if (gesture == "AdminCreateArtifact")
+        {
+            CreateArtifact();
+            return true;
+        }
+
         if (gesture == "SwipeRight")
         {
             MoveSelection(1);

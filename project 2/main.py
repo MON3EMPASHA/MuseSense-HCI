@@ -19,10 +19,14 @@ _LOCAL_VENV_PY = _SCRIPT_DIR / ".venv" / "Scripts" / "python.exe"
 _ROOT_VENV_PY = _SCRIPT_DIR.parent / ".venv" / "Scripts" / "python.exe"
 # Also check "venv" (hidden-less) for setups that predate the rename.
 _OLD_VENV_PY = _SCRIPT_DIR / "venv" / "Scripts" / "python.exe"
-_VENV_PY = _ROOT_VENV_PY if _is_valid_venv(_ROOT_VENV_PY) else (
-    _LOCAL_VENV_PY if _is_valid_venv(_LOCAL_VENV_PY) else _OLD_VENV_PY
+_CURRENT_PY = Path(sys.executable)
+_VENV_PY = _LOCAL_VENV_PY if _is_valid_venv(_LOCAL_VENV_PY) else (
+    _ROOT_VENV_PY if _is_valid_venv(_ROOT_VENV_PY) else _OLD_VENV_PY
 )
-if _is_valid_venv(_VENV_PY) and os.path.normcase(sys.executable) != os.path.normcase(str(_VENV_PY)):
+# Keep the currently activated venv when one is already active. Only re-launch
+# when running outside a valid venv and a project-local fallback exists.
+_RUNNING_IN_VALID_VENV = _is_valid_venv(_CURRENT_PY)
+if (not _RUNNING_IN_VALID_VENV) and _is_valid_venv(_VENV_PY) and os.path.normcase(sys.executable) != os.path.normcase(str(_VENV_PY)):
     import subprocess
     print(f"[BOOT] Re-launching under venv python: {_VENV_PY}")
     sys.exit(subprocess.call([str(_VENV_PY), "-u", os.path.abspath(__file__), *sys.argv[1:]]))
@@ -314,6 +318,10 @@ shape_cooldown_time = 0.0
 _BASE_DIR = Path(__file__).parent
 hand_shapes = load_hand_shapes(str(_BASE_DIR / "hand_shapes.json"))
 print(f"[GESTURE] Loaded {len(hand_shapes)} static hand shapes: {list(hand_shapes.keys())}")
+admin_hand_shapes = load_hand_shapes(str(_BASE_DIR / "admin_hand_shapes.json"))
+print(
+    f"[GESTURE] Loaded {len(admin_hand_shapes)} admin hand shapes: {list(admin_hand_shapes.keys())}"
+)
 
 
 all_macs = []
@@ -472,6 +480,8 @@ gaze_session = GazeSessionLogger(active_user_name)
 reports_dir = Path("reports")
 
 cap = cv2.VideoCapture(0)
+failed_camera_reads = 0
+last_camera_reset = 0.0
 
 # === Adaptive interface: live-feed (OpenCV preview window) visibility ===
 # The C# GUI sends "CAMERA:ON" / "CAMERA:OFF" based on the logged-in user's
@@ -514,7 +524,21 @@ last_artifact_detections = []
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret or frame is None:
+        # Keep UI responsive and attempt a soft camera reset on repeated failures.
+        cv2.waitKey(1)
+        failed_camera_reads += 1
+        if failed_camera_reads >= 30 and (time.monotonic() - last_camera_reset) > 2.0:
+            last_camera_reset = time.monotonic()
+            failed_camera_reads = 0
+            try:
+                cap.release()
+            except Exception:
+                pass
+            cap = cv2.VideoCapture(0)
+        else:
+            time.sleep(0.01)
         continue
+    failed_camera_reads = 0
     msg = ""
 
     # Accept C# connection asynchronously if not connected yet
@@ -724,6 +748,9 @@ while cap.isOpened():
                 user_login = 1
 
     # ── Face login / signup flow (runs when BT found no known user) ───────────
+    if user_login == 1 or active_user_name == "admin":
+        signup_flow = None
+
     if signup_flow is not None and not signup_flow.done:
         f_frame_signup = cv2.resize(frame, (640, 480))
         frame_rgb_signup = cv2.cvtColor(f_frame_signup, cv2.COLOR_BGR2RGB)
@@ -966,13 +993,45 @@ while cap.isOpened():
         elif results.left_hand_landmarks:
             active_hand = results.left_hand_landmarks
 
-        if active_hand and hand_shapes and time.monotonic() > shape_cooldown_time:
+        if active_hand and time.monotonic() > shape_cooldown_time:
             norm = normalize_landmarks(active_hand)
-            shape_name, shape_score = recognize_hand_shape(norm, hand_shapes, threshold=0.45)
-            if shape_name and shape_score > 0.55:
-                msg = shape_name
+            user_shape_name, user_shape_score = recognize_hand_shape(
+                norm, hand_shapes, threshold=0.45
+            )
+
+            admin_shape_name = None
+            admin_shape_score = 0.0
+            if active_user_name == "admin":
+                # Admin shapes should trigger easily when performed correctly.
+                admin_shape_name, admin_shape_score = recognize_hand_shape(
+                    norm, admin_hand_shapes, threshold=9999.0
+                )
+
+            chosen_kind = None
+            chosen_name = None
+            chosen_score = 0.0
+
+            if user_shape_name and user_shape_score > 0.55:
+                chosen_kind = "user"
+                chosen_name = user_shape_name
+                chosen_score = user_shape_score
+
+            if admin_shape_name and active_user_name == "admin":
+                chosen_kind = "admin"
+                chosen_name = admin_shape_name
+                chosen_score = admin_shape_score
+
+            if chosen_name:
+                msg = chosen_name
                 shape_cooldown_time = time.monotonic() + 1.5
-                print(f"[GESTURE] Shape detected: {shape_name} (score={shape_score:.2f})")
+                if chosen_kind == "admin":
+                    print(
+                        f"[GESTURE] Shape detected (admin): {chosen_name} (score={chosen_score:.2f})"
+                    )
+                else:
+                    print(
+                        f"[GESTURE] Shape detected (user): {chosen_name} (score={chosen_score:.2f})"
+                    )
 
         # ── Dynamic trajectory (Index Finger) ──────────────────────────────
         if results.pose_landmarks is not None:

@@ -1,0 +1,52 @@
+{
+  "type": "gaze_session_report",
+  "user": "Abdelmonem Hatem",
+  "started_at": "2026-05-18 18:27:03",
+  "sample_count": 167,
+  "zone_counts": {
+    "left": 0,
+    "center": 167,
+    "right": 0
+  },
+  "zone_percent": {
+    "left": 0.0,
+    "center": 100.0,
+    "right": 0.0
+  },
+  "dominant_zone": "center",
+  "dwell_seconds": {
+    "left": 0.0,
+    "center": 90.95,
+    "right": 0.0
+  },
+  "transitions": {
+    "left": {
+      "left": 0,
+      "center": 0,
+      "right": 0
+    },
+    "center": {
+      "left": 0,
+      "center": 166,
+      "right": 0
+    },
+    "right": {
+      "left": 0,
+      "center": 0,
+      "right": 0
+    }
+  },
+  "zone_mean_abs_delta": {
+    "left": 0.0,
+    "center": 0.0107,
+    "right": 0.0
+  },
+  "mean_gaze_delta": 0.0006,
+  "max_abs_gaze_delta": 0.0485,
+  "artifacts": {
+    "png": "Abdelmonem_Hatem_gaze_20260518_182703.png",
+    "json": "Abdelmonem_Hatem_gaze_20260518_182703.json",
+    "heatmap": "Abdelmonem_Hatem_gaze_20260518_182703_heatmap.png",
+    "combo": "Abdelmonem_Hatem_gaze_20260518_182703_combo.png"
+  }
+}

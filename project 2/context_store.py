@@ -212,6 +212,46 @@ def apply_gesture_action(
     resolved_category = category or "general"
 
     # Keep action mapping procedural and explicit to match lab style.
+    if gesture_key == "create_artifact":
+        return {
+            "action": "open_create_artifact",
+            "result": "opened",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
+        }
+
+    if gesture_key == "edit_artifact":
+        return {
+            "action": "open_edit_artifact",
+            "result": "opened",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
+        }
+
+    if gesture_key == "delete_artifact":
+        return {
+            "action": "open_delete_artifact",
+            "result": "opened",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
+        }
+
+    if gesture_key == "next_artifact":
+        return {
+            "action": "open_next_artifact",
+            "result": "opened",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
+        }
+
+    if gesture_key == "prev_artifact":
+        return {
+            "action": "open_prev_artifact",
+            "result": "opened",
+            "item_id": resolved_item_id,
+            "category": resolved_category,
+        }
+
     if gesture_key in {"circle"}:
         return toggle_favorite(
             store,
