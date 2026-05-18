@@ -19,20 +19,20 @@ import numpy as np
 
 # ── Layouts ───────────────────────────────────────────────────────────────────
 _ROWS_ALPHA: list[list[str]] = [
-    ["1","2","3","4","5","6","7","8","9","0"],
+    ["1","2","3","4","5","6","7","8","9","OK"],
     ["Q","W","E","R","T","Y","U","I","O","P"],
     ["A","S","D","F","G","H","J","K","L","DEL"],
-    ["Z","X","C","V","B","N","M","SPC","OK","✕"],
+    ["Z","X","C","V","B","N","M","SPC","0"],
 ]
 
 _ROWS_NUM: list[list[str]] = [
-    ["7","8","9"],
+    ["OK","7","8"],
     ["4","5","6"],
     ["1","2","3"],
-    ["DEL","0","OK"],
+    ["DEL","0","9"],
 ]
 
-_ACTION_KEYS = {"DEL", "OK", "✕", "SPC"}
+_ACTION_KEYS = {"DEL", "OK", "SPC"}
 
 # ── Colours (BGR) ─────────────────────────────────────────────────────────────
 _C = {
@@ -61,6 +61,7 @@ _C = {
 # ── Timing ────────────────────────────────────────────────────────────────────
 CLICK_COOLDOWN   = 0.30   # seconds between key presses (faster = smoother typing)
 PINCH_DIST_PX    = 30     # index-middle distance threshold for a click
+PINCH_HOLD_TIME  = 0.5    # seconds pinch must be held to fire a click
 OPEN_HAND_HOLD   = 1.0    # seconds open-hand must be held to confirm
 
 # ── Cursor smoothing ──────────────────────────────────────────────────────────
@@ -151,6 +152,7 @@ class HandKeyboard:
         self._compute_layout()
 
         self._last_click_time: float  = 0.0
+        self._pinch_since: float | None = None
         self._hovered: tuple[int,int] | None = None
         self._clicked_key: str | None = None
         self._click_flash_until: float = 0.0
@@ -161,6 +163,8 @@ class HandKeyboard:
         # cursor smoothing state
         self._smooth_cx: float | None = None
         self._smooth_cy: float | None = None
+        self._smooth_mx: float | None = None
+        self._smooth_my: float | None = None
         self._cursor_valid: bool = False
 
     # ── layout ────────────────────────────────────────────────────────────────
@@ -171,29 +175,26 @@ class HandKeyboard:
 
         if self._mode == "alpha":
             cols = 10
-            # keyboard occupies ~94% of frame width (was 88%) for bigger keys
-            total_w = int(fw * 0.94)
-            pad     = max(4, total_w // 100)   # bigger gap to reduce adjacent mis-hits
+            total_w = int(fw * 0.86)
+            pad     = max(3, total_w // 120)
             self._kw  = (total_w - (cols - 1) * pad) // cols
-            self._kh  = max(42, int(fh * 0.105))  # taller keys (was max(36, fh*0.085))
+            self._kh  = max(32, int(fh * 0.08))
             self._pad = pad
             rows      = len(self._rows)
             kb_w      = cols * (self._kw + pad) - pad
             kb_h      = rows * (self._kh + pad) - pad
             self._ox  = (fw - kb_w) // 2
-            # sit keyboard in lower 55% of frame
-            self._oy  = int(fh * 0.45)
+            self._oy  = int(fh * 0.2)
         else:
-            # numeric pad: 3 columns, 4 rows, large keys
             cols = 3
-            self._kw  = int(fw * 0.18)   # bigger num keys (was 0.12)
-            self._kh  = int(fh * 0.14)   # taller num keys (was 0.12)
-            self._pad = 10
+            self._kw  = int(fw * 0.14)
+            self._kh  = int(fh * 0.11)
+            self._pad = 8
             rows      = len(self._rows)
             kb_w      = cols * (self._kw + self._pad) - self._pad
             kb_h      = rows * (self._kh + self._pad) - self._pad
             self._ox  = (fw - kb_w) // 2
-            self._oy  = int(fh * 0.38)
+            self._oy  = int(fh * 0.2)
 
     def _key_rect(self, r: int, c: int) -> tuple[int,int,int,int]:
         x1 = self._ox + c * (self._kw + self._pad)
@@ -223,22 +224,43 @@ class HandKeyboard:
             iy = int(round(self._smooth_cy))
             self._cursor_valid = True
 
+            # ── nearest-key hover (no more bounding-box overwrite) ──────
+            best_dist_sq = float("inf")
+            best_key = None
             for r, row in enumerate(self._rows):
                 for c in range(len(row)):
                     x1, y1, x2, y2 = self._key_rect(r, c)
-                    # Expand hit-box by 3px on each side for easier targeting
-                    if x1 - 3 <= ix <= x2 + 3 and y1 - 3 <= iy <= y2 + 3:
-                        self._hovered = (r, c)
+                    ckx = (x1 + x2) // 2
+                    cky = (y1 + y2) // 2
+                    dsq = (ix - ckx) ** 2 + (iy - cky) ** 2
+                    if dsq < best_dist_sq:
+                        best_dist_sq = dsq
+                        best_key = (r, c)
+            self._hovered = best_key
 
+            # ── pinch click with smoothed middle finger ─────────────────
             if middle_tip is not None:
-                mx, my = middle_tip
-                # Use smoothed cursor for pinch distance too
-                dist = ((ix - mx)**2 + (iy - my)**2) ** 0.5
+                mx_raw, my_raw = middle_tip
+                if self._smooth_mx is None:
+                    self._smooth_mx = float(mx_raw)
+                    self._smooth_my = float(my_raw)
+                else:
+                    self._smooth_mx += (mx_raw - self._smooth_mx) * CURSOR_EMA_ALPHA
+                    self._smooth_my += (my_raw - self._smooth_my) * CURSOR_EMA_ALPHA
+                mx = int(round(self._smooth_mx))
+                my = int(round(self._smooth_my))
+                dist = ((ix - mx) ** 2 + (iy - my) ** 2) ** 0.5
+                now = time.monotonic()
                 if dist < PINCH_DIST_PX:
-                    now = time.monotonic()
-                    if now - self._last_click_time > CLICK_COOLDOWN:
+                    if self._pinch_since is None:
+                        self._pinch_since = now
+                    elif (now - self._pinch_since >= PINCH_HOLD_TIME
+                          and now - self._last_click_time > CLICK_COOLDOWN):
                         clicked = True
                         self._last_click_time = now
+                        self._pinch_since = None
+                else:
+                    self._pinch_since = None
         else:
             self._cursor_valid = False
 
@@ -291,34 +313,36 @@ class HandKeyboard:
         kb_w = cols * (self._kw + self._pad) - self._pad
         kb_h = len(rows) * (self._kh + self._pad) - self._pad
 
-        # panel background
+        # transparent overlay for semi-transparent keys & input
+        overlay = frame.copy()
+
+        # panel background (very subtle)
         pad_x, pad_y = 12, 8
         input_h      = 36
         px1 = self._ox - pad_x
         py1 = self._oy - input_h - 14 - pad_y
         px2 = self._ox + kb_w + pad_x
         py2 = self._oy + kb_h + pad_y
-
-        overlay = frame.copy()
         _rounded_rect(overlay, px1, py1, px2, py2, _C["panel_bg"], radius=10)
-        cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
-        _rounded_rect(frame, px1, py1, px2, py2, _C["panel_border"], radius=10, thickness=1)
+        cv2.addWeighted(overlay, 0.4, frame, 0.6, 0, frame)
 
-        # input field
+        # input field (semi-transparent)
         inp_x1 = self._ox
         inp_y1 = self._oy - input_h - 8
         inp_x2 = self._ox + kb_w
         inp_y2 = self._oy - 8
-        _rounded_rect(frame, inp_x1, inp_y1, inp_x2, inp_y2, _C["input_bg"], radius=5)
-        _rounded_rect(frame, inp_x1, inp_y1, inp_x2, inp_y2, _C["input_border"], radius=5, thickness=1)
+        inp_overlay = frame.copy()
+        _rounded_rect(inp_overlay, inp_x1, inp_y1, inp_x2, inp_y2, _C["input_bg"], radius=5)
+        _rounded_rect(inp_overlay, inp_x1, inp_y1, inp_x2, inp_y2, _C["input_border"], radius=5, thickness=1)
+        cv2.addWeighted(inp_overlay, 0.4, frame, 0.6, 0, frame)
 
         display = (self.text[-38:] if len(self.text) > 38 else self.text) + "|"
         cv2.putText(frame, display, (inp_x1 + 8, inp_y2 - 9),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.48, _C["input_text"], 1, cv2.LINE_AA)
 
-        # keys
+        # keys (semi-transparent)
+        key_overlay = frame.copy()
         for r, row in enumerate(rows):
-            # centre short rows (e.g. num pad last row)
             row_w = len(row) * (self._kw + self._pad) - self._pad
             row_ox = self._ox + (kb_w - row_w) // 2
 
@@ -343,7 +367,8 @@ class HandKeyboard:
                 else:
                     bg, border = _C["key_bg"], _C["key_border"]
 
-                _draw_key_box(frame, x1, y1, x2, y2, bg, border, key)
+                _draw_key_box(key_overlay, x1, y1, x2, y2, bg, border, key)
+        cv2.addWeighted(key_overlay, 0.4, frame, 0.6, 0, frame)
 
         # ── smoothed cursor crosshair ────────────────────────────────────
         if self._cursor_valid and self._smooth_cx is not None:

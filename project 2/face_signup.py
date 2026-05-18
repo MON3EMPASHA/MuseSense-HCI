@@ -21,7 +21,13 @@ from typing import Any
 import cv2
 import numpy as np
 
-from hand_keyboard import HandKeyboard, _is_open_hand, OPEN_HAND_HOLD
+from hand_keyboard import (
+    HandKeyboard,
+    _is_open_hand,
+    OPEN_HAND_HOLD,
+    PINCH_DIST_PX,
+    CLICK_COOLDOWN,
+)
 from face_recognizer import FaceRecognizer
 
 # ── tunables ──────────────────────────────────────────────────────────────────
@@ -172,7 +178,6 @@ class FaceSignupFlow:
         self._gender_hovered: int | None = None
         self._gender_selected: int | None = None
         self._gender_confirmed: bool = False
-        self._gender_cancelled: bool = False
         self._gender_last_click: float = 0.0
 
         # multi-capture state
@@ -268,13 +273,8 @@ class FaceSignupFlow:
         self._keyboard.update(annotated, index_tip, middle_tip,
                               left_hand_landmarks=holistic_results.left_hand_landmarks)
 
-        cv2.putText(annotated, "Type your name  (open left hand=confirm  X=cancel)",
+        cv2.putText(annotated, "Type your name  (open left hand=confirm)",
                     (4, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (0, 220, 255), 1)
-
-        if self._keyboard.cancelled:
-            self.done   = True
-            self.result = {"status": "guest"}
-            return
 
         if self._keyboard.confirmed:
             name = self._keyboard.text.strip()
@@ -301,13 +301,8 @@ class FaceSignupFlow:
         self._keyboard.update(annotated, index_tip, middle_tip,
                               left_hand_landmarks=holistic_results.left_hand_landmarks)
 
-        cv2.putText(annotated, "Type your age  (digits only, open left hand=confirm  X=cancel)",
+        cv2.putText(annotated, "Type your age  (digits only, open left hand=confirm)",
                     (4, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 220, 255), 1)
-
-        if self._keyboard.cancelled:
-            self.done   = True
-            self.result = {"status": "guest"}
-            return
 
         if self._keyboard.confirmed:
             age_text = self._keyboard.text.strip()
@@ -354,24 +349,20 @@ class FaceSignupFlow:
         conf_x2 = conf_x1 + conf_w
         conf_y2 = conf_y1 + conf_h
 
-        # Cancel button — to the right of confirm
-        canc_w, canc_h = 70, 36
-        canc_x1 = conf_x2 + 14
-        canc_y1 = conf_y1
-        canc_x2 = canc_x1 + canc_w
-        canc_y2 = canc_y1 + canc_h
-
-        all_rects  = gender_rects + [(conf_x1, conf_y1, conf_x2, conf_y2),
-                                     (canc_x1, canc_y1, canc_x2, canc_y2)]
+        all_rects  = gender_rects + [(conf_x1, conf_y1, conf_x2, conf_y2)]
         CONFIRM_IDX = len(gender_opts)
-        CANCEL_IDX  = len(gender_opts) + 1
 
-        # ── hover detection ───────────────────────────────────────────────
+        # ── nearest-key hover ────────────────────────────────────────────
         self._gender_hovered = None
         if index_tip is not None:
             ix, iy = index_tip
+            best_dsq = float("inf")
             for i, (x1, y1, x2, y2) in enumerate(all_rects):
-                if x1 <= ix <= x2 and y1 <= iy <= y2:
+                ckx = (x1 + x2) // 2
+                cky = (y1 + y2) // 2
+                dsq = (ix - ckx) ** 2 + (iy - cky) ** 2
+                if dsq < best_dsq:
+                    best_dsq = dsq
                     self._gender_hovered = i
 
         # ── pinch click ───────────────────────────────────────────────────
@@ -382,7 +373,7 @@ class FaceSignupFlow:
             mx, my = middle_tip
             dist = ((ix - mx) ** 2 + (iy - my) ** 2) ** 0.5
             now  = time.monotonic()
-            if dist < 18 and now - self._gender_last_click > 0.5:
+            if dist < PINCH_DIST_PX and now - self._gender_last_click > CLICK_COOLDOWN:
                 clicked_idx = self._gender_hovered
                 self._gender_last_click = now
 
@@ -390,9 +381,8 @@ class FaceSignupFlow:
             if clicked_idx < len(gender_opts):
                 self._gender_selected = clicked_idx
             elif clicked_idx == CONFIRM_IDX:
-                self._gender_confirmed = True
-            elif clicked_idx == CANCEL_IDX:
-                self._gender_cancelled = True
+                if self._gender_selected is not None:
+                    self._gender_confirmed = True
 
         # ── draw ──────────────────────────────────────────────────────────
         _center_text(annotated, "Select your gender",
@@ -429,22 +419,13 @@ class FaceSignupFlow:
                     (conf_x1 + (conf_w - tw) // 2, conf_y1 + (conf_h + th) // 2 - 2),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1, cv2.LINE_AA)
 
-        # cancel button
-        canc_hover = self._gender_hovered == CANCEL_IDX
-        canc_bg    = (140, 35, 35) if canc_hover else (100, 25, 25)
-        canc_brd   = (220, 70, 70) if canc_hover else (170, 50, 50)
-        cv2.rectangle(annotated, (canc_x1, canc_y1), (canc_x2, canc_y2), canc_bg, -1)
-        cv2.rectangle(annotated, (canc_x1, canc_y1), (canc_x2, canc_y2), canc_brd, 2)
-        (tw, th), _ = cv2.getTextSize("Cancel", cv2.FONT_HERSHEY_SIMPLEX, 0.42, 1)
-        cv2.putText(annotated, "Cancel",
-                    (canc_x1 + (canc_w - tw) // 2, canc_y1 + (canc_h + th) // 2 - 2),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1, cv2.LINE_AA)
+        # (cancel button removed)
 
         # hint
         hint = (f"Selected: {gender_opts[self._gender_selected]}  — pinch Confirm"
                 if self._gender_selected is not None
                 else "Pinch a gender to select, then pinch Confirm")
-        _center_text(annotated, hint, canc_y2 + 16, 0.35, (160, 160, 180), 1)
+        _center_text(annotated, hint, conf_y2 + 16, 0.35, (160, 160, 180), 1)
 
         # cursor dots
         if index_tip is not None:
@@ -455,11 +436,6 @@ class FaceSignupFlow:
             cv2.circle(annotated, middle_tip, 5, (0, 0, 0), 1)
 
         # ── transitions ───────────────────────────────────────────────────
-        if self._gender_cancelled:
-            self.done   = True
-            self.result = {"status": "guest"}
-            return
-
         if self._gender_confirmed:
             gender = (gender_opts[self._gender_selected]
                       if self._gender_selected is not None else "")
