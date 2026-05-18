@@ -1256,17 +1256,17 @@ public class TuioDemo : Form , TuioListener
 
     private void TryOpenAdminPortal()
     {
-        using (var loginForm = new AdminLoginForm())
+        using (var passwordEntry = new GestureTextEntryForm("Scan marker 110, then enter the admin password", string.Empty))
         {
-            if (loginForm.ShowDialog(this) != DialogResult.OK)
+            if (passwordEntry.ShowDialog(this) != DialogResult.OK || passwordEntry.WasCancelled)
             {
                 return;
             }
 
-            UserRecord adminUser = FindAdminUser(loginForm.EnteredUsername, loginForm.EnteredPassword);
+            UserRecord adminUser = FindAdminUserByPassword(passwordEntry.ResultText);
             if (adminUser == null)
             {
-                MessageBox.Show(this, "Invalid admin credentials.", "Admin Authentication", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "Invalid admin password.", "Admin Authentication", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
         }
@@ -1295,6 +1295,40 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
+    private bool RouteGestureToAdmin(string gesture)
+    {
+        if (string.IsNullOrWhiteSpace(gesture)) return false;
+
+        if (InvokeRequired)
+        {
+            try
+            {
+                return (bool)Invoke(new Func<bool>(() => RouteGestureToAdmin(gesture)));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        for (int i = Application.OpenForms.Count - 1; i >= 0; i--)
+        {
+            Form openForm = Application.OpenForms[i];
+            IAdminGestureReceiver receiver = openForm as IAdminGestureReceiver;
+            if (receiver == null || !openForm.Visible)
+            {
+                continue;
+            }
+
+            if (receiver.HandleGestureCommand(gesture))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private UserRecord FindAdminUser(string username, string password)
     {
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
@@ -1318,6 +1352,36 @@ public class TuioDemo : Form , TuioListener
 
             if (string.Equals((user.name ?? string.Empty).Trim(), normalizedUsername, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals((user.password ?? string.Empty).Trim(), password, StringComparison.Ordinal))
+            {
+                return user;
+            }
+        }
+
+        return null;
+    }
+
+    private UserRecord FindAdminUserByPassword(string password)
+    {
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            return null;
+        }
+
+        string candidatePassword = password.Trim();
+        foreach (UserRecord user in allUsers)
+        {
+            if (user == null)
+            {
+                continue;
+            }
+
+            string userRole = string.IsNullOrWhiteSpace(user.role) ? string.Empty : user.role.Trim().ToLowerInvariant();
+            if (userRole != "admin")
+            {
+                continue;
+            }
+
+            if (string.Equals(user.password ?? string.Empty, candidatePassword, StringComparison.Ordinal))
             {
                 return user;
             }
@@ -1705,6 +1769,13 @@ public class TuioDemo : Form , TuioListener
             else
             {
                 string gesture = msg.Trim();
+
+                if (RouteGestureToAdmin(gesture))
+                {
+                    SafeInvalidate();
+                    oldmsg = msg;
+                    continue;
+                }
 
                 // SwipeRight: navigate next artifact (on detail page) or next menu page
                 if (gesture == "SwipeRight")
@@ -4562,6 +4633,177 @@ public class TuioDemo : Form , TuioListener
 		}
 	}
 
+internal interface IAdminGestureReceiver
+{
+    bool HandleGestureCommand(string gesture);
+}
+
+public sealed class GestureTextEntryForm : Form, IAdminGestureReceiver
+{
+    private static readonly string[] Tokens = new[]
+    {
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+        "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+        "U", "V", "W", "X", "Y", "Z", "0", "1", "2", "3",
+        "4", "5", "6", "7", "8", "9", "SPACE", "BACK", "DONE", "CANCEL"
+    };
+
+    private readonly Label promptLabel;
+    private readonly Label bufferLabel;
+    private readonly Label tokenLabel;
+    private readonly Label hintLabel;
+    private int tokenIndex;
+    private string buffer;
+
+    public string ResultText { get { return buffer; } }
+    public bool WasCancelled { get; private set; }
+
+    public GestureTextEntryForm(string prompt, string initialText)
+    {
+        Text = "Gesture Input";
+        StartPosition = FormStartPosition.CenterParent;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        ClientSize = new Size(760, 260);
+        BackColor = Color.FromArgb(241, 245, 250);
+
+        buffer = initialText ?? string.Empty;
+
+        promptLabel = new Label
+        {
+            Text = prompt,
+            Font = new Font("Segoe UI", 16f, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(24, 20)
+        };
+
+        bufferLabel = new Label
+        {
+            Text = buffer.Length > 0 ? buffer : "<empty>",
+            Font = new Font("Segoe UI", 15f, FontStyle.Bold),
+            AutoSize = false,
+            Width = 710,
+            Height = 70,
+            Location = new Point(24, 72),
+            BorderStyle = BorderStyle.FixedSingle,
+            BackColor = Color.White,
+            Padding = new Padding(12)
+        };
+
+        tokenLabel = new Label
+        {
+            Text = CurrentTokenText(),
+            Font = new Font("Segoe UI", 18f, FontStyle.Bold),
+            AutoSize = false,
+            Width = 220,
+            Height = 64,
+            Location = new Point(24, 154),
+            BorderStyle = BorderStyle.FixedSingle,
+            BackColor = Color.FromArgb(223, 235, 255),
+            Padding = new Padding(10)
+        };
+
+        hintLabel = new Label
+        {
+            Text = "Swipe Left/Right = change token   Circle = select   Mute = backspace   DarkMode = done",
+            Font = new Font("Segoe UI", 10f),
+            AutoSize = true,
+            Location = new Point(24, 226),
+            ForeColor = Color.FromArgb(88, 98, 112)
+        };
+
+        Controls.Add(promptLabel);
+        Controls.Add(bufferLabel);
+        Controls.Add(tokenLabel);
+        Controls.Add(hintLabel);
+    }
+
+    private string CurrentTokenText()
+    {
+        return "Token: " + Tokens[tokenIndex];
+    }
+
+    private void RefreshView()
+    {
+        bufferLabel.Text = buffer.Length > 0 ? buffer : "<empty>";
+        tokenLabel.Text = CurrentTokenText();
+    }
+
+    private void AppendToken(string token)
+    {
+        if (token == "SPACE") buffer += " ";
+        else buffer += token;
+    }
+
+    public bool HandleGestureCommand(string gesture)
+    {
+        if (string.IsNullOrWhiteSpace(gesture)) return false;
+
+        if (gesture == "SwipeRight")
+        {
+            tokenIndex = (tokenIndex + 1) % Tokens.Length;
+            RefreshView();
+            return true;
+        }
+
+        if (gesture == "SwipeLeft")
+        {
+            tokenIndex = (tokenIndex - 1 + Tokens.Length) % Tokens.Length;
+            RefreshView();
+            return true;
+        }
+
+        if (gesture == "Circle")
+        {
+            string token = Tokens[tokenIndex];
+            if (token == "BACK")
+            {
+                if (buffer.Length > 0) buffer = buffer.Substring(0, buffer.Length - 1);
+            }
+            else if (token == "DONE")
+            {
+                DialogResult = DialogResult.OK;
+                Close();
+                return true;
+            }
+            else if (token == "CANCEL")
+            {
+                WasCancelled = true;
+                DialogResult = DialogResult.Cancel;
+                Close();
+                return true;
+            }
+            else
+            {
+                AppendToken(token);
+            }
+
+            RefreshView();
+            return true;
+        }
+
+        if (gesture == "Mute")
+        {
+            if (buffer.Length > 0)
+            {
+                buffer = buffer.Substring(0, buffer.Length - 1);
+                RefreshView();
+            }
+            return true;
+        }
+
+        if (gesture == "DarkMode")
+        {
+            DialogResult = DialogResult.OK;
+            Close();
+            return true;
+        }
+
+        return false;
+    }
+}
+
 public sealed class AdminLoginForm : Form
 {
     private readonly TextBox usernameTextBox;
@@ -4692,7 +4934,7 @@ internal sealed class AdminArtifactRoot
     public List<AdminArtifact> artifacts { get; set; }
 }
 
-public sealed class AdminArtifactEditorForm : Form
+public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
 {
     private readonly TextBox idBox;
     private readonly TextBox tuioIdBox;
@@ -4710,6 +4952,10 @@ public sealed class AdminArtifactEditorForm : Form
     private readonly TextBox audioPathBox;
     private readonly TextBox colorBox;
     private readonly TextBox narrationBox;
+    private readonly TextBox[] editableFields;
+    private readonly string[] editableFieldNames;
+    private readonly Label gestureHintLabel;
+    private int activeFieldIndex;
 
     public AdminArtifact Artifact { get; private set; }
 
@@ -4753,6 +4999,36 @@ public sealed class AdminArtifactEditorForm : Form
         colorBox = AddField(panel, "Theme Color", artifact.color, leftX, ref y);
         narrationBox = AddMultiLineField(panel, "Narration", artifact.narration, rightX, 110, ref y);
 
+        editableFields = new[]
+        {
+            idBox, tuioIdBox, nameBox, categoryBox, descriptionBox, historicalInfoBox,
+            tagsBox, periodBox, birthDateBox, eraBox, originBox, countryBox,
+            objPathBox, audioPathBox, colorBox, narrationBox
+        };
+        editableFieldNames = new[]
+        {
+            "Artifact ID", "TUIO ID", "Title", "Category", "Description",
+            "Historical Information", "Tags", "Date/Period", "Birth Date", "Era",
+            "Origin", "Country", "Image/Model Path", "Audio Path", "Theme Color", "Narration"
+        };
+
+        foreach (var field in editableFields)
+        {
+            field.ReadOnly = true;
+            field.BackColor = Color.White;
+        }
+
+        gestureHintLabel = new Label
+        {
+            Text = "Gesture controls: Swipe Left/Right = field, Circle = edit field, Mute = cancel, DarkMode = save",
+            AutoSize = true,
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(88, 98, 112),
+            Location = new Point(24, 12)
+        };
+        panel.Controls.Add(gestureHintLabel);
+        HighlightActiveField();
+
         var cancelButton = new Button
         {
             Text = "Cancel",
@@ -4777,50 +5053,143 @@ public sealed class AdminArtifactEditorForm : Form
 
         saveButton.Click += (s, e) =>
         {
-            int parsedId;
-            int parsedTuioId;
-            if (!int.TryParse(idBox.Text.Trim(), out parsedId))
+            if (TryCommitArtifact())
             {
-                MessageBox.Show(this, "Artifact ID must be a valid integer.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                DialogResult = DialogResult.OK;
+                Close();
             }
-            if (!int.TryParse(tuioIdBox.Text.Trim(), out parsedTuioId))
-            {
-                MessageBox.Show(this, "TUIO ID must be a valid integer.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(nameBox.Text))
-            {
-                MessageBox.Show(this, "Title is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            Artifact = new AdminArtifact
-            {
-                id = parsedId,
-                tuioId = parsedTuioId,
-                name = nameBox.Text.Trim(),
-                description = descriptionBox.Text.Trim(),
-                category = categoryBox.Text.Trim(),
-                historicalInfo = historicalInfoBox.Text.Trim(),
-                tags = tagsBox.Text.Trim(),
-                period = periodBox.Text.Trim(),
-                birthDate = birthDateBox.Text.Trim(),
-                era = eraBox.Text.Trim(),
-                origin = originBox.Text.Trim(),
-                country = countryBox.Text.Trim(),
-                objPath = objPathBox.Text.Trim(),
-                audioPath = audioPathBox.Text.Trim(),
-                color = colorBox.Text.Trim(),
-                narration = narrationBox.Text.Trim()
-            };
-
-            DialogResult = DialogResult.OK;
-            Close();
         };
 
         panel.Controls.Add(cancelButton);
         panel.Controls.Add(saveButton);
+    }
+
+    private void HighlightActiveField()
+    {
+        for (int i = 0; i < editableFields.Length; i++)
+        {
+            editableFields[i].BackColor = i == activeFieldIndex ? Color.FromArgb(223, 235, 255) : Color.White;
+        }
+
+        gestureHintLabel.Text = "Editing: " + editableFieldNames[activeFieldIndex] + "   |   Swipe Left/Right = field   Circle = edit   Mute = cancel   DarkMode = save";
+    }
+
+    private void MoveField(int delta)
+    {
+        activeFieldIndex = (activeFieldIndex + delta) % editableFields.Length;
+        if (activeFieldIndex < 0)
+        {
+            activeFieldIndex += editableFields.Length;
+        }
+
+        HighlightActiveField();
+    }
+
+    private bool TryEditActiveField()
+    {
+        string prompt = "Enter " + editableFieldNames[activeFieldIndex];
+        string initial = editableFields[activeFieldIndex].Text ?? string.Empty;
+
+        using (var input = new GestureTextEntryForm(prompt, initial))
+        {
+            if (input.ShowDialog(this) != DialogResult.OK || input.WasCancelled)
+            {
+                return false;
+            }
+
+            editableFields[activeFieldIndex].Text = input.ResultText;
+        }
+
+        return true;
+    }
+
+    private bool TryCommitArtifact()
+    {
+        int parsedId;
+        int parsedTuioId;
+        if (!int.TryParse(idBox.Text.Trim(), out parsedId))
+        {
+            MessageBox.Show(this, "Artifact ID must be a valid integer.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+        if (!int.TryParse(tuioIdBox.Text.Trim(), out parsedTuioId))
+        {
+            MessageBox.Show(this, "TUIO ID must be a valid integer.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(nameBox.Text))
+        {
+            MessageBox.Show(this, "Title is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        Artifact = new AdminArtifact
+        {
+            id = parsedId,
+            tuioId = parsedTuioId,
+            name = nameBox.Text.Trim(),
+            description = descriptionBox.Text.Trim(),
+            category = categoryBox.Text.Trim(),
+            historicalInfo = historicalInfoBox.Text.Trim(),
+            tags = tagsBox.Text.Trim(),
+            period = periodBox.Text.Trim(),
+            birthDate = birthDateBox.Text.Trim(),
+            era = eraBox.Text.Trim(),
+            origin = originBox.Text.Trim(),
+            country = countryBox.Text.Trim(),
+            objPath = objPathBox.Text.Trim(),
+            audioPath = audioPathBox.Text.Trim(),
+            color = colorBox.Text.Trim(),
+            narration = narrationBox.Text.Trim()
+        };
+
+        return true;
+    }
+
+    public bool HandleGestureCommand(string gesture)
+    {
+        if (string.IsNullOrWhiteSpace(gesture))
+        {
+            return false;
+        }
+
+        if (gesture == "SwipeRight")
+        {
+            MoveField(1);
+            return true;
+        }
+
+        if (gesture == "SwipeLeft")
+        {
+            MoveField(-1);
+            return true;
+        }
+
+        if (gesture == "Circle")
+        {
+            TryEditActiveField();
+            return true;
+        }
+
+        if (gesture == "Mute")
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+            return true;
+        }
+
+        if (gesture == "DarkMode")
+        {
+            if (TryCommitArtifact())
+            {
+                DialogResult = DialogResult.OK;
+                Close();
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     private static TextBox AddField(Control parent, string label, string value, int x, ref int y)
@@ -4863,7 +5232,7 @@ internal sealed class ArtifactAnalytics
     public double FinalScore { get; set; }
 }
 
-public sealed class AdminDashboardForm : Form
+public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
 {
     private readonly string artifactsPath;
     private readonly string contextPath;
@@ -4879,6 +5248,7 @@ public sealed class AdminDashboardForm : Form
     private readonly Label usersLabel;
     private readonly Label averageViewsLabel;
     private readonly ListView analyticsList;
+    private readonly Label adminHintLabel;
 
     private List<AdminArtifact> artifacts = new List<AdminArtifact>();
 
@@ -5037,6 +5407,16 @@ public sealed class AdminDashboardForm : Form
         rightPanel.Controls.Add(averageViewsLabel);
         rightPanel.Controls.Add(analyticsList);
 
+        adminHintLabel = new Label
+        {
+            Text = "Gesture controls: Swipe Left/Right = select artifact, Circle = edit, Mute = delete, DarkMode = create",
+            AutoSize = true,
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(88, 98, 112),
+            Location = new Point(24, 800)
+        };
+        rightPanel.Controls.Add(adminHintLabel);
+
         ReloadAll();
     }
 
@@ -5150,6 +5530,21 @@ public sealed class AdminDashboardForm : Form
         }).ToList();
 
         artifactGrid.DataSource = filtered;
+        SelectFirstArtifactIfNeeded();
+    }
+
+    private void SelectFirstArtifactIfNeeded()
+    {
+        if (artifactGrid.Rows.Count == 0)
+        {
+            return;
+        }
+
+        if (artifactGrid.CurrentCell == null)
+        {
+            artifactGrid.Rows[0].Selected = true;
+            artifactGrid.CurrentCell = artifactGrid.Rows[0].Cells[0];
+        }
     }
 
     private AdminArtifact GetSelectedArtifact()
@@ -5240,6 +5635,66 @@ public sealed class AdminDashboardForm : Form
         artifacts.Remove(selected);
         SaveArtifacts();
         ReloadAll();
+    }
+
+    private void MoveSelection(int delta)
+    {
+        if (artifactGrid.Rows.Count == 0)
+        {
+            return;
+        }
+
+        int currentIndex = artifactGrid.CurrentCell != null ? artifactGrid.CurrentCell.RowIndex : 0;
+        int nextIndex = (currentIndex + delta) % artifactGrid.Rows.Count;
+        if (nextIndex < 0)
+        {
+            nextIndex += artifactGrid.Rows.Count;
+        }
+
+        artifactGrid.ClearSelection();
+        artifactGrid.Rows[nextIndex].Selected = true;
+        artifactGrid.CurrentCell = artifactGrid.Rows[nextIndex].Cells[0];
+        artifactGrid.FirstDisplayedScrollingRowIndex = nextIndex;
+    }
+
+    public bool HandleGestureCommand(string gesture)
+    {
+        if (string.IsNullOrWhiteSpace(gesture))
+        {
+            return false;
+        }
+
+        if (gesture == "SwipeRight")
+        {
+            MoveSelection(1);
+            return true;
+        }
+
+        if (gesture == "SwipeLeft")
+        {
+            MoveSelection(-1);
+            return true;
+        }
+
+        if (gesture == "Circle")
+        {
+            EditSelectedArtifact();
+            return true;
+        }
+
+        if (gesture == "Mute")
+        {
+            DeleteSelectedArtifact();
+            return true;
+        }
+
+        if (gesture == "DarkMode")
+        {
+            CreateArtifact();
+            return true;
+        }
+
+        return false;
     }
 
     private void RefreshAnalytics()
