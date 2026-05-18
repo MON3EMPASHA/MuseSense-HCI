@@ -258,6 +258,9 @@ public class TuioDemo : Form , TuioListener
         long tuioMarker100SessionId = -1;
         TuioClient tuioClient;
         Client socketClient;
+        readonly object adminKeyboardLock = new object();
+        string pendingAdminKeyboardId = "";
+        Action<string> pendingAdminKeyboardCallback = null;
         int lastMarkerSent = -1;
         const int TUIO_FAVORITE_TOGGLE_ID = 103;
         
@@ -1320,7 +1323,8 @@ public class TuioDemo : Form , TuioListener
             {
                 LoadArtifacts();
                 Invalidate();
-            }))
+            },
+            RequestPythonKeyboard))
         {
             dashboard.ShowDialog(this);
         }
@@ -1416,7 +1420,11 @@ public class TuioDemo : Form , TuioListener
         {
             try
             {
-                return (bool)Invoke(new Func<bool>(() => RouteGestureToAdmin(gesture)));
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    RouteGestureToAdmin(gesture);
+                });
+                return IsAdminGestureCommand(gesture);
             }
             catch
             {
@@ -1424,9 +1432,24 @@ public class TuioDemo : Form , TuioListener
             }
         }
 
+        Form activeForm = Form.ActiveForm;
+        IAdminGestureReceiver activeReceiver = activeForm as IAdminGestureReceiver;
+        if (activeReceiver != null && activeForm.Visible)
+        {
+            if (activeReceiver.HandleGestureCommand(gesture))
+            {
+                return true;
+            }
+        }
+
         for (int i = Application.OpenForms.Count - 1; i >= 0; i--)
         {
             Form openForm = Application.OpenForms[i];
+            if (openForm == activeForm)
+            {
+                continue;
+            }
+
             IAdminGestureReceiver receiver = openForm as IAdminGestureReceiver;
             if (receiver == null || !openForm.Visible)
             {
@@ -1440,6 +1463,106 @@ public class TuioDemo : Form , TuioListener
         }
 
         return false;
+    }
+
+    private static bool IsAdminGestureCommand(string gesture)
+    {
+        return gesture == "AdminNextArtifact"
+            || gesture == "AdminPrevArtifact"
+            || gesture == "AdminEditArtifact"
+            || gesture == "AdminDeleteArtifact"
+            || gesture == "AdminCreateArtifact"
+            || gesture == "DeleteArtifact"
+            || gesture == "Delete";
+    }
+
+    private bool TryHandleAdminKeyboardResult(string msg)
+    {
+        if (string.IsNullOrWhiteSpace(msg) || !msg.StartsWith("KEYBOARD_RESULT:", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            string json = msg.Substring("KEYBOARD_RESULT:".Length);
+            var serializer = new JavaScriptSerializer();
+            var payload = serializer.Deserialize<Dictionary<string, object>>(json);
+            if (payload == null)
+            {
+                return true;
+            }
+
+            string id = payload.ContainsKey("id") ? Convert.ToString(payload["id"]) : "";
+            string text = payload.ContainsKey("text") ? Convert.ToString(payload["text"]) : "";
+            bool cancelled = payload.ContainsKey("cancelled") && Convert.ToBoolean(payload["cancelled"]);
+            Action<string> callback = null;
+
+            lock (adminKeyboardLock)
+            {
+                if (!string.IsNullOrWhiteSpace(pendingAdminKeyboardId) &&
+                    string.Equals(id, pendingAdminKeyboardId, StringComparison.Ordinal))
+                {
+                    callback = pendingAdminKeyboardCallback;
+                    pendingAdminKeyboardCallback = null;
+                    pendingAdminKeyboardId = "";
+                }
+            }
+
+            if (!cancelled && callback != null)
+            {
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    callback(text ?? "");
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[ADMIN-KEYBOARD] Failed to parse result: " + ex.Message);
+        }
+
+        return true;
+    }
+
+    private bool RequestPythonKeyboard(string prompt, string initial, string mode, Action<string> onResult)
+    {
+        if (socketClient == null || onResult == null)
+        {
+            return false;
+        }
+
+        string requestId = Guid.NewGuid().ToString("N");
+        lock (adminKeyboardLock)
+        {
+            pendingAdminKeyboardId = requestId;
+            pendingAdminKeyboardCallback = onResult;
+        }
+
+        try
+        {
+            var payload = new Dictionary<string, object>();
+            payload["type"] = "admin_keyboard_request";
+            payload["id"] = requestId;
+            payload["prompt"] = prompt ?? "";
+            payload["initial"] = initial ?? "";
+            payload["mode"] = mode ?? "alpha";
+
+            var serializer = new JavaScriptSerializer();
+            socketClient.sendMessage(serializer.Serialize(payload));
+            Console.WriteLine("[ADMIN-KEYBOARD] Request sent: " + requestId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[ADMIN-KEYBOARD] Failed to send request: " + ex.Message);
+            lock (adminKeyboardLock)
+            {
+                pendingAdminKeyboardId = "";
+                pendingAdminKeyboardCallback = null;
+            }
+            return false;
+        }
     }
 
     private UserRecord FindAdminUser(string username, string password)
@@ -1771,6 +1894,11 @@ public class TuioDemo : Form , TuioListener
                 break;
             }
             if (string.IsNullOrWhiteSpace(msg))
+            {
+                continue;
+            }
+
+            if (TryHandleAdminKeyboardResult(msg))
             {
                 continue;
             }
@@ -5496,13 +5624,16 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
     private readonly TextBox narrationBox;
     private readonly TextBox[] editableFields;
     private readonly string[] editableFieldNames;
+    private readonly Dictionary<TextBox, Label> fieldLabels = new Dictionary<TextBox, Label>();
+    private readonly Func<string, string, string, Action<string>, bool> keyboardEntryProvider;
     private readonly Label gestureHintLabel;
     private int activeFieldIndex;
 
     public AdminArtifact Artifact { get; private set; }
 
-    public AdminArtifactEditorForm(AdminArtifact source)
+    public AdminArtifactEditorForm(AdminArtifact source, Func<string, string, string, Action<string>, bool> keyboardEntryProvider)
     {
+        this.keyboardEntryProvider = keyboardEntryProvider;
         var artifact = source ?? new AdminArtifact();
 
         Text = source == null ? "Create Artifact" : "Edit Artifact";
@@ -5524,22 +5655,22 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
         int rightX = 430;
         int y = 24;
 
-        idBox = AddField(panel, "Artifact ID", artifact.id.ToString(), leftX, ref y);
-        tuioIdBox = AddField(panel, "TUIO ID", artifact.tuioId.ToString(), rightX, ref y);
-        nameBox = AddField(panel, "Title", artifact.name, leftX, ref y);
-        categoryBox = AddField(panel, "Category", string.IsNullOrWhiteSpace(artifact.category) ? artifact.country : artifact.category, rightX, ref y);
-        descriptionBox = AddMultiLineField(panel, "Description", artifact.description, leftX, 90, ref y);
-        historicalInfoBox = AddMultiLineField(panel, "Historical Information", string.IsNullOrWhiteSpace(artifact.historicalInfo) ? artifact.narration : artifact.historicalInfo, rightX, 90, ref y);
-        tagsBox = AddField(panel, "Tags (comma-separated)", artifact.tags, leftX, ref y);
-        periodBox = AddField(panel, "Date/Period", string.IsNullOrWhiteSpace(artifact.period) ? artifact.birthDate : artifact.period, rightX, ref y);
-        birthDateBox = AddField(panel, "Birth Date", artifact.birthDate, leftX, ref y);
-        eraBox = AddField(panel, "Era", artifact.era, rightX, ref y);
-        originBox = AddField(panel, "Origin", artifact.origin, leftX, ref y);
-        countryBox = AddField(panel, "Country", artifact.country, rightX, ref y);
-        objPathBox = AddField(panel, "Image/Model Path", artifact.objPath, leftX, ref y);
-        audioPathBox = AddField(panel, "Audio Path", artifact.audioPath, rightX, ref y);
-        colorBox = AddField(panel, "Theme Color", artifact.color, leftX, ref y);
-        narrationBox = AddMultiLineField(panel, "Narration", artifact.narration, rightX, 110, ref y);
+        idBox = AddField(panel, "Artifact ID", artifact.id.ToString(), leftX, ref y, fieldLabels);
+        tuioIdBox = AddField(panel, "TUIO ID", artifact.tuioId.ToString(), rightX, ref y, fieldLabels);
+        nameBox = AddField(panel, "Title", artifact.name, leftX, ref y, fieldLabels);
+        categoryBox = AddField(panel, "Category", string.IsNullOrWhiteSpace(artifact.category) ? artifact.country : artifact.category, rightX, ref y, fieldLabels);
+        descriptionBox = AddMultiLineField(panel, "Description", artifact.description, leftX, 90, ref y, fieldLabels);
+        historicalInfoBox = AddMultiLineField(panel, "Historical Information", string.IsNullOrWhiteSpace(artifact.historicalInfo) ? artifact.narration : artifact.historicalInfo, rightX, 90, ref y, fieldLabels);
+        tagsBox = AddField(panel, "Tags (comma-separated)", artifact.tags, leftX, ref y, fieldLabels);
+        periodBox = AddField(panel, "Date/Period", string.IsNullOrWhiteSpace(artifact.period) ? artifact.birthDate : artifact.period, rightX, ref y, fieldLabels);
+        birthDateBox = AddField(panel, "Birth Date", artifact.birthDate, leftX, ref y, fieldLabels);
+        eraBox = AddField(panel, "Era", artifact.era, rightX, ref y, fieldLabels);
+        originBox = AddField(panel, "Origin", artifact.origin, leftX, ref y, fieldLabels);
+        countryBox = AddField(panel, "Country", artifact.country, rightX, ref y, fieldLabels);
+        objPathBox = AddField(panel, "Image/Model Path", artifact.objPath, leftX, ref y, fieldLabels);
+        audioPathBox = AddField(panel, "Audio Path", artifact.audioPath, rightX, ref y, fieldLabels);
+        colorBox = AddField(panel, "Theme Color", artifact.color, leftX, ref y, fieldLabels);
+        narrationBox = AddMultiLineField(panel, "Narration", artifact.narration, rightX, 110, ref y, fieldLabels);
 
         editableFields = new[]
         {
@@ -5561,7 +5692,7 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
 
         gestureHintLabel = new Label
         {
-            Text = "Gesture controls: Swipe Left/Right = field, Circle = edit, Mute = cancel, DarkMode = save",
+            Text = "Gesture controls: AdminPrev/AdminNext = field, AdminEdit = edit, Mute = cancel, DarkMode = save",
             AutoSize = true,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(88, 98, 112),
@@ -5610,12 +5741,18 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
         for (int i = 0; i < editableFields.Length; i++)
         {
             editableFields[i].BackColor = i == activeFieldIndex ? Color.FromArgb(223, 235, 255) : Color.White;
+            editableFields[i].ForeColor = i == activeFieldIndex ? Color.Red : Color.Black;
+            Label fieldLabel;
+            if (fieldLabels.TryGetValue(editableFields[i], out fieldLabel))
+            {
+                fieldLabel.ForeColor = i == activeFieldIndex ? Color.Red : Color.Black;
+            }
         }
 
         string extraHint = editableFields[activeFieldIndex] == objPathBox
             ? "   |   Image picker: Swipe Left/Right = option   Circle = select"
             : string.Empty;
-        gestureHintLabel.Text = "Editing: " + editableFieldNames[activeFieldIndex] + "   |   Swipe Left/Right = field   Circle = edit   Mute = cancel   DarkMode = save" + extraHint;
+        gestureHintLabel.Text = "Editing: " + editableFieldNames[activeFieldIndex] + "   |   AdminPrev/AdminNext = field   AdminEdit = edit   Mute = cancel   AdminCreate = save" + extraHint;
     }
 
     private void MoveField(int delta)
@@ -5647,6 +5784,21 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
             }
 
             return true;
+        }
+
+        if (keyboardEntryProvider != null)
+        {
+            string mode = editableFields[activeFieldIndex] == idBox || editableFields[activeFieldIndex] == tuioIdBox
+                ? "num"
+                : "alpha";
+            TextBox targetField = editableFields[activeFieldIndex];
+            return keyboardEntryProvider(prompt, initial, mode, delegate(string result)
+            {
+                if (!IsDisposed && targetField != null)
+                {
+                    targetField.Text = result ?? "";
+                }
+            });
         }
 
         using (var input = new GestureTextEntryForm(prompt, initial))
@@ -5712,19 +5864,19 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
             return false;
         }
 
-        if (gesture == "SwipeRight")
+        if (gesture == "AdminNextArtifact")
         {
             MoveField(1);
             return true;
         }
 
-        if (gesture == "SwipeLeft")
+        if (gesture == "AdminPrevArtifact")
         {
             MoveField(-1);
             return true;
         }
 
-        if (gesture == "Circle")
+        if (gesture == "AdminEditArtifact")
         {
             TryEditActiveField();
             return true;
@@ -5737,7 +5889,7 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
             return true;
         }
 
-        if (gesture == "DarkMode")
+        if (gesture == "AdminCreateArtifact" || gesture == "DarkMode")
         {
             if (TryCommitArtifact())
             {
@@ -5751,17 +5903,18 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
         return false;
     }
 
-    private static TextBox AddField(Control parent, string label, string value, int x, ref int y)
+    private static TextBox AddField(Control parent, string label, string value, int x, ref int y, Dictionary<TextBox, Label> fieldLabels)
     {
         var labelControl = new Label { Text = label, AutoSize = true, Location = new Point(x, y), Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
         var box = new TextBox { Text = value ?? string.Empty, Width = 360, Location = new Point(x, y + 20), Font = new Font("Segoe UI", 9.5f) };
         parent.Controls.Add(labelControl);
         parent.Controls.Add(box);
+        fieldLabels[box] = labelControl;
         if (x > 300) y += 58;
         return box;
     }
 
-    private static TextBox AddMultiLineField(Control parent, string label, string value, int x, int height, ref int y)
+    private static TextBox AddMultiLineField(Control parent, string label, string value, int x, int height, ref int y, Dictionary<TextBox, Label> fieldLabels)
     {
         var labelControl = new Label { Text = label, AutoSize = true, Location = new Point(x, y), Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
         var box = new TextBox
@@ -5776,6 +5929,7 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
         };
         parent.Controls.Add(labelControl);
         parent.Controls.Add(box);
+        fieldLabels[box] = labelControl;
         if (x > 300) y += height + 36;
         return box;
     }
@@ -5797,6 +5951,7 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
     private readonly string contextPath;
     private readonly string reportsPath;
     private readonly Action onArtifactsChanged;
+    private readonly Func<string, string, string, Action<string>, bool> keyboardEntryProvider;
 
     private readonly Panel leftPanel;
     private readonly DataGridView artifactGrid;
@@ -5812,18 +5967,20 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
 
     private List<AdminArtifact> artifacts = new List<AdminArtifact>();
     private AdminTemplateBrowserForm activeTemplateBrowser;
+    private AdminArtifactEditorForm activeEditorForm;
 
     private int pendingDeleteArtifactId = -1;
     private DateTime pendingDeleteTime = DateTime.MinValue;
     private Label confirmDeleteLabel;
     private System.Windows.Forms.Timer confirmDeleteTimer;
 
-    public AdminDashboardForm(string artifactsPath, string contextPath, string reportsPath, Action onArtifactsChanged)
+    public AdminDashboardForm(string artifactsPath, string contextPath, string reportsPath, Action onArtifactsChanged, Func<string, string, string, Action<string>, bool> keyboardEntryProvider)
     {
         this.artifactsPath = artifactsPath;
         this.contextPath = contextPath;
         this.reportsPath = reportsPath;
         this.onArtifactsChanged = onArtifactsChanged;
+        this.keyboardEntryProvider = keyboardEntryProvider;
 
         Text = "MuseSense Admin Management";
         StartPosition = FormStartPosition.CenterParent;
@@ -6207,9 +6364,20 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
             period = selected.period
         };
 
-        using (var form = new AdminArtifactEditorForm(workingCopy))
+        using (var form = new AdminArtifactEditorForm(workingCopy, keyboardEntryProvider))
         {
-            if (form.ShowDialog() != DialogResult.OK || form.Artifact == null) return;
+            DialogResult dialogResult;
+            activeEditorForm = form;
+            try
+            {
+                dialogResult = form.ShowDialog(this);
+            }
+            finally
+            {
+                activeEditorForm = null;
+            }
+
+            if (dialogResult != DialogResult.OK || form.Artifact == null) return;
             if (artifacts.Any(a => a != selected && a.id == form.Artifact.id)) { MessageBox.Show(this, "Artifact ID already exists.", "Edit Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             if (artifacts.Any(a => a != selected && a.tuioId == form.Artifact.tuioId)) { MessageBox.Show(this, "TUIO ID already exists.", "Edit Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
@@ -6298,6 +6466,15 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
         {
             activeTemplateBrowser.HandleGestureCommand(gesture);
             return true;
+        }
+
+        // If edit modal is active, all admin gestures must be handled there.
+        if (activeEditorForm != null && !activeEditorForm.IsDisposed && activeEditorForm.Visible)
+        {
+            if (activeEditorForm.HandleGestureCommand(gesture))
+            {
+                return true;
+            }
         }
 
         if (gesture == "AdminNextArtifact")

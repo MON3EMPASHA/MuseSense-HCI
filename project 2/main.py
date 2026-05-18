@@ -79,6 +79,7 @@ try:
     from session_reports import save_session_reports
     from face_recognizer import FaceRecognizer
     from face_signup import FaceSignupFlow
+    from hand_keyboard import HandKeyboard
     from object_tracking import (
         ArtifactFocusSmoother,
         YoloTracker,
@@ -299,6 +300,11 @@ last_gaze_zone = ""
 latest_expression = None
 gesture_points = []
 circle_points = []
+admin_keyboard = None
+admin_keyboard_request_id = ""
+admin_keyboard_prompt = ""
+admin_keyboard_mode = "alpha"
+admin_keyboard_initial_text = ""
 expression_log_until = 0.0
 last_expression_signature = ""
 last_interest_emotion = ""
@@ -676,6 +682,22 @@ while cap.isOpened():
                         active_user_name = str(msg_obj.get("name", "admin")).strip()
                         context_store.ensure_user(active_user_name, "admin")
                         print(f"[LOGIN] Admin login via C# button — {active_user_name}")
+                    elif msg_type in {"admin_keyboard_request"}:
+                        admin_keyboard_request_id = str(msg_obj.get("id", "")).strip()
+                        admin_keyboard_prompt = str(msg_obj.get("prompt", "")).strip()
+                        admin_keyboard_initial_text = str(msg_obj.get("initial", ""))
+                        requested_mode = str(msg_obj.get("mode", "alpha")).strip().lower()
+                        admin_keyboard_mode = "num" if requested_mode == "num" else "alpha"
+                        admin_keyboard = HandKeyboard(
+                            mode=admin_keyboard_mode,
+                            frame_w=480,
+                            frame_h=320,
+                        )
+                        admin_keyboard.text = admin_keyboard_initial_text
+                        set_camera_window(True)
+                        print(
+                            f"[ADMIN-KEYBOARD] Open request id={admin_keyboard_request_id} prompt={admin_keyboard_prompt}"
+                        )
                     elif msg_type in {"context_update"}:
                         artifact_name = str(msg_obj.get("current_artifact", "")).strip()
                         category = str(msg_obj.get("current_category", "")).strip()
@@ -836,6 +858,66 @@ while cap.isOpened():
         results = holistic.process(frame_rgb)
         annotated_image = f_frame.copy()
         image_height, image_width, _ = frame_rgb.shape
+
+        if admin_keyboard is not None:
+            keyboard_hand = results.right_hand_landmarks or results.left_hand_landmarks
+            index_tip = None
+            middle_tip = None
+            if keyboard_hand is not None:
+                lm = keyboard_hand.landmark
+                index_tip = (int(lm[8].x * image_width), int(lm[8].y * image_height))
+                middle_tip = (int(lm[12].x * image_width), int(lm[12].y * image_height))
+
+            admin_keyboard.update(
+                annotated_image,
+                index_tip,
+                middle_tip,
+                results.left_hand_landmarks,
+            )
+
+            if admin_keyboard_prompt:
+                cv2.putText(
+                    annotated_image,
+                    admin_keyboard_prompt[:46],
+                    (12, 24),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55,
+                    (255, 255, 255),
+                    1,
+                    cv2.LINE_AA,
+                )
+
+            mp_drawing.draw_landmarks(
+                annotated_image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS
+            )
+            mp_drawing.draw_landmarks(
+                annotated_image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS
+            )
+
+            display_keyboard = cv2.resize(
+                annotated_image, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_LINEAR
+            )
+            cv2.imshow("Output", display_keyboard)
+
+            if admin_keyboard.confirmed:
+                payload = json.dumps(
+                    {
+                        "type": "admin_keyboard_result",
+                        "id": admin_keyboard_request_id,
+                        "text": admin_keyboard.text,
+                        "cancelled": False,
+                    }
+                )
+                send_socket_message(conn, "KEYBOARD_RESULT:" + payload)
+                print(f"[ADMIN-KEYBOARD] Result sent id={admin_keyboard_request_id}")
+                admin_keyboard = None
+                admin_keyboard_request_id = ""
+                admin_keyboard_prompt = ""
+                admin_keyboard_initial_text = ""
+
+            if cv2.waitKey(1) == ord("q"):
+                break
+            continue
 
         artifact_frame_counter += 1
         if artifact_frame_counter >= ARTIFACT_YOLO_INTERVAL:
@@ -1152,7 +1234,8 @@ while cap.isOpened():
         )
         cv2.imshow("Output", display_image)
         # logic to send msg to unity
-        if msg != "" and msg != old_msg:  # only send when there's actually something
+        is_admin_gesture = msg in admin_hand_shapes
+        if msg != "" and (msg != old_msg or is_admin_gesture):  # admin shapes repeat after cooldown
             emit_transcription(conn, f"Gesture: {msg}")
             context_snapshot = context_store.get_context_snapshot(active_user_name)
             current_item_id = (

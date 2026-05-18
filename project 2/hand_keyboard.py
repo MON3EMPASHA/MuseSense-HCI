@@ -293,12 +293,12 @@ class HandKeyboard:
         elif key == "OK":
             self.confirmed = True
         elif key == "SPC":
-            if len(self.text) < 32:
+            if len(self.text) < 512:
                 self.text += " "
         else:
             if self._mode == "num" and not key.isdigit():
                 return
-            if len(self.text) < 32:
+            if len(self.text) < 512:
                 self.text += key
 
     #drawing

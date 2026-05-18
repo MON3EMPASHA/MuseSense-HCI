@@ -63,20 +63,27 @@
             "source": "gesture",
             "timestamp": 1779116331,
             "gesture": "Circle"
+          },
+          {
+            "item_id": "Bust of Nefertiti",
+            "category": "Egypt",
+            "source": "gesture",
+            "timestamp": 1779140213,
+            "gesture": "Circle"
           }
         ],
         "explore_later": [],
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 7.5,
-        "favorites": 3.0,
+        "Egypt": 70.9,
+        "favorites": 4.0,
         "China": -1.0
       },
       "artifact_scores": {
         "King Senwosret III": 8.1,
-        "Mask of Tutankhamun": 5.5,
-        "Bust of Nefertiti": -1.8,
+        "Mask of Tutankhamun": 21.1,
+        "Bust of Nefertiti": 46.0,
         "Ramses II Statue": -5.8,
         "Sacred Scarab Beetle": 1.8,
         "Horus": 0.2,
@@ -84,20 +91,21 @@
         "Great Sphinx of Abu al-Hol": -0.5
       },
       "context": {
-        "current_artifact": "Bust of Nefertiti",
-        "current_category": "Egypt",
-        "last_object": "Bust of Nefertiti",
-        "last_gesture": "Circle",
-        "last_emotion": "sad",
+        "current_artifact": "marker_110",
+        "current_category": "general",
+        "last_object": "marker_110",
+        "last_gesture": "AdminPrevArtifact",
+        "last_emotion": "neutral",
         "last_gaze": "center_center"
       },
-      "updated_at": 1779116351,
+      "updated_at": 1779140478,
       "opened_artifacts": {
         "king senwosret iii": 1778417990.7348936,
         "ramses ii statue": 1779116282.0734377,
         "sacred scarab beetle": 1778351835.6402104,
-        "mask of tutankhamun": 1778418000.1804113,
-        "bust of nefertiti": 1779116343.3680906
+        "mask of tutankhamun": 1779138496.617588,
+        "bust of nefertiti": 1779140215.492186,
+        "marker_110": 1779140478.3875659
       }
     },
     "Abdelmonem Hatem": {
@@ -567,23 +575,31 @@
         "explore_later": [],
         "good_to_see": []
       },
-      "category_scores": {},
-      "artifact_scores": {},
-      "opened_artifacts": {},
-      "context": {
-        "current_artifact": "",
-        "current_category": "",
-        "last_object": "",
-        "last_gesture": "AdminEditArtifact",
-        "last_emotion": "neutral",
-        "last_gaze": "bottom_left"
+      "category_scores": {
+        "Egypt": 34.6
       },
-      "updated_at": 1779137344
+      "artifact_scores": {
+        "Mask of Tutankhamun": 9.3,
+        "Bust of Nefertiti": 25.3
+      },
+      "opened_artifacts": {
+        "mask of tutankhamun": 1779140495.1350062,
+        "bust of nefertiti": 1779140512.69595
+      },
+      "context": {
+        "current_artifact": "Bust of Nefertiti",
+        "current_category": "Egypt",
+        "last_object": "Bust of Nefertiti",
+        "last_gesture": "AdminCreateArtifact",
+        "last_emotion": "neutral",
+        "last_gaze": "center_center"
+      },
+      "updated_at": 1779140583
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1779137344
+    "updated_at": 1779140583
   }
 }
