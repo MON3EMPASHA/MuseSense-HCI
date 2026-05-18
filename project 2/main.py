@@ -284,8 +284,10 @@ def wait_for_csharp_client(server_socket: socket.socket) -> tuple[socket.socket,
         cv2.waitKey(1)
 
 
-conn, addr = wait_for_csharp_client(soc)
-conn.setblocking(False)
+print(f"[SOCKET] Python socket server listening on {hostname}:{port}")
+print("[SOCKET] C# GUI will be accepted asynchronously — proceeding with initialization")
+conn = None
+addr = None
 old_msg = ""
 mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
@@ -515,6 +517,17 @@ while cap.isOpened():
     if not ret or frame is None:
         continue
     msg = ""
+
+    # Accept C# connection asynchronously if not connected yet
+    if conn is None:
+        try:
+            client_connection, client_address = soc.accept()
+            conn = client_connection
+            addr = client_address
+            conn.setblocking(False)
+            print(f"[SOCKET] C# GUI connected from {addr[0]}:{addr[1]}")
+        except socket.timeout:
+            pass
 
     conn, socket_buffer, incoming_lines, connection_alive = poll_socket_lines(
         conn, socket_buffer
@@ -864,7 +877,7 @@ while cap.isOpened():
                     last_emotion = expression["emotion"]
                     last_gaze_zone = expression["gaze_zone"]
                     last_expression_signature = current_signature
-                    expression_log_until = time.monotonic() + 2.0
+                    expression_log_until = time.monotonic() + 0.3
                     emit_transcription(
                         conn, f"Expression: {last_emotion} (gaze: {last_gaze_zone})"
                     )

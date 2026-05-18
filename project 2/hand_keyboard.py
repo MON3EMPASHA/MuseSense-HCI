@@ -4,12 +4,12 @@ Virtual on-screen keyboard driven by hand landmarks.
 Navigation  : index finger tip (1 finger up)
 Click       : index + middle finger tips close together (pinch)
 Confirm     : open LEFT hand held for 1 second
-Cancel      : pinch the  ✕  key
+Cancel      : (cancel key removed)
 
 Modes
 -----
-mode="alpha"  – full QWERTY + numbers + DEL / OK / ✕
-mode="num"    – numeric pad  (0-9, DEL, OK, ✕)
+mode="alpha"  – full QWERTY + numbers + DEL / OK
+mode="num"    – numeric pad  (0-9, DEL, OK)
 """
 from __future__ import annotations
 
@@ -292,8 +292,6 @@ class HandKeyboard:
             self.text = self.text[:-1]
         elif key == "OK":
             self.confirmed = True
-        elif key == "✕":
-            self.cancelled = True
         elif key == "SPC":
             if len(self.text) < 32:
                 self.text += " "
@@ -358,7 +356,7 @@ class HandKeyboard:
                     bg, border = _C["click_bg"], _C["click_border"]
                 elif is_hover:
                     bg, border = _C["hover_bg"], _C["hover_border"]
-                elif key in ("DEL", "✕"):
+                elif key == "DEL":
                     bg, border = _C["del_bg"], _C["del_border"]
                 elif key == "OK":
                     bg, border = _C["ok_bg"], _C["ok_border"]

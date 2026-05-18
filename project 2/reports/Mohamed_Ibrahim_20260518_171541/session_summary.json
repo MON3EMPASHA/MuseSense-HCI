@@ -1,0 +1,310 @@
+{
+  "type": "session_summary",
+  "user": "Mohamed Ibrahim",
+  "started_at": "2026-05-18 17:15:41",
+  "ended_at": "2026-05-18 17:17:07",
+  "reports": {
+    "gaze": {
+      "png": "reports\\Mohamed_Ibrahim_20260518_171541\\Mohamed_Ibrahim_gaze_20260518_171541.png",
+      "json": "reports\\Mohamed_Ibrahim_20260518_171541\\Mohamed_Ibrahim_gaze_20260518_171541.json",
+      "heatmap": "reports\\Mohamed_Ibrahim_20260518_171541\\Mohamed_Ibrahim_gaze_20260518_171541_heatmap.png",
+      "combo": "reports\\Mohamed_Ibrahim_20260518_171541\\Mohamed_Ibrahim_gaze_20260518_171541_combo.png",
+      "summary": {
+        "type": "gaze_session_report",
+        "user": "Mohamed Ibrahim",
+        "started_at": "2026-05-18 17:15:41",
+        "sample_count": 211,
+        "zone_counts": {
+          "top_left": 3,
+          "top_center": 1,
+          "top_right": 1,
+          "center_left": 70,
+          "center_center": 49,
+          "center_right": 15,
+          "bottom_left": 33,
+          "bottom_center": 6,
+          "bottom_right": 33
+        },
+        "zone_percent": {
+          "top_left": 1.4,
+          "top_center": 0.5,
+          "top_right": 0.5,
+          "center_left": 33.2,
+          "center_center": 23.2,
+          "center_right": 7.1,
+          "bottom_left": 15.6,
+          "bottom_center": 2.8,
+          "bottom_right": 15.6
+        },
+        "dominant_zone": "center_left",
+        "dwell_seconds": {
+          "top_left": 1.13,
+          "top_center": 0.36,
+          "top_right": 0.39,
+          "center_left": 28.4,
+          "center_center": 19.25,
+          "center_right": 5.8,
+          "bottom_left": 12.61,
+          "bottom_center": 1.88,
+          "bottom_right": 12.74
+        },
+        "transitions": {
+          "top_left": {
+            "top_left": 1,
+            "top_center": 0,
+            "top_right": 0,
+            "center_left": 2,
+            "center_center": 0,
+            "center_right": 0,
+            "bottom_left": 0,
+            "bottom_center": 0,
+            "bottom_right": 0
+          },
+          "top_center": {
+            "top_left": 0,
+            "top_center": 0,
+            "top_right": 1,
+            "center_left": 0,
+            "center_center": 0,
+            "center_right": 0,
+            "bottom_left": 0,
+            "bottom_center": 0,
+            "bottom_right": 0
+          },
+          "top_right": {
+            "top_left": 0,
+            "top_center": 0,
+            "top_right": 0,
+            "center_left": 0,
+            "center_center": 1,
+            "center_right": 0,
+            "bottom_left": 0,
+            "bottom_center": 0,
+            "bottom_right": 0
+          },
+          "center_left": {
+            "top_left": 2,
+            "top_center": 1,
+            "top_right": 0,
+            "center_left": 55,
+            "center_center": 5,
+            "center_right": 3,
+            "bottom_left": 4,
+            "bottom_center": 0,
+            "bottom_right": 0
+          },
+          "center_center": {
+            "top_left": 0,
+            "top_center": 0,
+            "top_right": 0,
+            "center_left": 7,
+            "center_center": 38,
+            "center_right": 1,
+            "bottom_left": 1,
+            "bottom_center": 0,
+            "bottom_right": 2
+          },
+          "center_right": {
+            "top_left": 0,
+            "top_center": 0,
+            "top_right": 0,
+            "center_left": 1,
+            "center_center": 2,
+            "center_right": 11,
+            "bottom_left": 0,
+            "bottom_center": 0,
+            "bottom_right": 1
+          },
+          "bottom_left": {
+            "top_left": 0,
+            "top_center": 0,
+            "top_right": 0,
+            "center_left": 4,
+            "center_center": 1,
+            "center_right": 0,
+            "bottom_left": 26,
+            "bottom_center": 0,
+            "bottom_right": 1
+          },
+          "bottom_center": {
+            "top_left": 0,
+            "top_center": 0,
+            "top_right": 0,
+            "center_left": 0,
+            "center_center": 1,
+            "center_right": 0,
+            "bottom_left": 1,
+            "bottom_center": 3,
+            "bottom_right": 1
+          },
+          "bottom_right": {
+            "top_left": 0,
+            "top_center": 0,
+            "top_right": 0,
+            "center_left": 1,
+            "center_center": 0,
+            "center_right": 0,
+            "bottom_left": 1,
+            "bottom_center": 3,
+            "bottom_right": 28
+          }
+        },
+        "zone_mean_abs_delta": {
+          "top_left": 0.0448,
+          "top_center": 0.0235,
+          "top_right": 0.0308,
+          "center_left": 0.0617,
+          "center_center": 0.0613,
+          "center_right": 0.0767,
+          "bottom_left": 0.0601,
+          "bottom_center": 0.0512,
+          "bottom_right": 0.0908
+        },
+        "mean_gaze_delta": -0.0076,
+        "max_abs_gaze_delta": 0.3474,
+        "artifacts": {
+          "png": "Mohamed_Ibrahim_gaze_20260518_171541.png",
+          "json": "Mohamed_Ibrahim_gaze_20260518_171541.json",
+          "heatmap": "Mohamed_Ibrahim_gaze_20260518_171541_heatmap.png",
+          "combo": "Mohamed_Ibrahim_gaze_20260518_171541_combo.png"
+        }
+      }
+    },
+    "emotion": {
+      "png": "reports\\Mohamed_Ibrahim_20260518_171541\\Mohamed_Ibrahim_emotion_20260518_171541.png",
+      "json": "reports\\Mohamed_Ibrahim_20260518_171541\\Mohamed_Ibrahim_emotion_20260518_171541.json",
+      "summary": {
+        "type": "emotion_session_report",
+        "user": "Mohamed Ibrahim",
+        "started_at": "2026-05-18 17:15:41",
+        "sample_count": 211,
+        "emotion_counts": {
+          "neutral": 90,
+          "sad": 120,
+          "happy": 1
+        },
+        "emotion_percent": {
+          "neutral": 42.7,
+          "sad": 56.9,
+          "happy": 0.5
+        },
+        "dominant_emotion": "sad"
+      }
+    },
+    "artifacts": {
+      "png": "artifact_report.png",
+      "json": "artifact_report.json",
+      "summary": {
+        "type": "artifact_session_report",
+        "user": "Mohamed Ibrahim",
+        "total_artifacts": 7,
+        "opened_count": 0,
+        "opened_artifacts": [],
+        "unopened_artifacts": [
+          {
+            "name": "King Senwosret III",
+            "score": 8.1,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Middle Kingdom"
+          },
+          {
+            "name": "Mask of Tutankhamun",
+            "score": 5.3,
+            "opened": false,
+            "country": "Egypt",
+            "era": "New Kingdom"
+          },
+          {
+            "name": "Sacred Scarab Beetle",
+            "score": 1.8,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Old Kingdom onwards"
+          },
+          {
+            "name": "Bust of Nefertiti",
+            "score": 0.7,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Amarna Period"
+          },
+          {
+            "name": "Horus",
+            "score": 0.2,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Ancient Egypt (all periods)"
+          },
+          {
+            "name": "Great Sphinx of Abu al-Hol",
+            "score": -0.5,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Old Kingdom"
+          },
+          {
+            "name": "Ramses II Statue",
+            "score": -2.4,
+            "opened": false,
+            "country": "Egypt",
+            "era": "New Kingdom"
+          }
+        ],
+        "ranked_artifacts": [
+          {
+            "name": "King Senwosret III",
+            "score": 8.1,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Middle Kingdom"
+          },
+          {
+            "name": "Mask of Tutankhamun",
+            "score": 5.3,
+            "opened": false,
+            "country": "Egypt",
+            "era": "New Kingdom"
+          },
+          {
+            "name": "Sacred Scarab Beetle",
+            "score": 1.8,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Old Kingdom onwards"
+          },
+          {
+            "name": "Bust of Nefertiti",
+            "score": 0.7,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Amarna Period"
+          },
+          {
+            "name": "Horus",
+            "score": 0.2,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Ancient Egypt (all periods)"
+          },
+          {
+            "name": "Great Sphinx of Abu al-Hol",
+            "score": -0.5,
+            "opened": false,
+            "country": "Egypt",
+            "era": "Old Kingdom"
+          },
+          {
+            "name": "Ramses II Statue",
+            "score": -2.4,
+            "opened": false,
+            "country": "Egypt",
+            "era": "New Kingdom"
+          }
+        ],
+        "generated_at": "2026-05-18 17:17:07"
+      }
+    },
+    "combined_pdf": "session_reports.pdf"
+  }
+}

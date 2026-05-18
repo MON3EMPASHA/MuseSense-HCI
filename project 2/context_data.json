@@ -59,13 +59,13 @@
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 21.6,
+        "Egypt": 13.2,
         "favorites": 2.0,
         "China": -1.0
       },
       "artifact_scores": {
         "King Senwosret III": 8.1,
-        "Mask of Tutankhamun": 13.7,
+        "Mask of Tutankhamun": 5.3,
         "Bust of Nefertiti": 0.7,
         "Ramses II Statue": -2.4,
         "Sacred Scarab Beetle": 1.8,
@@ -78,10 +78,10 @@
         "current_category": "Egypt",
         "last_object": "Mask of Tutankhamun",
         "last_gesture": "Circle",
-        "last_emotion": "sad",
-        "last_gaze": "center"
+        "last_emotion": "neutral",
+        "last_gaze": "bottom_left"
       },
-      "updated_at": 1778710908,
+      "updated_at": 1779113826,
       "opened_artifacts": {
         "king senwosret iii": 1778417990.7348936,
         "ramses ii statue": 1778351607.5045404,
@@ -478,28 +478,30 @@
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": -1.3
+        "Egypt": 18.0
       },
       "artifact_scores": {
-        "Bust of Nefertiti": -1.3
+        "Bust of Nefertiti": 10.7,
+        "Mask of Tutankhamun": 7.3
       },
       "opened_artifacts": {
-        "bust of nefertiti": 1779110421.0090075
+        "bust of nefertiti": 1779111321.674631,
+        "mask of tutankhamun": 1779113491.623391
       },
       "context": {
-        "current_artifact": "",
-        "current_category": "",
-        "last_object": "Bust of Nefertiti",
-        "last_gesture": "",
+        "current_artifact": "Mask of Tutankhamun",
+        "current_category": "Egypt",
+        "last_object": "Mask of Tutankhamun",
+        "last_gesture": "Mute",
         "last_emotion": "neutral",
-        "last_gaze": "left"
+        "last_gaze": "center_left"
       },
-      "updated_at": 1779110443
+      "updated_at": 1779113522
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1779110443
+    "updated_at": 1779113826
   }
 }
