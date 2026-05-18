@@ -342,7 +342,7 @@
       "category_scores": {},
       "artifact_scores": {},
       "opened_artifacts": {
-        "marker_110": 1779134001.1452136
+        "marker_110": 1779135821.0523283
       },
       "context": {
         "current_artifact": "marker_110",
@@ -352,7 +352,7 @@
         "last_emotion": "",
         "last_gaze": ""
       },
-      "updated_at": 1779134001
+      "updated_at": 1779135821
     },
     "Andrew Talaat": {
       "profile": "",
@@ -574,16 +574,16 @@
         "current_artifact": "",
         "current_category": "",
         "last_object": "",
-        "last_gesture": "AdminPrevArtifact",
-        "last_emotion": "neutral",
-        "last_gaze": "center_left"
+        "last_gesture": "AdminDeleteArtifact",
+        "last_emotion": "surprised",
+        "last_gaze": "top_left"
       },
-      "updated_at": 1779134055
+      "updated_at": 1779135932
     }
   },
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1779134055
+    "updated_at": 1779135932
   }
 }

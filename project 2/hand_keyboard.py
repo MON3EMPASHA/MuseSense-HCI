@@ -17,7 +17,7 @@ import time
 import cv2
 import numpy as np
 
-# ── Layouts ───────────────────────────────────────────────────────────────────
+#Layouts
 _ROWS_ALPHA: list[list[str]] = [
     ["1","2","3","4","5","6","7","8","9","OK"],
     ["Q","W","E","R","T","Y","U","I","O","P"],
@@ -34,7 +34,7 @@ _ROWS_NUM: list[list[str]] = [
 
 _ACTION_KEYS = {"DEL", "OK", "SPC"}
 
-# ── Colours (BGR) ─────────────────────────────────────────────────────────────
+#Colours (BGR)
 _C = {
     "panel_bg":    (18,  18,  24),
     "panel_border":(55,  55,  75),
@@ -58,16 +58,16 @@ _C = {
     "hint_text":   (130, 130, 150),
 }
 
-# ── Timing ────────────────────────────────────────────────────────────────────
+# Timing
 CLICK_COOLDOWN   = 0.30   # seconds between key presses (faster = smoother typing)
 PINCH_DIST_PX    = 30     # index-middle distance threshold for a click
 PINCH_HOLD_TIME  = 0.5    # seconds pinch must be held to fire a click
 OPEN_HAND_HOLD   = 1.0    # seconds open-hand must be held to confirm
 
-# ── Cursor smoothing ──────────────────────────────────────────────────────────
+#Cursor smoothing
 CURSOR_EMA_ALPHA = 0.45   # lower = smoother but more lag (0..1)
 
-# ── MediaPipe landmark indices ────────────────────────────────────────────────
+#MediaPipe landmark indices
 _FINGER_TIPS = [8, 12, 16, 20]
 _FINGER_PIPS = [6, 10, 14, 18]
 _THUMB_TIP   = 4
@@ -167,7 +167,7 @@ class HandKeyboard:
         self._smooth_my: float | None = None
         self._cursor_valid: bool = False
 
-    # ── layout ────────────────────────────────────────────────────────────────
+    #layout
 
     def _compute_layout(self) -> None:
         """Compute key sizes and keyboard origin based on frame dimensions."""
@@ -201,7 +201,7 @@ class HandKeyboard:
         y1 = self._oy + r * (self._kh + self._pad)
         return x1, y1, x1 + self._kw, y1 + self._kh
 
-    # ── public API ────────────────────────────────────────────────────────────
+    # public API
 
     def update(self, frame: np.ndarray,
                index_tip: tuple[int,int] | None,
@@ -213,7 +213,7 @@ class HandKeyboard:
         if index_tip is not None:
             ix_raw, iy_raw = index_tip
 
-            # ── EMA cursor smoothing ────────────────────────────────────
+            # EMA cursor smoothing
             if self._smooth_cx is None:
                 self._smooth_cx = float(ix_raw)
                 self._smooth_cy = float(iy_raw)
@@ -224,7 +224,7 @@ class HandKeyboard:
             iy = int(round(self._smooth_cy))
             self._cursor_valid = True
 
-            # ── nearest-key hover (no more bounding-box overwrite) ──────
+            #nearest-key hover (no more bounding-box overwrite)
             best_dist_sq = float("inf")
             best_key = None
             for r, row in enumerate(self._rows):
@@ -238,7 +238,7 @@ class HandKeyboard:
                         best_key = (r, c)
             self._hovered = best_key
 
-            # ── pinch click with smoothed middle finger ─────────────────
+            #pinch click with smoothed middle finger
             if middle_tip is not None:
                 mx_raw, my_raw = middle_tip
                 if self._smooth_mx is None:
@@ -285,7 +285,7 @@ class HandKeyboard:
 
         self._draw(frame)
 
-    # ── input handling ────────────────────────────────────────────────────────
+    #input handling
 
     def _handle_key(self, key: str) -> None:
         if key == "DEL":
@@ -301,7 +301,7 @@ class HandKeyboard:
             if len(self.text) < 32:
                 self.text += key
 
-    # ── drawing ───────────────────────────────────────────────────────────────
+    #drawing
 
     def _draw(self, frame: np.ndarray) -> None:
         now  = time.monotonic()
@@ -368,7 +368,7 @@ class HandKeyboard:
                 _draw_key_box(key_overlay, x1, y1, x2, y2, bg, border, key)
         cv2.addWeighted(key_overlay, 0.4, frame, 0.6, 0, frame)
 
-        # ── smoothed cursor crosshair ────────────────────────────────────
+        #smoothed cursor crosshair
         if self._cursor_valid and self._smooth_cx is not None:
             cx = int(round(self._smooth_cx))
             cy = int(round(self._smooth_cy))

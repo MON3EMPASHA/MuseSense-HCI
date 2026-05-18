@@ -5798,6 +5798,7 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
     private readonly string reportsPath;
     private readonly Action onArtifactsChanged;
 
+    private readonly Panel leftPanel;
     private readonly DataGridView artifactGrid;
     private readonly TextBox searchBox;
     private readonly ComboBox categoryFilter;
@@ -5812,6 +5813,11 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
     private List<AdminArtifact> artifacts = new List<AdminArtifact>();
     private AdminTemplateBrowserForm activeTemplateBrowser;
 
+    private int pendingDeleteArtifactId = -1;
+    private DateTime pendingDeleteTime = DateTime.MinValue;
+    private Label confirmDeleteLabel;
+    private System.Windows.Forms.Timer confirmDeleteTimer;
+
     public AdminDashboardForm(string artifactsPath, string contextPath, string reportsPath, Action onArtifactsChanged)
     {
         this.artifactsPath = artifactsPath;
@@ -5825,7 +5831,7 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
         BackColor = Color.FromArgb(241, 245, 250);
 
         var topPanel = new Panel { Dock = DockStyle.Top, Height = 90, BackColor = Color.White };
-        var leftPanel = new Panel { Dock = DockStyle.Left, Width = 840, BackColor = Color.FromArgb(248, 252, 255) };
+        leftPanel = new Panel { Dock = DockStyle.Left, Width = 840, BackColor = Color.FromArgb(248, 252, 255) };
         var rightPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(246, 249, 252) };
 
         var title = new Label
@@ -5976,6 +5982,38 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
             Location = new Point(24, 800)
         };
         rightPanel.Controls.Add(adminHintLabel);
+
+        confirmDeleteLabel = new Label
+        {
+            Text = "",
+            Font = new Font("Segoe UI", 14f, FontStyle.Bold),
+            AutoSize = true,
+            ForeColor = Color.FromArgb(212, 69, 77),
+            BackColor = Color.FromArgb(255, 245, 245),
+            Padding = new Padding(16, 10, 16, 10),
+            Visible = false,
+            Location = new Point(200, 400)
+        };
+        confirmDeleteLabel.Paint += (s, e) =>
+        {
+            var lbl = (Label)s;
+            using (var pen = new Pen(Color.FromArgb(212, 69, 77), 2))
+            {
+                e.Graphics.DrawRectangle(pen, 0, 0, lbl.Width - 1, lbl.Height - 1);
+            }
+        };
+        leftPanel.Controls.Add(confirmDeleteLabel);
+        confirmDeleteLabel.BringToFront();
+
+        confirmDeleteTimer = new System.Windows.Forms.Timer { Interval = 5000 };
+        confirmDeleteTimer.Tick += (s, e) =>
+        {
+            confirmDeleteLabel.Visible = false;
+            confirmDeleteLabel.Text = "";
+            pendingDeleteArtifactId = -1;
+            pendingDeleteTime = DateTime.MinValue;
+            confirmDeleteTimer.Stop();
+        };
 
         ReloadAll();
     }
@@ -6200,14 +6238,31 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
     private void DeleteSelectedArtifact()
     {
         var selected = GetSelectedArtifact();
-        if (selected == null) { MessageBox.Show(this, "Select an artifact to delete.", "Delete Artifact", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (selected == null) { return; }
 
-        var result = MessageBox.Show(this, "Delete artifact '" + selected.name + "'? This action cannot be undone.", "Confirm Deletion", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
-        if (result != DialogResult.Yes) return;
+        if (pendingDeleteArtifactId == selected.id && (DateTime.UtcNow - pendingDeleteTime).TotalSeconds <= 5)
+        {
+            confirmDeleteTimer.Stop();
+            confirmDeleteLabel.Visible = false;
+            confirmDeleteLabel.Text = "";
+            pendingDeleteArtifactId = -1;
+            pendingDeleteTime = DateTime.MinValue;
 
-        artifacts.Remove(selected);
-        SaveArtifacts();
-        ReloadAll();
+            artifacts.Remove(selected);
+            SaveArtifacts();
+            ReloadAll();
+            return;
+        }
+
+        pendingDeleteArtifactId = selected.id;
+        pendingDeleteTime = DateTime.UtcNow;
+        confirmDeleteLabel.Text = "Delete \"" + selected.name + "\"? Perform Delete gesture again within 5s to confirm.";
+        confirmDeleteLabel.PerformLayout();
+        confirmDeleteLabel.Location = new Point(Math.Max(24, (leftPanel.Width - confirmDeleteLabel.Width) / 2), 360);
+        confirmDeleteLabel.Visible = true;
+        confirmDeleteLabel.BringToFront();
+        confirmDeleteTimer.Stop();
+        confirmDeleteTimer.Start();
     }
 
     private void MoveSelection(int delta)

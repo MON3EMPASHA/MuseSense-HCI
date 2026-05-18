@@ -8,8 +8,6 @@ from pathlib import Path
 # If launched with anything other than the project's venv interpreter, re-launch
 # with the local venv python so dependencies resolve correctly. We keep the
 # repo-root .venv as a fallback for existing local setups. We use subprocess
-# instead of os.execv because os.execv mishandles Windows paths containing
-# spaces (e.g. "project 2").
 _SCRIPT_DIR = Path(__file__).resolve().parent
 
 def _is_valid_venv(py_path: Path) -> bool:
@@ -32,8 +30,7 @@ if (not _RUNNING_IN_VALID_VENV) and _is_valid_venv(_VENV_PY) and os.path.normcas
     print(f"[BOOT] Re-launching under venv python: {_VENV_PY}")
     sys.exit(subprocess.call([str(_VENV_PY), "-u", os.path.abspath(__file__), *sys.argv[1:]]))
 
-# Suppress MediaPipe / absl C++ stderr noise before any imports load the libs.
-os.environ.setdefault("GLOG_minloglevel", "3")          # suppress glog INFO/WARNING/ERROR
+os.environ.setdefault("GLOG_minloglevel", "3")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 os.environ.setdefault("MEDIAPIPE_DISABLE_GPU", "1")
@@ -52,9 +49,6 @@ warnings.filterwarnings(
     message=r".*tf\.losses\.sparse_softmax_cross_entropy is deprecated.*",
 )
 
-# Redirect stderr to devnull only for the heavy ML imports so the
-# "inference_feedback_manager" C++ noise is swallowed. If an import raises,
-# restore stderr first so the traceback is visible.
 _real_stderr = sys.stderr
 sys.stderr = open(os.devnull, "w")
 try:
@@ -115,7 +109,6 @@ ARTIFACT_YOLO_INTERVAL = 5
 
 # user / bluetooth helpers moved to users.py
 
-
 def close_csharp_connection(connection: socket.socket | None) -> None:
     if connection is None:
         return
@@ -131,7 +124,6 @@ def send_socket_message(connection: socket.socket | None, payload: str) -> bool:
         return False
 
     try:
-        # Temporarily switch to blocking so sendall doesn't raise BlockingIOError
         connection.setblocking(True)
         connection.sendall(f"{payload}\n".encode("utf-8"))
         connection.setblocking(False)
@@ -439,16 +431,16 @@ if login_message is not None:
         active_user_name, str(login_message.get("Profile", "")).strip()
     )
 elif address is not None:
-    # BT device found but not in users.json — try face login / signup
+    # BT device found but not in users.json try face login / signup
     signup_flow = FaceSignupFlow(face_recognizer, OBJECTS_DIR, USERS_JSON_PATH)
     active_user_name = f"guest_{normalize_mac(address).replace(':', '')}"
     context_store.ensure_user(active_user_name)
 else:
-    # No BT at all — try face login / signup
+    # No BT at all try face login / signup
     signup_flow = FaceSignupFlow(face_recognizer, OBJECTS_DIR, USERS_JSON_PATH)
     context_store.ensure_user(active_user_name)
 
-# Clean up any previously persisted invalid artifacts (e.g. "person").
+# Clean up any previously persisted invalid artifacts.
 try:
     snapshot = context_store.get_context_snapshot(active_user_name)
     current_artifact = str(snapshot.get("current_artifact") or "").strip().lower()
@@ -484,8 +476,8 @@ cap = cv2.VideoCapture(0)
 failed_camera_reads = 0
 last_camera_reset = 0.0
 
-# === Adaptive interface: live-feed (OpenCV preview window) visibility ===
-# The C# GUI sends "CAMERA:ON" / "CAMERA:OFF" based on the logged-in user's
+# Adaptive interface: live-feed (OpenCV preview window) visibility
+# The C# GUI sends "CAMERA:ON" / "CAMERA:OFF" based on the logged-in user
 # age profile (Child & Senior modes hide the window; Teen/Adult show it).
 # Default is OFF until the first command arrives so we don't briefly flash a
 # window for a Child user.
@@ -503,7 +495,7 @@ def set_camera_window(visible: bool) -> None:
     camera_window_visible = visible
 
 
-# Don't create the window until C# sends CAMERA:ON (matches child-mode default).
+# Don't create the window until C# sends CAMERA:ON.
 
 
 def emit_transcription(connection, text: str) -> None:
@@ -640,9 +632,6 @@ while cap.isOpened():
                         print("[LOGIN] Admin marker detected — skipping face signup")
         else:
             # Allow the C# client to update context when user opens a single-artifact page.
-            # Expected examples:
-            #   {"type":"artifact_focus","artifact":"Ramses II","category":"New Kingdom"}
-            #   {"type":"context_update","current_artifact":"Ramses II","current_category":"New Kingdom"}
             if line.startswith("{") and line.endswith("}"):
                 try:
                     msg_obj = json.loads(line)
@@ -740,7 +729,7 @@ while cap.isOpened():
                 )
                 user_login = 1
         elif address is not None and signup_flow is None:
-            # Unknown MAC and no face flow — send raw MAC as guest
+            # Unknown MAC and no face flow send raw MAC as guest
             print("Sending MAC:", address)
             if send_socket_message(conn, address):
                 context_store.log_event(
@@ -754,7 +743,7 @@ while cap.isOpened():
                 )
                 user_login = 1
 
-    # ── Face login / signup flow (runs when BT found no known user) ───────────
+    #Face login / signup flow (runs when BT found no known user)
     if user_login == 1 or active_user_name == "admin":
         signup_flow = None
 
@@ -780,7 +769,7 @@ while cap.isOpened():
         if cv2.waitKey(1) == ord("q"):
             break
 
-        # Handle completion immediately — don't wait for next iteration
+        # Handle completion immediately dont wait for next iteration
         if not signup_flow.done:
             continue
 
@@ -795,8 +784,7 @@ while cap.isOpened():
             context_store.ensure_user(active_user_name, "visitor")
 
             # Look up the full user record from users.json so C# gets the same
-            # payload shape as a Bluetooth login (name, age, gender, Profile,
-            # themeMode, favorites, etc.)
+            # payload shape as a Bluetooth login (name, age, gender, Profile, themeMode, favorites, etc.)
             full_record: dict = {}
             try:
                 with USERS_JSON_PATH.open("r", encoding="utf-8") as _f:
@@ -840,7 +828,6 @@ while cap.isOpened():
 
         signup_flow = None
         user_login  = 1
-    # ─────────────────────────────────────────────────────────────────────────
     try:
 
         f_frame = cv2.resize(frame, (480, 320))
@@ -969,7 +956,7 @@ while cap.isOpened():
                     context_store.log_event(adaptive_event)
                     print(event_to_console(adaptive_event))
 
-        # ── Face detection + recognition (DeepFace, no YOLO) ─────────────
+        #Face detection + recognition (DeepFace, no YOLO)
         person_frame_counter += 1
         if person_frame_counter % 18 == 0:
             person_frame_counter = 0
@@ -991,9 +978,8 @@ while cap.isOpened():
                 color,
                 2,
             )
-        # ─────────────────────────────────────────────────────────────────
 
-        # ── Static hand-shape detection (Mute / DarkMode) ─────────────────
+        # Static hand-shape detection (Mute / DarkMode)
         active_hand = None
         if results.right_hand_landmarks:
             active_hand = results.right_hand_landmarks
@@ -1006,7 +992,7 @@ while cap.isOpened():
                 norm, hand_shapes, threshold=0.45
             )
 
-            # Diagnostic: compute best-match distances even if they don't
+            # Diagnostic: compute best-match distances even if they dont
             # meet the recognition threshold so we can see how close the
             # current hand is to any admin/user template.
             def _best_dist(points, templates):
@@ -1032,12 +1018,11 @@ while cap.isOpened():
                 # Admin gestures are recognized alongside the normal bank so
                 # the dashboard can react even when the user is not in a
                 # separate admin-only mode.
-                # Try matching the normalized points as-is
+                # Try matching the normalized points
                 admin_shape_name, admin_shape_score = recognize_hand_shape(
                     norm, admin_hand_shapes, threshold=0.55
                 )
-                # Also try a mirrored (x-flipped) version to accept left/right
-                # handedness differences coming from camera perspective.
+
                 if norm:
                     mirrored = []
                     for i in range(0, len(norm), 2):
@@ -1051,9 +1036,6 @@ while cap.isOpened():
                         admin_shape_score = m_score
 
                 best_admin_dist = _best_dist(norm, admin_hand_shapes)
-                # Print diagnostic when the hand is somewhat similar to any
-                # template (avoid flooding by only printing reasonably close
-                # matches).
                 if best_admin_dist < 1.5 or best_user_dist < 1.5:
                     print(
                         f"[GESTURE-DEBUG] best_user_dist={best_user_dist:.3f} best_admin_dist={best_admin_dist:.3f} user_match={user_shape_name}:{user_shape_score:.3f} admin_match={admin_shape_name}:{admin_shape_score:.3f}"
@@ -1085,7 +1067,7 @@ while cap.isOpened():
                         f"[GESTURE] Shape detected (user): {chosen_name} (score={chosen_score:.2f})"
                     )
 
-        # ── Dynamic trajectory (Index Finger) ──────────────────────────────
+        #Dynamic trajectory (Index Finger)
         if results.pose_landmarks is not None:
             right_index = results.pose_landmarks.landmark[
                 mp_pose.PoseLandmark.RIGHT_INDEX
