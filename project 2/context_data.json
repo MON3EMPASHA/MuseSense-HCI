@@ -125,21 +125,29 @@
             "source": "gesture",
             "timestamp": 1778634881,
             "gesture": "Circle"
+          },
+          {
+            "item_id": "Mask of TutankhamunIJ0PP",
+            "category": "Egypt",
+            "source": "gesture",
+            "timestamp": 1779146362,
+            "gesture": "Circle"
           }
         ],
         "explore_later": [],
         "good_to_see": []
       },
       "category_scores": {
-        "Egypt": 203.1,
-        "favorites": 6.0
+        "Egypt": 219.2,
+        "favorites": 7.0
       },
       "artifact_scores": {
-        "Mask of Tutankhamun": 144.1,
+        "Mask of Tutankhamun": 150.8,
         "Ramses II Statue": 8.3,
         "Sacred Scarab Beetle": 12.2,
         "Bust of Nefertiti": 32.8,
-        "Pyramids of Giza": 5.7
+        "Pyramids of Giza": 5.7,
+        "Mask of TutankhamunIJ0PP": 9.4
       },
       "opened_artifacts": {
         "mask of tutankhamun": 1779125373.138943,
@@ -148,17 +156,18 @@
         "bust of nefertiti": 1779125369.982437,
         "horus": 1778634471.7910998,
         "sacred scarab beetle": 1778634478.8173847,
-        "pyramids of giza": 1779125224.3031282
+        "pyramids of giza": 1779125224.3031282,
+        "mask of tutankhamunij0pp": 1779146341.1127324
       },
       "context": {
-        "current_artifact": "Mask of Tutankhamun",
+        "current_artifact": "Mask of TutankhamunIJ0PP",
         "current_category": "Egypt",
-        "last_object": "Mask of Tutankhamun",
-        "last_gesture": "AdminDeleteArtifact",
-        "last_emotion": "happy",
-        "last_gaze": "bottom_center"
+        "last_object": "Mask of TutankhamunIJ0PP",
+        "last_gesture": "Mute",
+        "last_emotion": "neutral",
+        "last_gaze": "top_right"
       },
-      "updated_at": 1779125425
+      "updated_at": 1779146581
     },
     "guest_5C56A471B0DA": {
       "profile": "",
@@ -600,6 +609,6 @@
   "events": [],
   "meta": {
     "version": 1,
-    "updated_at": 1779140583
+    "updated_at": 1779146581
   }
 }
