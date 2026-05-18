@@ -3497,9 +3497,7 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
-    // =====================================================================
-    //                       PROFILE PAGE — per-age layouts
-    // =====================================================================
+    // PROFILE PAGE — per-age layouts
 
     private void DrawProfileChild(Graphics g, int contentY)
     {
@@ -3670,7 +3668,7 @@ public class TuioDemo : Form , TuioListener
         FillRoundedRect(g, cardBsh_dynamic, card, 22);
         DrawRoundedRect(g, borderPen, card, 22);
 
-        // Avatar — large, centered horizontally
+        // Avatar large, centered horizontally
         int av = 200;
         Rectangle avR = new Rectangle(card.X + (card.Width - av) / 2, card.Y + 30, av, av);
         FillRoundedRect(g, avatarBrush, avR, av / 2);
@@ -3692,7 +3690,7 @@ public class TuioDemo : Form , TuioListener
         g.DrawString(uname, nameFont, fntBrush,
             card.X + (card.Width - nSize.Width) / 2, avR.Bottom + 20);
 
-        // Big readable info rows — full width, generous line height
+        // Big readable info rows full width, generous line height
         Font keyF = new Font("Segoe UI", 18f, FontStyle.Bold);
         Font valF = new Font("Segoe UI", 18f, FontStyle.Regular);
         int rowsY = avR.Bottom + 90;
@@ -3719,8 +3717,7 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
-    // ---------------- Drawing primitives (rounded corners, gradients) ----------------
-
+    //Drawing primitives (rounded corners, gradients)
     private static GraphicsPath BuildRoundedRectPath(Rectangle r, int radius)
     {
         int d = Math.Max(0, radius * 2);
@@ -3759,7 +3756,7 @@ public class TuioDemo : Form , TuioListener
         }
     }
 
-    // Center-and-draw a string inside a rectangle.
+    //center and draw a string inside a rectangle.
     private void DrawStringCentered(Graphics g, string text, Font font, Brush brush, Rectangle r)
     {
         SizeF sz = g.MeasureString(text, font);
@@ -3823,17 +3820,13 @@ public class TuioDemo : Form , TuioListener
             this.pnlCard.Size = new System.Drawing.Size(500, 500);
             this.pnlCard.TabIndex = 0;
             this.pnlCard.Paint += new System.Windows.Forms.PaintEventHandler(this.panel1_Paint);
-            // 
-            // pictureBox1
-            // 
+      
             this.pictureBox1.Location = new System.Drawing.Point(190, 101);
             this.pictureBox1.Name = "pictureBox1";
             this.pictureBox1.Size = new System.Drawing.Size(120, 120);
             this.pictureBox1.TabIndex = 0;
             this.pictureBox1.TabStop = false;
-            // 
-            // lblHello
-            // 
+
             this.lblHello.AutoSize = true;
             this.lblHello.Font = new System.Drawing.Font("Arial", 22F);
             this.lblHello.ForeColor = System.Drawing.Color.Cornsilk;
@@ -3843,9 +3836,7 @@ public class TuioDemo : Form , TuioListener
             this.lblHello.TabIndex = 1;
             this.lblHello.Text = "Hello, Visitor";
             this.lblHello.Click += new System.EventHandler(this.lblHello_Click);
-            // 
-            // lblStatus
-            // 
+      
             this.lblStatus.AutoSize = true;
             this.lblStatus.Font = new System.Drawing.Font("Arial", 18F);
             this.lblStatus.ForeColor = System.Drawing.Color.Cornsilk;
@@ -3855,9 +3846,7 @@ public class TuioDemo : Form , TuioListener
             this.lblStatus.TabIndex = 2;
             this.lblStatus.Text = "Waiting...";
             this.lblStatus.Click += new System.EventHandler(this.label1_Click);
-            // 
-            // TuioDemo
-            // 
+       
             this.ClientSize = new System.Drawing.Size(1564, 743);
             this.Controls.Add(this.pnlCard);
             this.Name = "TuioDemo";
@@ -3954,10 +3943,7 @@ public class TuioDemo : Form , TuioListener
 
     }
 
-    // =====================================================================
-    //              EMOTION-REACTIVE EFFECTS (balloons, ring, etc.)
-    // =====================================================================
-    //
+    // emotion reactive effects
     // Listens for Python "TRANS:Expression: <emotion>" lines. Spawns short
     // visual reactions on the GUI, throttled with confirmation + cooldowns so
     // the user is never carpet-bombed. Each age mode gets a different
@@ -5365,26 +5351,28 @@ public sealed class AdminTemplateBrowserForm : Form, IAdminGestureReceiver
     public bool HandleGestureCommand(string gesture)
     {
         if (string.IsNullOrWhiteSpace(gesture)) return false;
+        string g = gesture.Trim();
+        string gl = g.ToLowerInvariant();
 
-        if (gesture == "AdminNextArtifact" || gesture == "SwipeLeft")
+        if (gl == "adminnextartifact" || gl == "adminnext" || gl == "nextartifact" || gl == "swipeleft")
         {
             MoveTemplate(1);
             return true;
         }
 
-        if (gesture == "AdminPrevArtifact" || gesture == "SwipeRight")
+        if (gl == "adminprevartifact" || gl == "adminprev" || gl == "prevartifact" || gl == "swiperight")
         {
             MoveTemplate(-1);
             return true;
         }
 
-        if (gesture == "AdminCreateArtifact" || gesture == "Circle")
+        if (gl == "admincreateartifact" || gl == "admincreate" || gl == "createartifact" || gl == "circle")
         {
             ConfirmTemplate();
             return true;
         }
 
-        if (gesture == "AdminDeleteArtifact" || gesture == "Mute")
+        if (gl == "admindeleteartifact" || gl == "admindelete" || gl == "deleteartifact" || gl == "mute")
         {
             WasCancelled = true;
             DialogResult = DialogResult.Cancel;
@@ -5648,6 +5636,9 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
         {
             return false;
         }
+
+        string g = gesture.Trim();
+        string gl = g.ToLowerInvariant();
 
         if (gesture == "SwipeRight")
         {
@@ -6178,61 +6169,61 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
             return true;
         }
 
-        if (gesture == "AdminNextArtifact")
+        if (gl == "adminnextartifact" || gl == "adminnext" || gl == "nextartifact")
         {
             MoveSelection(1);
             return true;
         }
 
-        if (gesture == "AdminPrevArtifact")
+        if (gl == "adminprevartifact" || gl == "adminprev" || gl == "prevartifact")
         {
             MoveSelection(-1);
             return true;
         }
 
-        if (gesture == "AdminEditArtifact")
+        if (gl == "admineditartifact" || gl == "adminedit" || gl == "editartifact")
         {
             EditSelectedArtifact();
             return true;
         }
 
-        if (gesture == "AdminDeleteArtifact" || gesture == "Delete" || gesture == "DeleteArtifact")
+        if (gl == "admindeleteartifact" || gl == "admindelete" || gl == "delete" || gl == "deleteartifact")
         {
             DeleteSelectedArtifact();
             return true;
         }
 
-        if (gesture == "AdminCreateArtifact")
+        if (gl == "admincreateartifact" || gl == "admincreate" || gl == "createartifact")
         {
             CreateArtifact();
             return true;
         }
 
-        if (gesture == "SwipeRight")
+        if (gl == "swiperight")
         {
             MoveSelection(1);
             return true;
         }
 
-        if (gesture == "SwipeLeft")
+        if (gl == "swipeleft")
         {
             MoveSelection(-1);
             return true;
         }
 
-        if (gesture == "Circle")
+        if (gl == "circle")
         {
             EditSelectedArtifact();
             return true;
         }
 
-        if (gesture == "Mute")
+        if (gl == "mute")
         {
             DeleteSelectedArtifact();
             return true;
         }
 
-        if (gesture == "DarkMode")
+        if (gl == "darkmode")
         {
             CreateArtifact();
             return true;
