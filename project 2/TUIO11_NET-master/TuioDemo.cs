@@ -5078,6 +5078,334 @@ internal sealed class AdminArtifactRoot
     public List<AdminArtifact> artifacts { get; set; }
 }
 
+public sealed class ArtifactTemplate
+{
+    public string Name { get; set; }
+    public string BirthDate { get; set; }
+    public string Era { get; set; }
+    public string Origin { get; set; }
+    public string Description { get; set; }
+    public string Narration { get; set; }
+    public string ObjPath { get; set; }
+    public string AudioPath { get; set; }
+    public string Color { get; set; }
+    public string Country { get; set; }
+    public string Category { get; set; }
+    public string Tags { get; set; }
+    public string HistoricalInfo { get; set; }
+    public string Period { get; set; }
+
+    public AdminArtifact ToArtifact(int id, int tuioId)
+    {
+        return new AdminArtifact
+        {
+            id = id,
+            tuioId = tuioId,
+            name = Name,
+            birthDate = BirthDate,
+            era = Era,
+            origin = Origin,
+            description = Description,
+            narration = Narration,
+            objPath = ObjPath,
+            audioPath = AudioPath,
+            color = Color,
+            country = Country,
+            category = Category,
+            tags = Tags,
+            historicalInfo = HistoricalInfo,
+            period = Period
+        };
+    }
+}
+
+internal static class ArtifactTemplateStore
+{
+    public static readonly ArtifactTemplate[] Templates = new[]
+    {
+        new ArtifactTemplate
+        {
+            Name = "Cleopatra VII",
+            BirthDate = "69\u201330 BC",
+            Era = "Ptolemaic Period",
+            Origin = "Alexandria, Egypt",
+            Description = "Cleopatra VII was the last active ruler of the Ptolemaic Kingdom of Egypt. Renowned for her political acumen, multilingual diplomacy, and strategic alliances with Julius Caesar and Mark Antony, she remains one of history\u2019s most iconic figures.",
+            Narration = "Here you see Cleopatra VII, the last queen of Egypt\u2019s Ptolemaic dynasty. She ruled from 51 to 30 BC and was the first Ptolemaic ruler to learn the Egyptian language. Known for her intelligence, charisma, and political ambition, she formed powerful alliances with Rome\u2019s most influential leaders to preserve Egypt\u2019s independence. Her dramatic life and death alongside Mark Antony have inspired countless stories, artworks, and films throughout history.",
+            ObjPath = "artifacts/cleopatra.png",
+            AudioPath = "audio/cleopatra.wav",
+            Color = "#D4A017",
+            Country = "Egypt",
+            Category = "Historical Figure",
+            Tags = "queen, ptolemaic, egypt, ruler, hellenistic, cleopatra",
+            HistoricalInfo = "Here you see Cleopatra VII, the last queen of Egypt\u2019s Ptolemaic dynasty. She ruled from 51 to 30 BC and was the first Ptolemaic ruler to learn the Egyptian language. Known for her intelligence, charisma, and political ambition, she formed powerful alliances with Rome\u2019s most influential leaders to preserve Egypt\u2019s independence.",
+            Period = "69\u201330 BC"
+        },
+        new ArtifactTemplate
+        {
+            Name = "Anubis",
+            BirthDate = "Worshipped from c. 3100 BC",
+            Era = "All periods",
+            Origin = "Ancient Egypt",
+            Description = "Anubis is the ancient Egyptian god of mummification, tombs, and the afterlife. Depicted as a black jackal or a human with a jackal head, he guided souls through the underworld and presided over the embalming ritual.",
+            Narration = "This representation shows Anubis, one of the most recognizable deities in the Egyptian pantheon. As the god of embalming and guardian of the dead, Anubis played a central role in Egyptian funerary practices. Priests performing mummification often wore jackal-headed masks to invoke his protection. Anubis was believed to oversee the Weighing of the Heart ceremony, where the deceased\u2019s heart was balanced against the feather of Ma\u2019at to determine their worthiness for the afterlife.",
+            ObjPath = "artifacts/Anubis.png",
+            AudioPath = "audio/anubis.wav",
+            Color = "#1A1A1A",
+            Country = "Egypt",
+            Category = "Deity",
+            Tags = "god, jackal, afterlife, mythology, mummification",
+            HistoricalInfo = "This representation shows Anubis, one of the most recognizable deities in the Egyptian pantheon. As the god of embalming and guardian of the dead, Anubis played a central role in Egyptian funerary practices. Priests performing mummification often wore jackal-headed masks to invoke his protection.",
+            Period = "Worshipped from c. 3100 BC"
+        },
+        new ArtifactTemplate
+        {
+            Name = "Rosetta Stone",
+            BirthDate = "196 BC",
+            Era = "Ptolemaic Period",
+            Origin = "Rosetta (Rashid), Egypt",
+            Description = "The Rosetta Stone is a granodiorite stele inscribed with a decree issued in 196 BC during the reign of King Ptolemy V. Its parallel texts in Egyptian hieroglyphs, Demotic script, and Ancient Greek provided the key to deciphering Egyptian hieroglyphs.",
+            Narration = "The Rosetta Stone is one of the most significant archaeological finds in history. Discovered in 1799 by French soldiers during Napoleon\u2019s Egyptian campaign, this granodiorite slab carries the same decree in three scripts: hieroglyphic for temple inscriptions, Demotic for everyday use, and Ancient Greek for the administration. The breakthrough came in 1822 when Jean-Fran\u00e7ois Champollion recognized that hieroglyphs were not purely symbolic but included phonetic characters, allowing him to unlock the written language of ancient Egypt.",
+            ObjPath = "artifacts/Rosetta Stone.png",
+            AudioPath = "audio/rosetta_stone.wav",
+            Color = "#6B5B4F",
+            Country = "Egypt",
+            Category = "Inscription",
+            Tags = "stele, hieroglyphs, decipherment, ptolemaic, inscription",
+            HistoricalInfo = "The Rosetta Stone is one of the most significant archaeological finds in history. Discovered in 1799 by French soldiers during Napoleon\u2019s Egyptian campaign, this granodiorite slab carries the same decree in three scripts: hieroglyphic for temple inscriptions, Demotic for everyday use, and Ancient Greek for the administration.",
+            Period = "196 BC"
+        }
+    };
+}
+
+public sealed class AdminTemplateBrowserForm : Form, IAdminGestureReceiver
+{
+    private readonly ArtifactTemplate[] templates;
+    private int templateIndex;
+
+    private readonly PictureBox imageBox;
+    private readonly Label counterLabel;
+    private readonly Label nameLabel;
+    private readonly Label eraLabel;
+    private readonly Label originLabel;
+    private readonly Label descriptionLabel;
+    private readonly Label categoryLabel;
+    private readonly Label tagsLabel;
+    private readonly Label hintLabel;
+
+    public AdminArtifact ResultArtifact { get; private set; }
+    public bool WasCancelled { get; private set; }
+
+    public AdminTemplateBrowserForm()
+    {
+        templates = ArtifactTemplateStore.Templates;
+
+        Text = "Create Artifact from Template";
+        StartPosition = FormStartPosition.CenterParent;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        ClientSize = new Size(940, 620);
+        BackColor = Color.FromArgb(20, 24, 34);
+
+        var imagePanel = new Panel
+        {
+            Location = new Point(24, 24),
+            Size = new Size(400, 460),
+            BackColor = Color.FromArgb(30, 35, 48),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+
+        imageBox = new PictureBox
+        {
+            Location = new Point(0, 0),
+            Size = new Size(400, 460),
+            SizeMode = PictureBoxSizeMode.Zoom,
+            BackColor = Color.FromArgb(30, 35, 48)
+        };
+        imagePanel.Controls.Add(imageBox);
+
+        int detailX = 450;
+
+        counterLabel = new Label
+        {
+            Text = "",
+            Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(detailX, 28),
+            ForeColor = Color.FromArgb(140, 152, 175)
+        };
+
+        nameLabel = new Label
+        {
+            Text = "",
+            Font = new Font("Segoe UI", 22f, FontStyle.Bold),
+            AutoSize = false,
+            Width = 460,
+            Height = 60,
+            Location = new Point(detailX, 54),
+            ForeColor = Color.White
+        };
+
+        categoryLabel = new Label
+        {
+            Text = "",
+            Font = new Font("Segoe UI", 10f),
+            AutoSize = true,
+            Location = new Point(detailX, 118),
+            ForeColor = Color.FromArgb(100, 180, 255)
+        };
+
+        eraLabel = new Label
+        {
+            Text = "",
+            Font = new Font("Segoe UI", 10f),
+            AutoSize = true,
+            Location = new Point(detailX, 144),
+            ForeColor = Color.FromArgb(160, 172, 190)
+        };
+
+        originLabel = new Label
+        {
+            Text = "",
+            Font = new Font("Segoe UI", 10f),
+            AutoSize = true,
+            Location = new Point(detailX, 170),
+            ForeColor = Color.FromArgb(160, 172, 190)
+        };
+
+        descriptionLabel = new Label
+        {
+            Text = "",
+            Font = new Font("Segoe UI", 9.5f),
+            AutoSize = false,
+            Width = 460,
+            Height = 160,
+            Location = new Point(detailX, 200),
+            ForeColor = Color.FromArgb(210, 215, 225)
+        };
+
+        tagsLabel = new Label
+        {
+            Text = "",
+            Font = new Font("Segoe UI", 9f, FontStyle.Italic),
+            AutoSize = true,
+            Location = new Point(detailX, 370),
+            ForeColor = Color.FromArgb(120, 132, 150)
+        };
+
+        hintLabel = new Label
+        {
+            Text = "Navigate: Swipe Left/Right or AdminNext/Prev   |   Create: AdminCreateArtifact or Circle   |   Cancel: Mute",
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(24, 570),
+            ForeColor = Color.FromArgb(140, 152, 175)
+        };
+
+        Controls.Add(imagePanel);
+        Controls.Add(counterLabel);
+        Controls.Add(nameLabel);
+        Controls.Add(categoryLabel);
+        Controls.Add(eraLabel);
+        Controls.Add(originLabel);
+        Controls.Add(descriptionLabel);
+        Controls.Add(tagsLabel);
+        Controls.Add(hintLabel);
+
+        ShowCurrentTemplate();
+    }
+
+    private string ResolveFullImagePath(string objPath)
+    {
+        if (string.IsNullOrWhiteSpace(objPath)) return null;
+        string baseDir = Path.GetDirectoryName(Application.ExecutablePath);
+        string full = Path.Combine(baseDir, objPath);
+        if (File.Exists(full)) return full;
+        return null;
+    }
+
+    private void ShowCurrentTemplate()
+    {
+        var t = templates[templateIndex];
+        counterLabel.Text = string.Format("Template {0} of {1}", templateIndex + 1, templates.Length);
+        nameLabel.Text = t.Name ?? "";
+        categoryLabel.Text = t.Category ?? "";
+        eraLabel.Text = "Era: " + (string.IsNullOrWhiteSpace(t.Era) ? "\u2014" : t.Era);
+        originLabel.Text = "Origin: " + (string.IsNullOrWhiteSpace(t.Origin) ? "\u2014" : t.Origin);
+        descriptionLabel.Text = t.Description ?? "";
+        tagsLabel.Text = "Tags: " + (string.IsNullOrWhiteSpace(t.Tags) ? "none" : t.Tags);
+
+        string imagePath = ResolveFullImagePath(t.ObjPath);
+        if (imagePath != null)
+        {
+            try { imageBox.Image = Image.FromFile(imagePath); }
+            catch { imageBox.Image = null; }
+        }
+        else
+        {
+            imageBox.Image = null;
+        }
+    }
+
+    private void MoveTemplate(int delta)
+    {
+        if (templates.Length == 0) return;
+        templateIndex = (templateIndex + delta + templates.Length) % templates.Length;
+        ShowCurrentTemplate();
+    }
+
+    private void ConfirmTemplate()
+    {
+        var t = templates[templateIndex];
+        ResultArtifact = t.ToArtifact(0, 0);
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+
+    public bool HandleGestureCommand(string gesture)
+    {
+        if (string.IsNullOrWhiteSpace(gesture)) return false;
+
+        if (gesture == "AdminNextArtifact" || gesture == "SwipeLeft")
+        {
+            MoveTemplate(1);
+            return true;
+        }
+
+        if (gesture == "AdminPrevArtifact" || gesture == "SwipeRight")
+        {
+            MoveTemplate(-1);
+            return true;
+        }
+
+        if (gesture == "AdminCreateArtifact" || gesture == "Circle")
+        {
+            ConfirmTemplate();
+            return true;
+        }
+
+        if (gesture == "AdminDeleteArtifact" || gesture == "Mute")
+        {
+            WasCancelled = true;
+            DialogResult = DialogResult.Cancel;
+            Close();
+            return true;
+        }
+
+        return false;
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        base.OnFormClosed(e);
+        if (imageBox.Image != null)
+        {
+            imageBox.Image.Dispose();
+            imageBox.Image = null;
+        }
+    }
+}
+
 public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
 {
     private static readonly string[] ImageOptions = new[]
@@ -5419,6 +5747,7 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
     private readonly Label adminHintLabel;
 
     private List<AdminArtifact> artifacts = new List<AdminArtifact>();
+    private AdminTemplateBrowserForm activeTemplateBrowser;
 
     public AdminDashboardForm(string artifactsPath, string contextPath, string reportsPath, Action onArtifactsChanged)
     {
@@ -5723,20 +6052,29 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
 
     private void CreateArtifact()
     {
+        var browser = new AdminTemplateBrowserForm();
+        activeTemplateBrowser = browser;
+        if (browser.ShowDialog(this) != DialogResult.OK || browser.ResultArtifact == null)
+        {
+            activeTemplateBrowser = null;
+            browser.Dispose();
+            return;
+        }
+        activeTemplateBrowser = null;
+        browser.Dispose();
+
+        var templateArtifact = browser.ResultArtifact;
         int nextId = artifacts.Count == 0 ? 0 : artifacts.Max(a => a.id) + 1;
         int nextTuioId = artifacts.Count == 0 ? 0 : artifacts.Max(a => a.tuioId) + 1;
-        var initial = new AdminArtifact { id = nextId, tuioId = nextTuioId, color = "#A0A0A0" };
+        templateArtifact.id = nextId;
+        templateArtifact.tuioId = nextTuioId;
 
-        using (var form = new AdminArtifactEditorForm(initial))
-        {
-            if (form.ShowDialog() != DialogResult.OK || form.Artifact == null) return;
-            if (artifacts.Any(a => a.id == form.Artifact.id)) { MessageBox.Show(this, "Artifact ID already exists.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-            if (artifacts.Any(a => a.tuioId == form.Artifact.tuioId)) { MessageBox.Show(this, "TUIO ID already exists.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        if (artifacts.Any(a => a.id == templateArtifact.id)) { MessageBox.Show(this, "Artifact ID conflict.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        if (artifacts.Any(a => a.tuioId == templateArtifact.tuioId)) { MessageBox.Show(this, "TUIO ID conflict.", "Create Artifact", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
-            artifacts.Add(form.Artifact);
-            SaveArtifacts();
-            ReloadAll();
-        }
+        artifacts.Add(templateArtifact);
+        SaveArtifacts();
+        ReloadAll();
     }
 
     private void EditSelectedArtifact()
@@ -5830,6 +6168,14 @@ public sealed class AdminDashboardForm : Form, IAdminGestureReceiver
         if (string.IsNullOrWhiteSpace(gesture))
         {
             return false;
+        }
+
+        // If the template browser is active, delegate all gestures to it
+        // and consume them so nothing leaks to the dashboard underneath.
+        if (activeTemplateBrowser != null && !activeTemplateBrowser.IsDisposed)
+        {
+            activeTemplateBrowser.HandleGestureCommand(gesture);
+            return true;
         }
 
         if (gesture == "AdminNextArtifact")
