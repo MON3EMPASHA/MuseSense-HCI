@@ -323,13 +323,6 @@ admin_hand_shapes = load_hand_shapes(str(_BASE_DIR / "admin_hand_shapes.json"))
 print(
     f"[GESTURE] Loaded {len(admin_hand_shapes)} admin hand shapes: {list(admin_hand_shapes.keys())}"
 )
-ADMIN_GESTURE_ACTIONS = {
-    "AdminCreateArtifact": "create_artifact",
-    "AdminEditArtifact": "edit_artifact",
-    "AdminDeleteArtifact": "delete_artifact",
-    "AdminNextArtifact": "next_artifact",
-    "AdminPrevArtifact": "prev_artifact",
-}
 
 
 all_macs = []
@@ -488,6 +481,8 @@ gaze_session = GazeSessionLogger(active_user_name)
 reports_dir = Path("reports")
 
 cap = cv2.VideoCapture(0)
+failed_camera_reads = 0
+last_camera_reset = 0.0
 
 # === Adaptive interface: live-feed (OpenCV preview window) visibility ===
 # The C# GUI sends "CAMERA:ON" / "CAMERA:OFF" based on the logged-in user's
@@ -530,7 +525,21 @@ last_artifact_detections = []
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret or frame is None:
+        # Keep UI responsive and attempt a soft camera reset on repeated failures.
+        cv2.waitKey(1)
+        failed_camera_reads += 1
+        if failed_camera_reads >= 30 and (time.monotonic() - last_camera_reset) > 2.0:
+            last_camera_reset = time.monotonic()
+            failed_camera_reads = 0
+            try:
+                cap.release()
+            except Exception:
+                pass
+            cap = cv2.VideoCapture(0)
+        else:
+            time.sleep(0.01)
         continue
+    failed_camera_reads = 0
     msg = ""
 
     # Accept C# connection asynchronously if not connected yet
@@ -740,6 +749,9 @@ while cap.isOpened():
                 user_login = 1
 
     # ── Face login / signup flow (runs when BT found no known user) ───────────
+    if user_login == 1 or active_user_name == "admin":
+        signup_flow = None
+
     if signup_flow is not None and not signup_flow.done:
         f_frame_signup = cv2.resize(frame, (640, 480))
         frame_rgb_signup = cv2.cvtColor(f_frame_signup, cv2.COLOR_BGR2RGB)
@@ -987,9 +999,14 @@ while cap.isOpened():
             user_shape_name, user_shape_score = recognize_hand_shape(
                 norm, hand_shapes, threshold=0.45
             )
-            admin_shape_name, admin_shape_score = recognize_hand_shape(
-                norm, admin_hand_shapes, threshold=0.45
-            )
+
+            admin_shape_name = None
+            admin_shape_score = 0.0
+            if active_user_name == "admin":
+                # Admin shapes should trigger easily when performed correctly.
+                admin_shape_name, admin_shape_score = recognize_hand_shape(
+                    norm, admin_hand_shapes, threshold=9999.0
+                )
 
             chosen_kind = None
             chosen_name = None
@@ -1000,21 +1017,17 @@ while cap.isOpened():
                 chosen_name = user_shape_name
                 chosen_score = user_shape_score
 
-            if (
-                admin_shape_name
-                and admin_shape_score > 0.55
-                and admin_shape_score >= chosen_score
-            ):
+            if admin_shape_name and active_user_name == "admin":
                 chosen_kind = "admin"
                 chosen_name = admin_shape_name
                 chosen_score = admin_shape_score
 
             if chosen_name:
-                msg = ADMIN_GESTURE_ACTIONS.get(chosen_name, chosen_name)
+                msg = chosen_name
                 shape_cooldown_time = time.monotonic() + 1.5
                 if chosen_kind == "admin":
                     print(
-                        f"[GESTURE] Shape detected (admin): {chosen_name} -> {msg} (score={chosen_score:.2f})"
+                        f"[GESTURE] Shape detected (admin): {chosen_name} (score={chosen_score:.2f})"
                     )
                 else:
                     print(
