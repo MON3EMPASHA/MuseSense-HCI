@@ -19,10 +19,14 @@ _LOCAL_VENV_PY = _SCRIPT_DIR / ".venv" / "Scripts" / "python.exe"
 _ROOT_VENV_PY = _SCRIPT_DIR.parent / ".venv" / "Scripts" / "python.exe"
 # Also check "venv" (hidden-less) for setups that predate the rename.
 _OLD_VENV_PY = _SCRIPT_DIR / "venv" / "Scripts" / "python.exe"
-_VENV_PY = _ROOT_VENV_PY if _is_valid_venv(_ROOT_VENV_PY) else (
-    _LOCAL_VENV_PY if _is_valid_venv(_LOCAL_VENV_PY) else _OLD_VENV_PY
+_CURRENT_PY = Path(sys.executable)
+_VENV_PY = _LOCAL_VENV_PY if _is_valid_venv(_LOCAL_VENV_PY) else (
+    _ROOT_VENV_PY if _is_valid_venv(_ROOT_VENV_PY) else _OLD_VENV_PY
 )
-if _is_valid_venv(_VENV_PY) and os.path.normcase(sys.executable) != os.path.normcase(str(_VENV_PY)):
+# Keep the currently activated venv when one is already active. Only re-launch
+# when running outside a valid venv and a project-local fallback exists.
+_RUNNING_IN_VALID_VENV = _is_valid_venv(_CURRENT_PY)
+if (not _RUNNING_IN_VALID_VENV) and _is_valid_venv(_VENV_PY) and os.path.normcase(sys.executable) != os.path.normcase(str(_VENV_PY)):
     import subprocess
     print(f"[BOOT] Re-launching under venv python: {_VENV_PY}")
     sys.exit(subprocess.call([str(_VENV_PY), "-u", os.path.abspath(__file__), *sys.argv[1:]]))
@@ -313,6 +317,17 @@ shape_cooldown_time = 0.0
 _BASE_DIR = Path(__file__).parent
 hand_shapes = load_hand_shapes(str(_BASE_DIR / "hand_shapes.json"))
 print(f"[GESTURE] Loaded {len(hand_shapes)} static hand shapes: {list(hand_shapes.keys())}")
+admin_hand_shapes = load_hand_shapes(str(_BASE_DIR / "admin_hand_shapes.json"))
+print(
+    f"[GESTURE] Loaded {len(admin_hand_shapes)} admin hand shapes: {list(admin_hand_shapes.keys())}"
+)
+ADMIN_GESTURE_ACTIONS = {
+    "AdminCreateArtifact": "create_artifact",
+    "AdminEditArtifact": "edit_artifact",
+    "AdminDeleteArtifact": "delete_artifact",
+    "AdminNextArtifact": "next_artifact",
+    "AdminPrevArtifact": "prev_artifact",
+}
 
 
 all_macs = []
@@ -954,13 +969,44 @@ while cap.isOpened():
         elif results.left_hand_landmarks:
             active_hand = results.left_hand_landmarks
 
-        if active_hand and hand_shapes and time.monotonic() > shape_cooldown_time:
+        if active_hand and time.monotonic() > shape_cooldown_time:
             norm = normalize_landmarks(active_hand)
-            shape_name, shape_score = recognize_hand_shape(norm, hand_shapes, threshold=0.45)
-            if shape_name and shape_score > 0.55:
-                msg = shape_name
+            user_shape_name, user_shape_score = recognize_hand_shape(
+                norm, hand_shapes, threshold=0.45
+            )
+            admin_shape_name, admin_shape_score = recognize_hand_shape(
+                norm, admin_hand_shapes, threshold=0.45
+            )
+
+            chosen_kind = None
+            chosen_name = None
+            chosen_score = 0.0
+
+            if user_shape_name and user_shape_score > 0.55:
+                chosen_kind = "user"
+                chosen_name = user_shape_name
+                chosen_score = user_shape_score
+
+            if (
+                admin_shape_name
+                and admin_shape_score > 0.55
+                and admin_shape_score >= chosen_score
+            ):
+                chosen_kind = "admin"
+                chosen_name = admin_shape_name
+                chosen_score = admin_shape_score
+
+            if chosen_name:
+                msg = ADMIN_GESTURE_ACTIONS.get(chosen_name, chosen_name)
                 shape_cooldown_time = time.monotonic() + 1.5
-                print(f"[GESTURE] Shape detected: {shape_name} (score={shape_score:.2f})")
+                if chosen_kind == "admin":
+                    print(
+                        f"[GESTURE] Shape detected (admin): {chosen_name} -> {msg} (score={chosen_score:.2f})"
+                    )
+                else:
+                    print(
+                        f"[GESTURE] Shape detected (user): {chosen_name} (score={chosen_score:.2f})"
+                    )
 
         # ── Dynamic trajectory (Index Finger) ──────────────────────────────
         if results.pose_landmarks is not None:
