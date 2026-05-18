@@ -1,0 +1,15 @@
+{
+  "type": "emotion_session_report",
+  "user": "guest",
+  "started_at": "2026-05-18 16:14:10",
+  "sample_count": 83,
+  "emotion_counts": {
+    "neutral": 81,
+    "surprised": 2
+  },
+  "emotion_percent": {
+    "neutral": 97.6,
+    "surprised": 2.4
+  },
+  "dominant_emotion": "neutral"
+}

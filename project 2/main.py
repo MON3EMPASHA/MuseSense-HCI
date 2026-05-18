@@ -19,8 +19,8 @@ _LOCAL_VENV_PY = _SCRIPT_DIR / ".venv" / "Scripts" / "python.exe"
 _ROOT_VENV_PY = _SCRIPT_DIR.parent / ".venv" / "Scripts" / "python.exe"
 # Also check "venv" (hidden-less) for setups that predate the rename.
 _OLD_VENV_PY = _SCRIPT_DIR / "venv" / "Scripts" / "python.exe"
-_VENV_PY = _OLD_VENV_PY if _is_valid_venv(_OLD_VENV_PY) else (
-    _LOCAL_VENV_PY if _is_valid_venv(_LOCAL_VENV_PY) else _ROOT_VENV_PY
+_VENV_PY = _ROOT_VENV_PY if _is_valid_venv(_ROOT_VENV_PY) else (
+    _LOCAL_VENV_PY if _is_valid_venv(_LOCAL_VENV_PY) else _OLD_VENV_PY
 )
 if _is_valid_venv(_VENV_PY) and os.path.normcase(sys.executable) != os.path.normcase(str(_VENV_PY)):
     import subprocess
@@ -594,6 +594,13 @@ while cap.isOpened():
                     tuio_last_seen = time.monotonic()
                     print(f"[TUIO] Marker {marker_id} -> {artifact_name}")
                     emit_transcription(conn, f"Marker {marker_id}: {artifact_name}")
+                    if marker_id == 110:
+                        # Admin marker: skip face signup/login flow in Python.
+                        signup_flow = None
+                        user_login = 1
+                        active_user_name = "admin"
+                        context_store.ensure_user(active_user_name, "admin")
+                        print("[LOGIN] Admin marker detected — skipping face signup")
         else:
             # Allow the C# client to update context when user opens a single-artifact page.
             # Expected examples:

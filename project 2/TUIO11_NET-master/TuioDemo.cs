@@ -1256,19 +1256,26 @@ public class TuioDemo : Form , TuioListener
 
     private void TryOpenAdminPortal()
     {
-        using (var passwordEntry = new GestureTextEntryForm("Scan marker 110, then enter the admin password", string.Empty))
+        bool adminExists = false;
+        foreach (UserRecord user in allUsers)
         {
-            if (passwordEntry.ShowDialog(this) != DialogResult.OK || passwordEntry.WasCancelled)
+            if (user == null)
             {
-                return;
+                continue;
             }
 
-            UserRecord adminUser = FindAdminUserByPassword(passwordEntry.ResultText);
-            if (adminUser == null)
+            string userRole = string.IsNullOrWhiteSpace(user.role) ? string.Empty : user.role.Trim().ToLowerInvariant();
+            if (userRole == "admin")
             {
-                MessageBox.Show(this, "Invalid admin password.", "Admin Authentication", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                adminExists = true;
+                break;
             }
+        }
+
+        if (!adminExists)
+        {
+            MessageBox.Show(this, "No admin user found in users.json.", "Admin Authentication", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
         }
 
         string artifactsPath = ResolveArtifactsPath();
@@ -4804,6 +4811,128 @@ public sealed class GestureTextEntryForm : Form, IAdminGestureReceiver
     }
 }
 
+public sealed class GestureListPickerForm : Form, IAdminGestureReceiver
+{
+    private readonly string[] options;
+    private readonly Label promptLabel;
+    private readonly Label optionLabel;
+    private readonly Label hintLabel;
+    private int optionIndex;
+
+    public string ResultChoice { get; private set; }
+    public bool WasCancelled { get; private set; }
+
+    public GestureListPickerForm(string prompt, string[] choices, string currentValue)
+    {
+        options = choices ?? Array.Empty<string>();
+        if (options.Length == 0)
+        {
+            options = new[] { "" };
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentValue))
+        {
+            for (int i = 0; i < options.Length; i++)
+            {
+                if (string.Equals(options[i], currentValue, StringComparison.OrdinalIgnoreCase))
+                {
+                    optionIndex = i;
+                    break;
+                }
+            }
+        }
+
+        Text = "Gesture Picker";
+        StartPosition = FormStartPosition.CenterParent;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        ClientSize = new Size(760, 220);
+        BackColor = Color.FromArgb(241, 245, 250);
+
+        promptLabel = new Label
+        {
+            Text = prompt,
+            Font = new Font("Segoe UI", 16f, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(24, 18)
+        };
+
+        optionLabel = new Label
+        {
+            Text = CurrentOptionText(),
+            Font = new Font("Segoe UI", 14f, FontStyle.Bold),
+            AutoSize = false,
+            Width = 710,
+            Height = 70,
+            Location = new Point(24, 64),
+            BorderStyle = BorderStyle.FixedSingle,
+            BackColor = Color.White,
+            Padding = new Padding(12)
+        };
+
+        hintLabel = new Label
+        {
+            Text = "Swipe Left/Right = change option   Circle = select   Mute = cancel",
+            Font = new Font("Segoe UI", 10f),
+            AutoSize = true,
+            Location = new Point(24, 150),
+            ForeColor = Color.FromArgb(88, 98, 112)
+        };
+
+        Controls.Add(promptLabel);
+        Controls.Add(optionLabel);
+        Controls.Add(hintLabel);
+    }
+
+    private string CurrentOptionText()
+    {
+        return "Option: " + options[optionIndex];
+    }
+
+    private void RefreshView()
+    {
+        optionLabel.Text = CurrentOptionText();
+    }
+
+    public bool HandleGestureCommand(string gesture)
+    {
+        if (string.IsNullOrWhiteSpace(gesture)) return false;
+
+        if (gesture == "SwipeRight")
+        {
+            optionIndex = (optionIndex + 1) % options.Length;
+            RefreshView();
+            return true;
+        }
+
+        if (gesture == "SwipeLeft")
+        {
+            optionIndex = (optionIndex - 1 + options.Length) % options.Length;
+            RefreshView();
+            return true;
+        }
+
+        if (gesture == "Circle")
+        {
+            ResultChoice = options[optionIndex];
+            DialogResult = DialogResult.OK;
+            Close();
+            return true;
+        }
+
+        if (gesture == "Mute")
+        {
+            WasCancelled = true;
+            DialogResult = DialogResult.Cancel;
+            Close();
+            return true;
+        }
+
+        return false;
+    }
+}
+
 public sealed class AdminLoginForm : Form
 {
     private readonly TextBox usernameTextBox;
@@ -4936,6 +5065,13 @@ internal sealed class AdminArtifactRoot
 
 public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
 {
+    private static readonly string[] ImageOptions = new[]
+    {
+        "artifacts/Tutankhamun.png",
+        "artifacts/Ramses II.png",
+        "artifacts/King Senwosret III.png",
+        "artifacts/Bust of Nefertiti.png"
+    };
     private readonly TextBox idBox;
     private readonly TextBox tuioIdBox;
     private readonly TextBox nameBox;
@@ -5020,7 +5156,7 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
 
         gestureHintLabel = new Label
         {
-            Text = "Gesture controls: Swipe Left/Right = field, Circle = edit field, Mute = cancel, DarkMode = save",
+            Text = "Gesture controls: Swipe Left/Right = field, Circle = edit, Mute = cancel, DarkMode = save",
             AutoSize = true,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(88, 98, 112),
@@ -5071,7 +5207,10 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
             editableFields[i].BackColor = i == activeFieldIndex ? Color.FromArgb(223, 235, 255) : Color.White;
         }
 
-        gestureHintLabel.Text = "Editing: " + editableFieldNames[activeFieldIndex] + "   |   Swipe Left/Right = field   Circle = edit   Mute = cancel   DarkMode = save";
+        string extraHint = editableFields[activeFieldIndex] == objPathBox
+            ? "   |   Image picker: Swipe Left/Right = option   Circle = select"
+            : string.Empty;
+        gestureHintLabel.Text = "Editing: " + editableFieldNames[activeFieldIndex] + "   |   Swipe Left/Right = field   Circle = edit   Mute = cancel   DarkMode = save" + extraHint;
     }
 
     private void MoveField(int delta)
@@ -5089,6 +5228,21 @@ public sealed class AdminArtifactEditorForm : Form, IAdminGestureReceiver
     {
         string prompt = "Enter " + editableFieldNames[activeFieldIndex];
         string initial = editableFields[activeFieldIndex].Text ?? string.Empty;
+
+        if (editableFields[activeFieldIndex] == objPathBox)
+        {
+            using (var picker = new GestureListPickerForm("Choose image/model", ImageOptions, initial))
+            {
+                if (picker.ShowDialog(this) != DialogResult.OK || picker.WasCancelled)
+                {
+                    return false;
+                }
+
+                editableFields[activeFieldIndex].Text = picker.ResultChoice;
+            }
+
+            return true;
+        }
 
         using (var input = new GestureTextEntryForm(prompt, initial))
         {
